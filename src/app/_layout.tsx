@@ -1,28 +1,43 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { OverlayHost, ui } from '../components/Overlay';
 import { store } from '../lib/store';
-import { T } from '../lib/theme';
+import { C } from '../lib/theme';
 
 store.onSaveError(() => ui.toast('儲存失敗：空間不足'));
+
+const ios = Platform.OS === 'ios';
+// iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊
+const glass = ios && parseInt(String(Platform.Version), 10) >= 26;
 
 export default function RootLayout() {
   const [ready, setReady] = useState(store.loaded);
   useEffect(() => { store.load().then(() => setReady(true)); }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: T.app }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.groupedBg }}>
       <StatusBar style="dark" />
       {ready ? (
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: T.app } }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="note/[id]" options={{ gestureEnabled: true }} />
-          <Stack.Screen name="garden" options={{ presentation: 'modal' }} />
+        <Stack screenOptions={{
+          headerShown: ios,
+          headerTransparent: ios,
+          headerBlurEffect: glass ? undefined : 'systemChromeMaterial',
+          headerShadowVisible: false,
+          headerLargeTitleShadowVisible: false,
+          headerTintColor: C.tint,
+          headerBackButtonDisplayMode: 'minimal',
+          headerTitle: '',
+          contentStyle: { backgroundColor: C.groupedBg },
+        }}>
+          <Stack.Screen name="index" options={{ headerLargeTitleEnabled: true }} />
+          <Stack.Screen name="folder/[kind]" options={{ headerLargeTitleEnabled: true }} />
+          <Stack.Screen name="note/[id]" options={{ contentStyle: { backgroundColor: C.page } }} />
+          <Stack.Screen name="garden" options={{ presentation: 'modal', sheetGrabberVisible: true, headerTitle: '茄子田' }} />
         </Stack>
-      ) : <View style={{ flex: 1, backgroundColor: T.app }} />}
+      ) : <View style={{ flex: 1, backgroundColor: C.groupedBg }} />}
       <OverlayHost />
     </GestureHandlerRootView>
   );

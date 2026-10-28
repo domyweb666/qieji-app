@@ -242,3 +242,54 @@ export function convertNote(n: Note) {
     n.type = 'text';
   }
 }
+
+/* ---------------- list grouping (iOS 備忘錄式分組) ---------------- */
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+const WEEK = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+export function rowDate(ts: number, now = new Date()) {
+  const d = new Date(ts), days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (days <= 0) return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  if (days === 1) return '昨天';
+  if (days < 7) return WEEK[d.getDay()];
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// 列表第二行的灰字：清單顯示劃掉進度與第一個還沒劃的點子，文字筆記顯示標題之後的內容
+export function preview(n: Note) {
+  if (n.type === 'check') {
+    const lines = n.items.filter(i => i.t.trim());
+    if (!lines.length) return '沒有其他內容';
+    const done = lines.filter(i => i.done).length;
+    const next = lines.find(i => !i.done && i.t.trim() !== label(n));
+    return [`${done}/${lines.length} 劃掉`, next?.t.trim()].filter(Boolean).join('　');
+  }
+  const lines = n.body.split('\n').map(l => l.trim()).filter(Boolean);
+  const rest = n.title.trim() ? lines : lines.slice(1);
+  return rest[0] || '沒有其他內容';
+}
+
+export type Section = { title: string; notes: Note[] };
+export function groupNotes(notes: Note[], o: { sort: SortKey; trash: boolean }, now = new Date()): Section[] {
+  const out: Section[] = [];
+  const push = (title: string, n: Note) => {
+    const last = out[out.length - 1];
+    if (last && last.title === title) last.notes.push(n); else out.push({ title, notes: [n] });
+  };
+  const today = startOfDay(now);
+  const bucket = (ts: number) => {
+    const days = Math.round((today - startOfDay(new Date(ts))) / 86400000);
+    if (days <= 0) return '今天';
+    if (days === 1) return '昨天';
+    if (days < 7) return '過去 7 天';
+    if (days < 30) return '過去 30 天';
+    const d = new Date(ts);
+    return d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}月` : `${d.getFullYear()}年`;
+  };
+  for (const n of notes) {
+    if (!o.trash && n.pinned) push('已釘選', n);
+    else if (o.sort === 'updated' || o.sort === 'created') push(bucket(o.sort === 'created' ? n.created : n.updated), n);
+    else push(o.trash ? '最近刪除' : '筆記', n);
+  }
+  return out;
+}

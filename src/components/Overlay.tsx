@@ -1,8 +1,8 @@
 // 疊在所有畫面上面的一層：選單、確認框、toast、開花與茄子進籃的動畫。
 // 其他畫面用 ui.sheet() / ui.toast() / ui.pop() / ui.toBasket() 呼叫。
 import { Image } from 'expo-image';
-import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeOut, interpolate, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion,
   useSharedValue, withSequence, withTiming,
@@ -10,10 +10,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Kind } from '../lib/model';
-import { ART, T } from '../lib/theme';
+import { ART, C, F } from '../lib/theme';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
-type SheetSpec = { title?: string; rows?: Row[]; render?: (close: () => void) => ReactNode };
+type SheetSpec = { title?: string; rows: Row[] };
 type ToastSpec = { msg: string; action?: { label: string; fn: () => void } };
 type Pt = { x: number; y: number };
 type Fx = { key: number; kind: Kind; at: Pt; fly: boolean };
@@ -28,9 +28,20 @@ let calm = false;
 let fxKey = 0;
 
 export const ui = {
-  sheet: (rows: Row[], title?: string) => host?.sheet({ rows, title }),
-  custom: (title: string, render: (close: () => void) => ReactNode) => host?.sheet({ title, render }),
-  confirm: (msg: string, ok: () => void) => host?.confirm({ msg, ok }),
+  // iOS 用系統的動作表單與確認框，其他平台（網頁預覽）用自己畫的
+  sheet: (rows: Row[], title?: string) => {
+    if (Platform.OS !== 'ios') return host?.sheet({ rows, title });
+    const opts = [...rows.map(r => (r.on ? `✓ ${r.label}` : r.label)), '取消'];
+    const destructiveButtonIndex = rows.map((r, i) => (r.danger ? i : -1)).filter(i => i >= 0);
+    ActionSheetIOS.showActionSheetWithOptions(
+      { title, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: C.tint as string },
+      i => { if (i < rows.length) rows[i].fn(); },
+    );
+  },
+  confirm: (msg: string, ok: () => void, okLabel = '刪除') => {
+    if (Platform.OS !== 'ios') return host?.confirm({ msg, ok });
+    Alert.alert(msg, undefined, [{ text: '取消', style: 'cancel' }, { text: okLabel, style: 'destructive', onPress: ok }]);
+  },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
   // 行尾冒出一朵花（或茄子）往上飄；at = 那一行右側中間的螢幕座標
   pop: (at: Pt, kind: Kind) => host?.fx({ key: ++fxKey, kind, at, fly: false }),
@@ -85,7 +96,7 @@ export function OverlayHost() {
 
       {toast && (
         <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)}
-          style={[s.toast, { bottom: insets.bottom + 150 }]}>
+          style={[s.toast, { bottom: insets.bottom + 76 }]}>
           <Text style={s.toastText}>{toast.msg}</Text>
           {toast.action && (
             <Pressable hitSlop={10} onPress={() => { toast.action!.fn(); setToast(null); }}>
@@ -104,12 +115,11 @@ export function OverlayHost() {
             style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
             <ScrollView bounces={false}>
               {sheet.title ? <Text style={s.sheetTitle}>{sheet.title}</Text> : null}
-              {sheet.render?.(closeSheet)}
-              {sheet.rows?.map((r, i) => (
-                <Pressable key={i} style={({ pressed }) => [s.opt, pressed && { backgroundColor: '#F3ECE2' }]}
+              {sheet.rows.map((r, i) => (
+                <Pressable key={i} style={({ pressed }) => [s.opt, pressed && { backgroundColor: C.fill }]}
                   onPress={() => { closeSheet(); r.fn(); }}>
                   {r.dot ? <View style={[s.dot, { backgroundColor: r.dot }]} /> : null}
-                  <Text style={[s.optText, r.danger && { color: T.danger }]}>{r.label}</Text>
+                  <Text style={[s.optText, r.danger && { color: C.red }]}>{r.label}</Text>
                   {r.on ? <Text style={s.on}>✓</Text> : null}
                 </Pressable>
               ))}
@@ -125,7 +135,7 @@ export function OverlayHost() {
             <View style={s.acts}>
               <Pressable hitSlop={8} onPress={() => setConfirm(null)}><Text style={s.act}>取消</Text></Pressable>
               <Pressable hitSlop={8} onPress={() => { const ok = confirm.ok; setConfirm(null); ok(); }}>
-                <Text style={[s.act, { color: T.danger }]}>刪除</Text>
+                <Text style={[s.act, { color: C.red }]}>刪除</Text>
               </Pressable>
             </View>
           </View>
@@ -164,9 +174,10 @@ function Pop({ f, onDone }: { f: Fx; onDone: () => void }) {
 }
 
 const BASKET_W = 64;
+const BASKET_UP = 64; // 留出底部工具列的高度
 const basketBox = (W: number, H: number, bottom: number) => {
   const h = BASKET_W / ART['basket-only'].r;
-  return { x: W - 16 - BASKET_W / 2, y: H - (bottom + 18) - h + h * 0.45 }; // 籃口
+  return { x: W - 16 - BASKET_W / 2, y: H - (bottom + BASKET_UP) - h + h * 0.45 }; // 籃口
 };
 
 function Fly({ f, bottom, onLand }: { f: Fx; bottom: number; onLand: () => void }) {
@@ -237,28 +248,28 @@ function Basket({ on, bottom, landed }: { on: boolean; bottom: number; landed: n
   }));
   const a = ART['basket-only'];
   return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', right: 16, bottom: bottom + 18, zIndex: 41 }, st]}>
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', right: 16, bottom: bottom + BASKET_UP, zIndex: 41 }, st]}>
       <Image source={a.src} style={{ width: BASKET_W, height: BASKET_W / a.r }} />
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,.35)' },
-  center: { alignItems: 'center', justifyContent: 'center', padding: 20 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '80%', backgroundColor: T.card,
-    borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 8 },
-  sheetTitle: { marginTop: 8, marginHorizontal: 20, marginBottom: 6, fontSize: 15, color: T.muted, fontWeight: '500' },
-  opt: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, paddingHorizontal: 20 },
-  optText: { fontSize: 18, color: T.text },
-  dot: { width: 24, height: 24, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(0,0,0,.2)' },
-  on: { marginLeft: 'auto', color: T.egg, fontWeight: '700', fontSize: 18 },
-  dlg: { backgroundColor: T.card, borderRadius: 26, width: '100%', maxWidth: 420, paddingTop: 26, paddingHorizontal: 24, paddingBottom: 14 },
-  dlgText: { fontSize: 21, lineHeight: 31, color: T.text, marginBottom: 18 },
-  acts: { flexDirection: 'row', justifyContent: 'flex-end', gap: 30, marginTop: 16 },
-  act: { color: T.egg, fontSize: 19, paddingVertical: 10, paddingHorizontal: 6 },
-  toast: { position: 'absolute', alignSelf: 'center', backgroundColor: '#3A2E42', paddingVertical: 11, paddingHorizontal: 18,
+  backdrop: { backgroundColor: 'rgba(0,0,0,.3)' },
+  center: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  sheet: { position: 'absolute', left: 8, right: 8, bottom: 0, maxHeight: '80%', backgroundColor: C.card,
+    borderRadius: 14, paddingTop: 4, marginBottom: 8 },
+  sheetTitle: { marginTop: 10, marginBottom: 4, fontSize: F.footnote, color: C.secondary, textAlign: 'center' },
+  opt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, paddingHorizontal: 20 },
+  optText: { fontSize: F.body + 3, color: C.tint },
+  dot: { width: 14, height: 14, borderRadius: 7 },
+  on: { color: C.tint, fontWeight: '600', fontSize: F.body },
+  dlg: { backgroundColor: C.card, borderRadius: 14, width: '100%', maxWidth: 300, paddingTop: 20, overflow: 'hidden' },
+  dlgText: { fontSize: F.headline, fontWeight: '600', color: C.label, textAlign: 'center', paddingHorizontal: 16, marginBottom: 18 },
+  acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
+  act: { flex: 1, color: C.tint, fontSize: F.body, paddingVertical: 12, paddingHorizontal: 30, textAlign: 'center' },
+  toast: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(28,28,30,0.9)', paddingVertical: 11, paddingHorizontal: 18,
     borderRadius: 22, flexDirection: 'row', gap: 16, alignItems: 'center', zIndex: 50 },
-  toastText: { color: '#fff', fontSize: 15 },
-  toastBtn: { color: '#CDB4E6', fontWeight: '700', fontSize: 15 },
+  toastText: { color: '#fff', fontSize: F.subhead },
+  toastBtn: { color: '#D7B8F3', fontWeight: '600', fontSize: F.subhead },
 });

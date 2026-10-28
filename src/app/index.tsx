@@ -1,179 +1,141 @@
-// 筆記列表（也是垃圾桶、搜尋結果）
+// 首頁：大標題、茄子田／釘選／最近刪除三張卡片磚、依時間分組的筆記，底部是搜尋與新增
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, Stack } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ColorValue } from 'react-native';
+import { menuItems, showActs, type Act } from '../components/Acts';
 import { EmptyArt } from '../components/Breathe';
-import { Icon } from '../components/Icon';
-import { ui } from '../components/Overlay';
+import { listStyles, NoteSections } from '../components/NoteList';
+import { Sym } from '../components/Sym';
+import { GlassBtn, native, WebBottom, WebTop } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
-import { CKEYS, col, label, listDate, SORTS, uid, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
-import { store, useStore } from '../lib/store';
-import { ART, T } from '../lib/theme';
+import { CKEYS, col, SORTS, visibleNotes, weekGarden, type ColorKey, type Note, type SortKey } from '../lib/model';
+import { newNote, store, useStore } from '../lib/store';
+import { ART, C, F } from '../lib/theme';
 
-export default function ListScreen() {
+export default function Home() {
   const s = useStore();
-  const insets = useSafeAreaInsets();
-  const [trash, setTrash] = useState(false);
   const [filter, setFilter] = useState<ColorKey | 'all'>('all');
-  const [searching, setSearching] = useState(false);
   const [q, setQ] = useState('');
-  const listRef = useRef<FlatList<Note>>(null);
+  const searching = !!q.trim();
 
-  const notes = visibleNotes(s, { trash, filter, q, sort: s.sort });
-  const setSort = (k: SortKey) => { s.sort = k; store.change(); };
-  const toTop = () => listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  const notes = visibleNotes(s, { trash: false, filter, q, sort: s.sort });
+  const live = s.notes.filter(n => !n.deleted);
+  const pinned = live.filter(n => n.pinned).length;
+  const trashed = s.notes.length - live.length;
+  const week = weekGarden(s);
 
-  function newNote(type: 'text' | 'check') {
-    const n: Note = { id: uid(), type, title: '', body: '', items: [], color: filter !== 'all' ? filter : 'purple',
-      pinned: false, deleted: false, created: Date.now(), updated: Date.now(), b: false };
-    s.notes.push(n);
-    store.change();
+  const compose = () => {
+    const n = newNote(filter !== 'all' ? filter : 'purple');
     router.push({ pathname: '/note/[id]', params: { id: n.id, fresh: '1' } });
-  }
+  };
+  const open = (n: Note) => router.push({ pathname: '/note/[id]', params: { id: n.id } });
 
-  function onRow(n: Note) {
-    if (!trash) return router.push({ pathname: '/note/[id]', params: { id: n.id } });
-    ui.sheet([
-      { label: '還原', fn: () => { n.deleted = false; store.change(); ui.toast('已還原'); } },
-      { label: '永久刪除', danger: true, fn: () => { s.notes = s.notes.filter(x => x !== n); store.change(); } },
-    ], label(n));
-  }
-
-  function menu() {
-    if (trash) {
-      const cnt = s.notes.filter(n => n.deleted).length;
-      return ui.sheet([
-        { label: '回到茄記', fn: () => setTrash(false) },
-        { label: `清空垃圾桶（${cnt}）`, danger: true, fn: () => ui.confirm('永久刪除垃圾桶裡的所有筆記？', () => {
-          s.notes = s.notes.filter(n => !n.deleted); store.change();
-        }) },
-      ]);
-    }
-    ui.sheet([
-      { label: '茄子田', fn: () => router.push('/garden') },
-      { label: '匯出備份', fn: exportData },
-      { label: '匯入備份', fn: importData },
-      { label: `共 ${s.notes.filter(n => !n.deleted).length} 則筆記`, fn: () => {} },
-    ], '選單');
-  }
-
-  const empty = trash
-    ? <EmptyArt art="sleep" lines={['垃圾桶是空的', '茄子在睡覺']} />
-    : (q.trim() || filter !== 'all')
-      ? <EmptyArt art="search" lines={['找不到符合的筆記']} />
-      : <EmptyArt art="basket" lines={['菜籃還是空的', '點右下角的茄子，寫下第一個想法']} />;
+  const acts: Act[] = [
+    { label: '茄子田', icon: 'leaf', fn: () => router.push('/garden') },
+    { label: '排序方式', icon: 'arrow.up.arrow.down', sub: (Object.keys(SORTS) as SortKey[]).map(k => ({
+      label: SORTS[k], on: s.sort === k, fn: () => { s.sort = k; store.change(); },
+    })) },
+    { label: '依顏色篩選', icon: 'circle.grid.2x2', sub: [
+      { label: '全部', on: filter === 'all', fn: () => setFilter('all') },
+      ...CKEYS.map(k => ({ label: col(k).name, on: filter === k, fn: () => setFilter(k) })),
+    ] },
+    { label: '備份', inline: true, sub: [
+      { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
+      { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
+    ] },
+  ];
 
   return (
-    <View style={s_.root}>
-      <View style={[s_.head, { paddingTop: insets.top }]}>
-        <View style={s_.bar}>
-          {searching
-            ? <TextInput style={s_.q} value={q} onChangeText={setQ} placeholder="搜尋筆記" autoFocus
-                clearButtonMode="while-editing" returnKeyType="search" autoCorrect={false} />
-            : <Text style={s_.h1}>{trash ? '垃圾桶' : '茄記'}</Text>}
-          <Pressable style={s_.ib} onPress={() => ui.sheet([
-            { label: '全部', on: filter === 'all', fn: () => setFilter('all') },
-            ...CKEYS.map(k => ({ label: col(k).name, dot: col(k).hd, on: filter === k, fn: () => setFilter(k) })),
-          ], '依顏色篩選')} accessibilityLabel="依顏色篩選">
-            <ColorGrid filter={filter} />
-          </Pressable>
-          <Pressable style={s_.ib} onPress={menu} accessibilityLabel="選單"><Icon name="dots" color={T.text} /></Pressable>
-        </View>
-        <Pressable style={s_.sortbar} onPress={() => ui.sheet(
-          (Object.keys(SORTS) as SortKey[]).map(k => ({ label: SORTS[k], on: s.sort === k, fn: () => setSort(k) })), '排序方式')}>
-          <Text style={s_.sortText}>{SORTS[s.sort]} ▾</Text>
-        </Pressable>
-        {filter !== 'all' && <Text style={s_.filterTag}>只顯示{col(filter).name}　·　點右上色塊切換</Text>}
-      </View>
+    <View style={{ flex: 1, backgroundColor: C.groupedBg }} collapsable={false}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
+        contentContainerStyle={listStyles.wrap}>
+        <Stack.Title large>茄記</Stack.Title>
+        {native && <Stack.SearchBar placeholder="搜尋" onChangeText={e => setQ(e.nativeEvent.text)} onCancelButtonPress={() => setQ('')} />}
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="選單">{menuItems(acts)}</Stack.Toolbar.Menu>
+        </Stack.Toolbar>
+        <Stack.Toolbar placement="bottom">
+          <Stack.Toolbar.SearchBarSlot />
+          <Stack.Toolbar.Spacer />
+          <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel="新增" onPress={compose} />
+        </Stack.Toolbar>
 
-      <FlatList
-        ref={listRef}
-        data={notes}
-        keyExtractor={n => n.id}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 6, paddingBottom: insets.bottom + 150 }}
-        ListEmptyComponent={empty}
-        renderItem={({ item: n }) => {
-          const c = col(n.color);
-          return (
-            <Pressable onPress={() => onRow(n)}
-              style={({ pressed }) => [s_.row, { backgroundColor: c.bg, borderLeftColor: c.hd }, pressed && { opacity: 0.85 }]}>
-              <Text style={s_.rt} numberOfLines={2}>{label(n)}</Text>
-              <View style={s_.rd}>
-                {n.pinned ? <Text style={{ fontSize: 15 }}>📌</Text> : null}
-                {n.type === 'check' ? <Icon name="check" size={20} color="#555" /> : null}
-                <Text style={s_.rdText}>{listDate(n.updated)}</Text>
+        <WebTop title="茄記" right={<GlassBtn icon="ellipsis" label="選單" onPress={() => showActs(acts, '選單')} />} />
+
+        {!searching && (
+          <View style={st.tiles}>
+            <Pressable style={({ pressed }) => [st.tile, st.wide, pressed && st.pressed]} onPress={() => router.push('/garden')}>
+              <View style={[st.badge, { backgroundColor: C.tintSoft }]}>
+                <Image source={ART.egg.src} style={{ width: 20, height: 20 / ART.egg.r }} />
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={st.tileTitle}>本週茄子田</Text>
+                <Text style={st.tileSub}>{week.f} 朵花　·　{week.eggs.length} 顆茄子</Text>
+              </View>
+              <Sym name="chevron.right" size={14} color={C.tertiary} weight="semibold" />
             </Pressable>
-          );
-        }}
-      />
-
-      {!trash && (
-        <Pressable style={({ pressed }) => [s_.fab, { bottom: insets.bottom + 72 }, pressed && { transform: [{ scale: 0.92 }] }]}
-          accessibilityLabel="新增筆記"
-          onPress={() => ui.sheet([{ label: '文字', fn: () => newNote('text') }, { label: '清單', fn: () => newNote('check') }], '新增')}>
-          <View pointerEvents="none">
-            <Image source={ART['face-happy'].src} style={{ width: 58, height: 58 / ART['face-happy'].r }} />
+            <Tile icon="pin.fill" color={C.tint} count={pinned} label="釘選" onPress={() => router.push('/folder/pinned')} />
+            <Tile icon="trash.fill" color={C.gray} count={trashed} label="最近刪除" onPress={() => router.push('/folder/trash')} />
           </View>
-          <View pointerEvents="none" style={s_.plus}><Icon name="plus" size={16} color="#fff" /></View>
-        </Pressable>
-      )}
+        )}
 
-      <View style={[s_.bnav, { paddingBottom: insets.bottom }]}>
-        <NavBtn icon="notes" on={!trash && !searching} label="筆記"
-          onPress={() => { setTrash(false); setSearching(false); setQ(''); toTop(); }} />
-        <NavBtn icon="search" on={searching} label="搜尋"
-          onPress={() => { if (searching) setQ(''); setSearching(!searching); }} />
-        <NavBtn icon="trash" on={trash} label="垃圾桶" onPress={() => { setTrash(!trash); toTop(); }} />
-        <NavBtn icon="menu" on={false} label="選單" onPress={menu} />
-      </View>
+        {filter !== 'all' && (
+          <Pressable style={st.chip} onPress={() => setFilter('all')} accessibilityLabel="取消顏色篩選">
+            <View style={[st.chipDot, { backgroundColor: col(filter).hd }]} />
+            <Text style={st.chipText}>只顯示{col(filter).name}</Text>
+            <Sym name="xmark.circle.fill" size={16} color={C.tertiary} />
+          </Pressable>
+        )}
+
+        {notes.length
+          ? <NoteSections notes={notes} sort={s.sort} trash={false} onPress={open} />
+          : (searching || filter !== 'all')
+            ? <EmptyArt art="search" lines={['找不到符合的筆記']} />
+            : <EmptyArt art="basket" lines={['菜籃還是空的', '點右下角的筆，寫下第一個想法']} />}
+      </ScrollView>
+
+      <WebBottom>
+        <View style={st.webSearch}>
+          <Sym name="magnifyingglass" size={17} color={C.secondary} />
+          <TextInput value={q} onChangeText={setQ} placeholder="搜尋" placeholderTextColor={C.placeholder} style={st.webSearchInput} />
+        </View>
+        <GlassBtn icon="square.and.pencil" label="新增" onPress={compose} />
+      </WebBottom>
     </View>
   );
 }
 
-function NavBtn({ icon, on, label, onPress }: { icon: 'notes' | 'search' | 'trash' | 'menu'; on: boolean; label: string; onPress: () => void }) {
+function Tile({ icon, color, count, label, onPress }: {
+  icon: 'pin.fill' | 'trash.fill'; color: ColorValue; count: number; label: string; onPress: () => void;
+}) {
   return (
-    <Pressable style={s_.navBtn} onPress={onPress} accessibilityLabel={label}>
-      <Icon name={icon} size={28} color={on ? T.egg : T.navOff} />
+    <Pressable style={({ pressed }) => [st.tile, pressed && st.pressed]} onPress={onPress}>
+      <View style={st.tileTop}>
+        <View style={[st.badge, { backgroundColor: color }]}><Sym name={icon} size={15} color="#fff" /></View>
+        <Text style={st.count}>{count}</Text>
+      </View>
+      <Text style={st.tileLabel}>{label}</Text>
     </Pressable>
   );
 }
 
-function ColorGrid({ filter }: { filter: ColorKey | 'all' }) {
-  if (filter !== 'all') return <View style={{ width: 26, height: 26, borderRadius: 3, backgroundColor: col(filter).hd }} />;
-  return (
-    <View style={s_.grid}>
-      {['#8E6AAE', '#EECF5E', '#8DAF62', '#F09C5E'].map(c => <View key={c} style={{ width: 12, height: 12, backgroundColor: c }} />)}
-    </View>
-  );
-}
-
-const s_ = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.app },
-  head: { backgroundColor: T.bar, borderBottomWidth: 1, borderBottomColor: T.line },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 6, paddingRight: 6, paddingBottom: 6, paddingLeft: 16, minHeight: 56 },
-  h1: { flex: 1, fontSize: 26, fontWeight: '600', color: T.egg, letterSpacing: 1 },
-  q: { flex: 1, minWidth: 0, fontSize: 18, backgroundColor: T.card, borderWidth: 1, borderColor: T.line, borderRadius: 8,
-    paddingVertical: 8, paddingHorizontal: 10, color: T.text },
-  ib: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
-  grid: { width: 26, height: 26, flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
-  sortbar: { marginHorizontal: 8, marginBottom: 8, backgroundColor: T.card, borderWidth: 1, borderColor: T.line, borderRadius: 12, padding: 9 },
-  sortText: { color: T.muted, textAlign: 'center', fontSize: 18 },
-  filterTag: { fontSize: 14, color: T.muted, textAlign: 'center', marginTop: -2, marginBottom: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', minHeight: 68, marginBottom: 8, borderRadius: 12, borderLeftWidth: 6,
-    paddingVertical: 10, paddingRight: 12, paddingLeft: 14, gap: 10,
-    shadowColor: '#3C281E', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
-  rt: { flex: 1, fontSize: 21, lineHeight: 27, color: T.text },
-  rd: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rdText: { fontSize: 16, color: '#555' },
-  fab: { position: 'absolute', right: 14, width: 66, height: 86, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#3C1E50', shadowOpacity: 0.28, shadowRadius: 8, shadowOffset: { width: 0, height: 5 } },
-  plus: { position: 'absolute', right: 0, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: T.stem,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#fff' },
-  bnav: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', backgroundColor: T.bar, borderTopWidth: 1, borderTopColor: T.line },
-  navBtn: { flex: 1, height: 60, alignItems: 'center', justifyContent: 'center' },
+const st = StyleSheet.create({
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 },
+  tile: { flexBasis: '45%', flexGrow: 1, backgroundColor: C.card, borderRadius: 14, padding: 12 },
+  wide: { flexBasis: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pressed: { opacity: 0.7 },
+  badge: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  tileTitle: { fontSize: F.headline, fontWeight: '600', color: C.label },
+  tileSub: { fontSize: F.subhead, color: C.secondary, marginTop: 1 },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  count: { fontSize: F.title, fontWeight: '700', color: C.label },
+  tileLabel: { fontSize: F.subhead, fontWeight: '600', color: C.secondary, marginTop: 8 },
+  chip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
+    backgroundColor: C.card, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12 },
+  chipDot: { width: 9, height: 9, borderRadius: 4.5 },
+  chipText: { fontSize: F.subhead, color: C.label },
+  webSearch: { flex: 1, height: 44, borderRadius: 22, backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  webSearchInput: { flex: 1, fontSize: F.body, color: C.label },
 });

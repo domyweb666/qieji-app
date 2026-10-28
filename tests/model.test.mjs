@@ -112,3 +112,22 @@ test('不是備份檔就丟錯，不動資料', () => {
   assert.throws(() => importBackup(s, 'not json'));
   assert.equal(s.notes.length, 3);
 });
+
+test('列表依時間分組，釘選的排最上面', async () => {
+  const { groupNotes, visibleNotes, parseState, rowDate } = await import('../src/lib/model.ts');
+  const now = new Date(2026, 9, 28, 12, 0);
+  const at = (y, m, d) => new Date(y, m, d, 9, 0).getTime();
+  const s = parseState(JSON.stringify({ notes: [
+    { id: 'p', type: 'text', body: '釘', pinned: true, created: 1, updated: at(2025, 0, 1) },
+    { id: 't', type: 'text', body: '今天', created: 1, updated: at(2026, 9, 28) },
+    { id: 'y', type: 'text', body: '昨天', created: 1, updated: at(2026, 9, 27) },
+    { id: 'w', type: 'text', body: '這週', created: 1, updated: at(2026, 9, 23) },
+    { id: 'o', type: 'text', body: '很久', created: 1, updated: at(2026, 2, 3) },
+  ] }));
+  const notes = visibleNotes(s, { trash: false, filter: 'all', q: '', sort: 'updated' });
+  const g = groupNotes(notes, { sort: 'updated', trash: false }, now);
+  assert.deepEqual(g.map(x => [x.title, x.notes.map(n => n.id).join('')]),
+    [['已釘選', 'p'], ['今天', 't'], ['昨天', 'y'], ['過去 7 天', 'w'], ['3月', 'o']]);
+  assert.equal(rowDate(at(2026, 9, 27), now), '昨天');
+  assert.equal(rowDate(at(2026, 9, 26), now), '星期一');
+});

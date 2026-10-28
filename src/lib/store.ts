@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { emptyState, HINT_KEY, KEY, parseState, type State } from './model';
+import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, type State } from './model';
 
 let state: State = emptyState();
 let loaded = false;
@@ -61,4 +61,13 @@ const getVersion = () => version;
 export function useStore() {
   useSyncExternalStore(subscribe, getVersion, getVersion);
   return state;
+}
+
+// 新增筆記：直接開一張清單，點子就是一行一行記，少一次「文字還是清單」的選擇
+export function newNote(color: ColorKey = 'purple', type: Note['type'] = 'check') {
+  const n: Note = { id: uid(), type, title: '', body: '', items: [], color,
+    pinned: false, deleted: false, created: Date.now(), updated: Date.now(), b: false };
+  state.notes.push(n);
+  store.change();
+  return n;
 }

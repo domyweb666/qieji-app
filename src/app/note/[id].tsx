@@ -1,49 +1,41 @@
 // 筆記編輯：文字筆記／清單筆記。清單的每一行就是一個點子：
-// 往右滑＝劃掉結茄子，往左滑＝刪除，拉右邊的把手＝排序。
+// 點左邊圓圈或往右滑＝劃掉結茄子，往左滑＝刪除，拉右邊的把手＝排序。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import {
-  InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  InputAccessoryView, Keyboard, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type HostInstance, type TextInputInstance, type TextInputKeyPressEvent,
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { Icon } from '../../components/Icon';
-import { ui, type Row } from '../../components/Overlay';
+import { menuItems, showActs, type Act } from '../../components/Acts';
+import { ui } from '../../components/Overlay';
+import { Sym } from '../../components/Sym';
+import { GlassBtn, native, WebTop } from '../../components/WebBars';
 import {
   ago, bloom, CKEYS, col, convertNote, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Kind, type Note,
 } from '../../lib/model';
-import { store, useStore } from '../../lib/store';
-import { T } from '../../lib/theme';
+import { newNote, store, useStore } from '../../lib/store';
+import { C, F } from '../../lib/theme';
 
 const KBAR = 'kbar';
-const LINE_H = 44;
 
 export default function NoteScreen() {
   const { id, fresh } = useLocalSearchParams<{ id: string; fresh?: string }>();
   // 關閉空白筆記時它會被移出 state，這裡留住它，讓退場動畫期間畫面不會突然變空
   const keep = useRef<Note | undefined>(undefined);
   if (!keep.current) keep.current = store.s.notes.find(n => n.id === id);
-  if (!keep.current) return <View style={{ flex: 1, backgroundColor: T.app }} />;
+  if (!keep.current) return <View style={{ flex: 1, backgroundColor: C.page }} />;
   return <Editor n={keep.current} fresh={fresh === '1'} />;
 }
 
-const mixWhite = (hex: string, w: number) => {
-  const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-  return `rgb(${c.map(v => Math.round(v + (255 - v) * w)).join(',')})`;
-};
-
 function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   useStore();
-  const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const [, force] = useReducer((x: number) => x + 1, 0);
-  const c = col(n.color);
-  const ink = n.color === 'black' ? '#fff' : '#1f1f1f';
 
   const closed = useRef(false);
   const mounted = useRef(true);
@@ -155,7 +147,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const it: Item = { id: uid(), t: '', done: false, b: false };
     n.items.unshift(it);
     changed();
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
     focusItem(it.id, 0);
   }
   function insertAfter(id: string, text: string) {
@@ -242,7 +233,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
       const idx = n.items.findIndex(i => i.id === id);
       const mids = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
       drag.current = { idx, mids };
-      dragH.value = layouts.current[id]?.h ?? 54;
+      dragH.value = layouts.current[id]?.h ?? 46;
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       setDragging(true);
       Haptics.selectionAsync().catch(() => {});
@@ -288,116 +279,132 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     return () => { clearTimeout(t); mounted.current = false; closeNote(); };
   }, []);
 
-  /* ---------- header actions ---------- */
-  function more() {
-    Keyboard.dismiss();
-    const share = (n.title ? n.title + '\n\n' : '') + plain(n);
-    const r: Row[] = [];
-    r.push({ label: n.pinned ? '取消釘選' : '釘選到最上方', fn: () => { n.pinned = !n.pinned; changed(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); } });
-    r.push({ label: n.type === 'text' ? '轉為清單（每行一條）' : '轉為文字', fn: () => {
-      convertNote(n); changed(true); setEpoch(e => e + 1);
-      ui.toast(n.type === 'check' ? '已轉為清單' : '已轉為文字');
-    } });
-    if (n.type === 'check' && n.items.length > 1) r.push({ label: '上下順序反轉', fn: () => { n.items.reverse(); changed(true); } });
-    if (n.type === 'check' && n.items.some(i => i.done)) {
-      r.push({ label: '全部恢復（取消劃線）', fn: () => { n.items.forEach(i => (i.done = false)); changed(true); } });
-      r.push({ label: '清掉劃掉的行', fn: () => { n.items = n.items.filter(i => !i.done); changed(true); } });
-    }
-    r.push({ label: '分享', fn: () => { Share.share({ message: share }).catch(() => {}); } });
-    r.push({ label: '複製全文', fn: () => { Clipboard.setStringAsync(share).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } });
-    r.push({ label: '刪除', danger: true, fn: () => {
-      n.deleted = true; n.pinned = false;
-      if (n.type === 'check') n.items = n.items.filter(i => i.t.trim());
-      const empty = isEmpty(n);
-      if (empty) store.s.notes = store.s.notes.filter(x => x !== n);
-      closed.current = true;
-      store.change();
-      router.back();
-      if (!empty) ui.toast('已移到垃圾桶', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
-    } });
-    ui.sheet(r);
+  /* ---------- actions ---------- */
+  const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
+  const anyDone = n.type === 'check' && n.items.some(i => i.done);
+  function togglePin() { n.pinned = !n.pinned; changed(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); }
+  function convert() {
+    convertNote(n); changed(true); setEpoch(e => e + 1);
+    ui.toast(n.type === 'check' ? '已轉為清單' : '已轉為文字');
   }
-  function pickColor() {
-    Keyboard.dismiss();
-    ui.custom('選擇顏色', close => (
-      <View style={st.palette}>
-        {CKEYS.map(k => (
-          <Pressable key={k} accessibilityLabel={col(k).name} onPress={() => { n.color = k; changed(); close(); }}
-            style={[st.pal, { backgroundColor: col(k).hd }, n.color === k && st.palOn]} />
-        ))}
-      </View>
-    ));
+  function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
+  function del() {
+    n.deleted = true; n.pinned = false;
+    if (n.type === 'check') n.items = n.items.filter(i => i.t.trim());
+    const empty = isEmpty(n);
+    if (empty) store.s.notes = store.s.notes.filter(x => x !== n);
+    closed.current = true;
+    store.change();
+    router.back();
+    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
   }
+  // 新增：換成一則新的（跟備忘錄一樣，不會一層層疊上去）
+  function compose() {
+    const m = newNote(n.color);
+    router.replace({ pathname: '/note/[id]', params: { id: m.id, fresh: '1' } });
+  }
+  const moreActs: Act[] = [
+    { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
+    { label: n.type === 'text' ? '轉為清單（每行一條）' : '轉為文字', icon: n.type === 'text' ? 'checklist' : 'text.alignleft', fn: convert },
+    { label: '清單', inline: true, hidden: n.type !== 'check' || (n.items.length < 2 && !anyDone), sub: [
+      { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => { n.items.reverse(); changed(true); } },
+      { label: '全部恢復（取消劃線）', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => { n.items.forEach(i => (i.done = false)); changed(true); } },
+      { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => { n.items = n.items.filter(i => !i.done); changed(true); } },
+    ] },
+    { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } },
+    { label: '刪除', icon: 'trash', destructive: true, fn: del },
+  ];
+  const colorActs: Act[] = CKEYS.map(k => ({ label: col(k).name, on: n.color === k, fn: () => { n.color = k; changed(); } }));
 
   const showHint = n.type === 'check' && !store.hintSeen && n.items.some(i => i.t.trim());
-  const inputProps = Platform.OS === 'ios' ? { inputAccessoryViewID: KBAR } : {};
+  const inputProps = native ? { inputAccessoryViewID: KBAR } : {};
+  const editing = focusId !== null;
 
   return (
-    <View style={[st.root, { backgroundColor: c.bg }]}>
-      <View style={[st.head, { backgroundColor: c.hd, paddingTop: insets.top + 6 }]}>
-        <Pressable style={st.ib} onPress={() => router.back()} accessibilityLabel="返回"><Icon name="back" color={ink} /></Pressable>
-        <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="標題" {...inputProps}
-          placeholderTextColor={n.color === 'black' ? 'rgba(255,255,255,.45)' : 'rgba(31,31,31,.45)'}
-          style={[st.title, { color: ink }, focusId === 'title' && { backgroundColor: 'rgba(255,255,255,.55)' }]}
-          returnKeyType="next" submitBehavior="submit"
-          onChangeText={v => { n.title = v; changed(); }}
-          onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
-          onSubmitEditing={() => (n.type === 'text' ? bodyRef.current?.focus() : focusNew())} />
-        <Pressable style={[st.swatch, { backgroundColor: c.hd }]} onPress={pickColor} accessibilityLabel="顏色" />
-        <Pressable style={st.ib} onPress={more} accessibilityLabel="更多"><Icon name="dots" color={ink} /></Pressable>
-      </View>
-      <View style={st.meta}>
-        <Text style={st.metaText}>{ago(n.updated)}</Text>
-        <Text style={st.metaText}>{fullDate(n.updated)}</Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: C.page }} collapsable={false}>
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
+        scrollEnabled={!dragging} onLayout={e => setBodyH(e.nativeEvent.layout.height)}>
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="分享" onPress={share} />
+          <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="更多">{menuItems(moreActs)}</Stack.Toolbar.Menu>
+        </Stack.Toolbar>
+        {/* 打字時底部工具列讓位，改用鍵盤上方那一條 */}
+        {!editing && (
+          <Stack.Toolbar placement="bottom">
+            <Stack.Toolbar.Button icon={n.type === 'check' ? 'text.alignleft' : 'checklist'}
+              accessibilityLabel={n.type === 'check' ? '轉為文字' : '轉為清單'} onPress={convert} />
+            <Stack.Toolbar.Menu icon="paintpalette" accessibilityLabel="顏色" title="顏色">{menuItems(colorActs)}</Stack.Toolbar.Menu>
+            <Stack.Toolbar.Button icon={n.pinned ? 'pin.fill' : 'pin'} accessibilityLabel="釘選" onPress={togglePin} />
+            <Stack.Toolbar.Spacer />
+            <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel="新增" onPress={compose} />
+          </Stack.Toolbar>
+        )}
+        <WebTop left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
+          right={(
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <GlassBtn icon="square.and.arrow.up" label="分享" onPress={share} />
+              <GlassBtn icon="ellipsis" label="更多" onPress={() => showActs(moreActs)} />
+            </View>
+          )} />
 
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
-        automaticallyAdjustKeyboardInsets scrollEnabled={!dragging} onLayout={e => setBodyH(e.nativeEvent.layout.height)}>
-        {n.type === 'text' ? (
-          <View style={{ minHeight: bodyH }}>
-            <Lines rule={c.rule} height={Math.max(bodyH, 0)} />
+        <View style={st.paper}>
+          <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="標題" {...inputProps}
+            placeholderTextColor={C.placeholder} style={st.title} multiline scrollEnabled={false}
+            returnKeyType="next" submitBehavior="submit"
+            onChangeText={v => { n.title = v.replace(/\r?\n/g, ' '); changed(); }}
+            onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
+            onSubmitEditing={() => (n.type === 'text' ? bodyRef.current?.focus() : focusNew())} />
+          <View style={st.meta}>
+            <View style={[st.metaDot, { backgroundColor: col(n.color).hd }]} />
+            <Text style={st.metaText}>{fullDate(n.updated)}　{ago(n.updated)}</Text>
+          </View>
+
+          {n.type === 'text' ? (
             <TextInput ref={bodyRef} key={`body${epoch}`} defaultValue={n.body} placeholder="開始輸入…" multiline scrollEnabled={false}
-              placeholderTextColor="rgba(0,0,0,.35)" style={[st.body, { minHeight: bodyH }]} {...inputProps}
+              placeholderTextColor={C.placeholder} style={[st.body, { minHeight: Math.max(bodyH - 160, 200) }]} {...inputProps}
               onChangeText={v => { n.body = v; changed(); }}
               onFocus={() => onFocus('body')} onBlur={() => onBlur('body')} />
-          </View>
-        ) : (
-          <>
-            <Pressable style={[st.addrow, { borderBottomColor: c.rule }]} onPress={focusNew}>
-              <Text style={st.addPlus}>＋</Text><Text style={st.addText}>新增一行</Text>
-            </Pressable>
-            <View>
-              {n.items.map((it, index) => (
-                <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id}
-                  inputKey={`${it.id}:${rev.current[it.id] || 0}:${epoch}`}
-                  bg={c.bg} rule={c.rule} inputProps={inputProps}
-                  dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
-                  refInput={r => { inputs.current[it.id] = r; }} refRow={r => { rows.current[it.id] = r; }}
-                  onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
-                  onSel={v => { sel.current[it.id] = v; }}
-                  onChange={v => onChange(it.id, v)} onSubmit={() => onSubmit(it.id)} onKey={e => onKey(it.id, e)}
-                  onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
-                  onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
-              ))}
-            </View>
-            {showHint && <Text style={st.hint}>向右滑＝劃掉，結一顆茄子　·　向左滑＝刪除</Text>}
-            {/* tap empty space = jump to the new-idea field */}
-            <Pressable style={{ height: 200 }} onPress={focusNew} />
-          </>
-        )}
+          ) : (
+            <>
+              <Pressable style={({ pressed }) => [st.addrow, pressed && { opacity: 0.5 }]} onPress={focusNew}>
+                <View style={st.addIcon}><Sym name="plus" size={14} color={C.tint} weight="semibold" /></View>
+                <Text style={st.addText}>新增一行</Text>
+              </Pressable>
+              <View>
+                {n.items.map((it, index) => (
+                  <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id}
+                    inputKey={`${it.id}:${rev.current[it.id] || 0}:${epoch}`} inputProps={inputProps}
+                    dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
+                    refInput={r => { inputs.current[it.id] = r; }} refRow={r => { rows.current[it.id] = r; }}
+                    onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
+                    onSel={v => { sel.current[it.id] = v; }}
+                    onChange={v => onChange(it.id, v)} onSubmit={() => onSubmit(it.id)} onKey={e => onKey(it.id, e)}
+                    onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
+                    onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
+                ))}
+              </View>
+              {showHint && <Text style={st.hint}>點圓圈或往右滑＝劃掉，結一顆茄子　·　往左滑＝刪除</Text>}
+              {/* tap empty space = jump to the new-idea field */}
+              <Pressable style={{ height: 220 }} onPress={focusNew} />
+            </>
+          )}
+        </View>
       </ScrollView>
 
-      {Platform.OS === 'ios' && (
+      {native && (
         <InputAccessoryView nativeID={KBAR}>
-          <View style={[st.kbar, { backgroundColor: c.hd }]}>
+          <View style={st.kbar}>
             <Pressable style={[st.kb, !canUndo && st.kbOff]} disabled={!canUndo} onPress={undo} accessibilityLabel="復原">
-              <Icon name="undo" color="rgba(0,0,0,.65)" />
+              <Sym name="arrow.uturn.backward" size={19} color={C.tint} />
             </Pressable>
             <Pressable style={[st.kb, !canRedo && st.kbOff]} disabled={!canRedo} onPress={redo} accessibilityLabel="重做">
-              <Icon name="redo" color="rgba(0,0,0,.65)" />
+              <Sym name="arrow.uturn.forward" size={19} color={C.tint} />
             </Pressable>
             <View style={{ flex: 1 }} />
-            <Pressable style={st.kDone} onPress={() => Keyboard.dismiss()}><Text style={st.kDoneText}>完成</Text></Pressable>
+            <Pressable style={st.kb} onPress={() => Keyboard.dismiss()} accessibilityLabel="完成">
+              <Text style={st.kDone}>完成</Text>
+            </Pressable>
           </View>
         </InputAccessoryView>
       )}
@@ -405,19 +412,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   );
 }
 
-function Lines({ rule, height }: { rule: string; height: number }) {
-  const count = Math.ceil(height / LINE_H) + 40;
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: (i + 1) * LINE_H - 1, height: 1, backgroundColor: rule }} />
-      ))}
-    </View>
-  );
-}
-
 type LineProps = {
-  it: Item; index: number; done: boolean; focused: boolean; inputKey: string; bg: string; rule: string; inputProps: object;
+  it: Item; index: number; done: boolean; focused: boolean; inputKey: string; inputProps: object;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; refRow: (r: HostInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onSel: (v: { start: number; end: number }) => void; onChange: (v: string) => void; onSubmit: () => void;
@@ -455,13 +451,13 @@ function Line(p: LineProps) {
   });
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
-  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? '#7a7a7a' : tx.value < 0 ? '#d0443a' : 'transparent' }));
+  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? (C.tint as string) : tx.value < 0 ? '#FF3B30' : 'transparent' }));
   const leftLabel = useAnimatedStyle(() => ({ opacity: tx.value > 0 ? 1 : 0 }));
   const rightLabel = useAnimatedStyle(() => ({ opacity: tx.value < 0 ? 1 : 0 }));
   const shift = useAnimatedStyle(() => {
     const from = p.dragIdx.value, to = p.dragTo.value;
     if (from < 0) return { zIndex: 0, transform: [{ translateY: 0 }], shadowOpacity: 0 };
-    if (index === from) return { zIndex: 5, transform: [{ translateY: p.dragDy.value }], shadowOpacity: 0.2 };
+    if (index === from) return { zIndex: 5, transform: [{ translateY: p.dragDy.value }], shadowOpacity: 0.18 };
     let y = 0;
     if (from < to && index > from && index <= to) y = -p.dragH.value;
     if (from > to && index < from && index >= to) y = p.dragH.value;
@@ -471,26 +467,37 @@ function Line(p: LineProps) {
   return (
     <Animated.View ref={p.refRow as any} collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
-      style={[st.ci, { borderBottomColor: p.rule }, st.ciShadow, shift]}>
+      style={[st.ci, shift]}>
       <Animated.View style={[StyleSheet.absoluteFill, st.under, under]}>
         <Animated.Text style={[st.underText, leftLabel]}>{p.done ? '恢復' : '劃掉'}</Animated.Text>
         <Animated.Text style={[st.underText, rightLabel]}>刪除</Animated.Text>
       </Animated.View>
       <GestureDetector gesture={swipe}>
-        <Animated.View style={[st.cin, { backgroundColor: p.focused ? mixWhite(p.bg, 0.45) : p.bg }, slide]}>
-          <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false}
-            submitBehavior="submit" returnKeyType="next" {...p.inputProps}
-            style={[st.ta, p.done && st.taDone]}
-            onChangeText={p.onChange} onSubmitEditing={p.onSubmit} onKeyPress={p.onKey}
-            onSelectionChange={e => p.onSel(e.nativeEvent.selection)}
-            onFocus={p.onFocus} onBlur={p.onBlur} />
-          {p.focused
-            ? <Pressable style={st.x} onPress={p.onX} accessibilityLabel="刪除這行"><Text style={st.xText}>✕</Text></Pressable>
-            : (
-              <GestureDetector gesture={grip}>
-                <View style={st.grip} accessibilityLabel="拖曳排序"><Text style={st.gripText}>⋮⋮</Text></View>
-              </GestureDetector>
-            )}
+        <Animated.View style={[st.cin, slide]}>
+          <Pressable style={st.circleHit} onPress={onStrike} hitSlop={6}
+            accessibilityRole="checkbox" accessibilityState={{ checked: p.done }} accessibilityLabel={p.done ? '恢復' : '劃掉'}>
+            <View style={[st.circle, p.done && st.circleOn]}>
+              {p.done && <Sym name="checkmark" size={12} color="#fff" weight="semibold" />}
+            </View>
+          </Pressable>
+          <View style={st.lineBody}>
+            <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false}
+              submitBehavior="submit" returnKeyType="next" {...p.inputProps}
+              style={[st.ta, p.done && st.taDone]}
+              onChangeText={p.onChange} onSubmitEditing={p.onSubmit} onKeyPress={p.onKey}
+              onSelectionChange={e => p.onSel(e.nativeEvent.selection)}
+              onFocus={p.onFocus} onBlur={p.onBlur} />
+            {p.focused
+              ? (
+                <Pressable style={st.side} onPress={p.onX} accessibilityLabel="刪除這行">
+                  <Sym name="xmark.circle.fill" size={18} color={C.tertiary} />
+                </Pressable>
+              ) : (
+                <GestureDetector gesture={grip}>
+                  <View style={st.side} accessibilityLabel="拖曳排序"><Sym name="line.3.horizontal" size={16} color={C.tertiary} /></View>
+                </GestureDetector>
+              )}
+          </View>
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -498,37 +505,30 @@ function Line(p: LineProps) {
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingBottom: 6, minHeight: 58 },
-  ib: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, minWidth: 0, fontSize: 23, fontWeight: '500', paddingVertical: 8, paddingHorizontal: 6, borderRadius: 6 },
-  swatch: { width: 30, height: 30, borderRadius: 7, borderWidth: 2, borderColor: 'rgba(255,255,255,.8)', marginHorizontal: 6,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 } },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, paddingHorizontal: 14 },
-  metaText: { fontSize: 15, color: 'rgba(0,0,0,.5)' },
-  body: { fontSize: 20, lineHeight: LINE_H, paddingHorizontal: 14, paddingTop: 0, paddingBottom: 160, color: T.text, textAlignVertical: 'top' },
-  addrow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 14, height: 54, borderBottomWidth: 1 },
-  addPlus: { fontSize: 22, color: 'rgba(0,0,0,.45)' },
-  addText: { fontSize: 19, color: 'rgba(0,0,0,.45)' },
-  ci: { borderBottomWidth: 1, overflow: 'hidden' },
-  ciShadow: { shadowColor: '#000', shadowRadius: 9, shadowOffset: { width: 0, height: 6 } },
+  paper: { paddingHorizontal: 20 },
+  title: { fontSize: F.title, fontWeight: '700', color: C.label, paddingTop: 8, paddingBottom: 2, paddingHorizontal: 0 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 14 },
+  metaDot: { width: 8, height: 8, borderRadius: 4 },
+  metaText: { fontSize: F.footnote, color: C.secondary },
+  body: { fontSize: F.body, lineHeight: 25, color: C.label, paddingTop: 0, paddingBottom: 160, paddingHorizontal: 0, textAlignVertical: 'top' },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 46 },
+  addIcon: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.tintSoft, alignItems: 'center', justifyContent: 'center' },
+  addText: { fontSize: F.body, color: C.tint },
+  ci: { overflow: 'hidden', backgroundColor: C.page, shadowColor: '#000', shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
-  underText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  cin: { flexDirection: 'row', alignItems: 'flex-start', gap: 2, paddingLeft: 14 },
-  ta: { flex: 1, minWidth: 0, fontSize: 20, lineHeight: 30, paddingTop: 12, paddingBottom: 12, paddingHorizontal: 4, minHeight: 54, color: T.text },
-  taDone: { textDecorationLine: 'line-through', color: 'rgba(0,0,0,.38)' },
-  x: { width: 40, height: 52, alignItems: 'center', justifyContent: 'center' },
-  xText: { color: 'rgba(0,0,0,.4)', fontSize: 19 },
-  grip: { width: 36, height: 52, alignItems: 'center', justifyContent: 'center' },
-  gripText: { color: 'rgba(0,0,0,.22)', fontSize: 18, letterSpacing: -2 },
-  hint: { fontSize: 13, color: 'rgba(0,0,0,.4)', textAlign: 'center', padding: 14 },
-  kbar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10,
-    borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,.1)' },
-  kb: { height: 40, minWidth: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  underText: { color: '#fff', fontSize: F.subhead, fontWeight: '600' },
+  cin: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.page },
+  circleHit: { width: 36, paddingTop: 11, alignItems: 'flex-start' },
+  circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: C.tertiary, alignItems: 'center', justifyContent: 'center' },
+  circleOn: { backgroundColor: C.tint, borderColor: C.tint },
+  lineBody: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.separator },
+  ta: { flex: 1, minWidth: 0, fontSize: F.body, lineHeight: 23, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 0, minHeight: 46, color: C.label },
+  taDone: { textDecorationLine: 'line-through', color: C.secondary },
+  side: { width: 36, height: 46, alignItems: 'center', justifyContent: 'center' },
+  hint: { fontSize: F.footnote, color: C.secondary, textAlign: 'center', padding: 14 },
+  kbar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: C.groupedBg,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
+  kb: { height: 40, minWidth: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   kbOff: { opacity: 0.3 },
-  kDone: { height: 40, backgroundColor: 'rgba(0,0,0,.75)', borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center' },
-  kDoneText: { color: '#fff', fontSize: 16 },
-  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, paddingTop: 10, paddingHorizontal: 20, paddingBottom: 18 },
-  pal: { width: '16%', aspectRatio: 1, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,.2)' },
-  palOn: { borderWidth: 3, borderColor: T.egg },
+  kDone: { color: C.tint, fontSize: F.body, fontWeight: '600' },
 });

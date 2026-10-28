@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { ART, T, type ArtName } from '../lib/theme';
+import { ART, C, F, type ArtName } from '../lib/theme';
 
 export function EmptyArt({ art, lines }: { art: ArtName; lines: string[] }) {
   const calm = useReducedMotion();
@@ -25,7 +25,7 @@ export function EmptyArt({ art, lines }: { art: ArtName; lines: string[] }) {
 }
 
 const s = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingVertical: 56, paddingHorizontal: 20 },
-  art: { width: '62%', maxWidth: 230, marginBottom: 8 },
-  text: { color: T.muted, fontSize: 17, lineHeight: 30, textAlign: 'center' },
+  wrap: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+  art: { width: '56%', maxWidth: 210, marginBottom: 10 },
+  text: { color: C.secondary, fontSize: F.subhead, lineHeight: 24, textAlign: 'center' },
 });
