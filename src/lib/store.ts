@@ -7,12 +7,13 @@ import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, t
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; subs: Set<() => void>; listening?: boolean;
 };
 const g = globalThis as { __qiejiStore?: Box };
-const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, subs: new Set() });
+const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
 const emit = () => box.subs.forEach(f => f());
+const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
 
 async function writeNow() {
   clearTimeout(box.saveT);
@@ -28,13 +29,21 @@ export const store = {
   get s() { return box.state; },
   get loaded() { return box.loaded; },
   get hintSeen() { return box.hintSeen; },
+  // 上次開著的筆記（關掉 app 時還開著的那則），下次打開直接回到它；停在列表就是 null
+  get last() { return box.last; },
+  setLast(id: string | null) {
+    if (box.last === id) return;
+    box.last = id;
+    (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
+  },
 
   async load() {
     if (box.loaded) return;
-    const [raw, hint] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY)]);
+    const [raw, hint, last] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY)]);
     if (box.loaded) return;
     box.state = parseState(raw);
     box.hintSeen = hint === '1';
+    box.last = last;
     box.loaded = true;
     box.version++;
     emit();

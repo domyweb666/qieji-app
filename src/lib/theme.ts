@@ -41,22 +41,3 @@ export const ART = {
   field: { src: require('../../assets/img/field.webp'), r: 941 / 800 },
 } as const;
 export type ArtName = keyof typeof ART;
-
-
-// 劃掉動畫（茄子飛進籃子）用的圖。要換圖只改這裡（見 docs/籃子動畫-美術需求.md）
-export const HARVEST = {
-  // 籃子：空的／裝了一些／滿的（依本週收成數換）。
-  // front＝同一張圖只留籃口前緣以下（沿著籃口弧線切），疊在掉進去的茄子上面
-  baskets: [
-    { src: require('../../assets/img/harvest-basket-empty.webp'), front: require('../../assets/img/harvest-basket-empty-front.webp'), r: 240 / 245 },
-    { src: require('../../assets/img/harvest-basket-some.webp'), front: require('../../assets/img/harvest-basket-some-front.webp'), r: 240 / 248 },
-    { src: require('../../assets/img/harvest-basket-full.webp'), front: require('../../assets/img/harvest-basket-full-front.webp'), r: 240 / 249 },
-  ],
-  // 籃口前緣正中間在圖片高度的哪裡（0＝最上、1＝最下），茄子掉到這附近被蓋住
-  rim: 0.62,
-  // 飛的茄子：一般／金色（金色那張含旁邊的星星，所以比較寬，身體大小一樣）
-  fly: {
-    e: { src: require('../../assets/img/harvest-egg.webp'), r: 120 / 163, w: 40 },
-    g: { src: require('../../assets/img/harvest-egg-gold.webp'), r: 158 / 161, w: 52 },
-  },
-} as const;

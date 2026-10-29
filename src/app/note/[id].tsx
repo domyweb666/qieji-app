@@ -1,12 +1,12 @@
 // 筆記編輯：文字筆記／清單筆記。清單的每一行就是一個點子：
-// 往右滑＝劃掉結茄子，往左滑＝刪除，拉右邊的把手＝排序。
+// 往右滑＝劃掉，往左滑＝刪除，拉右邊的把手＝排序。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import {
-  InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
-  type HostInstance, type TextInputInstance, type TextInputKeyPressEvent,
+  InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, View,
+  type TextInputInstance, type TextInputKeyPressEvent,
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -16,7 +16,7 @@ import { ui } from '../../components/Overlay';
 import { Sym } from '../../components/Sym';
 import { GlassBtn, native, WebTop } from '../../components/WebBars';
 import {
-  ago, bloom, col, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Kind, type Note,
+  ago, bloom, col, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Note,
 } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
@@ -39,7 +39,6 @@ export default function NoteScreen() {
 
 function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   useStore();
-  const { height: winH } = useWindowDimensions();
   const [, force] = useReducer((x: number) => x + 1, 0);
 
   const closed = useRef(false);
@@ -48,7 +47,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const titleRef = useRef<TextInputInstance>(null);
   const bodyRef = useRef<TextInputInstance>(null);
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
-  const rows = useRef<Record<string, HostInstance | null>>({});
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const sel = useRef<Record<string, { start: number; end: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
@@ -104,20 +102,9 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const canRedo = hpos.current < hist.current.length - 1;
   undoShown.current = `${canUndo}|${canRedo}`;
 
-  /* ---------- bloom / harvest ---------- */
-  function fx(id: string, kind: Kind, fly: boolean) {
-    rows.current[id]?.measureInWindow((x, y, w, h) => {
-      if (y + h < 0 || y > winH) return;
-      const at = { x: x + w, y: y + h / 2 };
-      if (fly) ui.toBasket(at, kind); else ui.pop(at, kind);
-    });
-  }
-  // an idea "blooms" the first time it is left with text in it
-  function bloomCheck(anim: boolean, skipId?: string | null) {
-    const ids = bloom(store.s, n, skipId);
-    if (!ids.length) return;
-    store.change();
-    if (anim && n.type === 'check') ids.forEach(id => fx(id, 'f', false));
+  /* ---------- 開花／結茄子：畫面上不顯示了，數字照樣記著（網頁版還在用，資料不能少） ---------- */
+  function bloomCheck(skipId?: string | null) {
+    if (bloom(store.s, n, skipId).length) store.save();
   }
   function strike(id: string) {
     const it = n.items.find(i => i.id === id);
@@ -125,8 +112,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const kind = toggleStrike(store.s, it);
     changed(true);
     store.markHint();
-    // 這裡只輕點一下；茄子落進籃子時再震一下（金茄子震得比較明顯，見 Harvest.tsx）
-    if (kind) { fx(id, kind, true); Haptics.selectionAsync().catch(() => {}); }
+    if (kind) Haptics.selectionAsync().catch(() => {});
   }
   function remove(id: string) {
     const idx = n.items.findIndex(i => i.id === id);
@@ -166,7 +152,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     n.items.splice(n.items.findIndex(i => i.id === id) + 1, 0, it);
     changed();
     focusItem(it.id, 0);
-    bloomCheck(true, it.id);
+    bloomCheck(it.id);
   }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
@@ -175,14 +161,14 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   function onFocus(id: string) {
     focused.current = id;
     setFocusId(id);
-    if (n.type === 'check') bloomCheck(true, id === 'title' ? null : id);
+    if (n.type === 'check') bloomCheck(id === 'title' ? null : id);
   }
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
     setTimeout(() => {
       if (focused.current || !mounted.current || closed.current) return;
       setFocusId(null);
-      if (n.type === 'check') { bloomCheck(true); cleanupEmpty(); }
+      if (n.type === 'check') { bloomCheck(); cleanupEmpty(); }
     }, 120);
   }
 
@@ -274,7 +260,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     closed.current = true;
     Keyboard.dismiss();
     clearTimeout(histT.current);
-    bloomCheck(false);
+    bloomCheck();
     if (n.type === 'check') n.items = n.items.filter(i => i.t.trim());
     if (isEmpty(n)) store.s.notes = store.s.notes.filter(x => x !== n);
     store.change();
@@ -289,7 +275,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     let t: ReturnType<typeof setTimeout> | undefined;
     // 新的清單先停在標題，不自動多一行；要寫點子就點「新增一行」
     if (fresh) t = setTimeout(() => (n.type === 'text' ? bodyRef.current : titleRef.current)?.focus(), 60);
-    return () => { clearTimeout(t); mounted.current = false; closeNote(); };
+    store.setLast(n.id); // 關掉 app 時還開著這則，下次打開就直接回到這裡
+    return () => { clearTimeout(t); mounted.current = false; closeNote(); store.setLast(null); };
   }, []);
 
   /* ---------- actions ---------- */
@@ -383,7 +370,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
                   <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} tone={tone}
                     inputKey={`${it.id}:${rev.current[it.id] || 0}:${epoch}`} inputProps={inputProps}
                     dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
-                    refInput={r => { inputs.current[it.id] = r; }} refRow={r => { rows.current[it.id] = r; }}
+                    refInput={r => { inputs.current[it.id] = r; }}
                     onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
                     onSel={v => { sel.current[it.id] = v; }}
                     onChange={v => onChange(it.id, v)} onSubmit={() => onSubmit(it.id)} onKey={e => onKey(it.id, e)}
@@ -391,7 +378,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
                     onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
                 ))}
               </View>
-              {showHint && <Text style={st.hint}>往右滑劃掉（結一顆茄子）　·　往左滑刪除</Text>}
+              {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
               {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
               <View style={{ height: 220 }} />
             </>
@@ -422,7 +409,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 type LineProps = {
   it: Item; index: number; done: boolean; focused: boolean; inputKey: string; inputProps: object; tone: { bg: string; rule: string };
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
-  refInput: (r: TextInputInstance | null) => void; refRow: (r: HostInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
+  refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onSel: (v: { start: number; end: number }) => void; onChange: (v: string) => void; onSubmit: () => void;
   onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
   onStrike: () => void; onRemove: () => void; onX: () => void;
@@ -436,8 +423,10 @@ function Line(p: LineProps) {
   const { onStrike, onRemove, index, dragIdx, dragTo, dragDy, dragH } = p;
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
   const id = p.it.id;
+  // 每一行的高度跟著字數長：打到超過一行就自動換到下一行（不靠系統自己算，iPhone 和網頁都一樣）
+  const [taH, setTaH] = useState(0);
 
-  // 劃掉前先在字上畫一條線（從左到右、多行就一行接一行），畫完才真的劃掉、茄子起飛。
+  // 劃掉前先在字上畫一條線（從左到右、多行就一行接一行），畫完才真的劃掉。
   // 先用一個看不見的 Text 量出每一行字的位置和寬度。恢復（取消劃掉）不用畫。
   const calm = useReducedMotion();
   const ink = useSharedValue(0);
@@ -507,7 +496,7 @@ function Line(p: LineProps) {
   }, WEB_DEPS ? [index] : undefined);
 
   return (
-    <Animated.View ref={p.refRow as any} collapsable={false}
+    <Animated.View collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
       style={[st.ci, { backgroundColor: p.tone.bg, borderBottomColor: p.tone.rule }, shift]}>
       <Animated.View style={[StyleSheet.absoluteFill, st.under, under]}>
@@ -519,7 +508,8 @@ function Line(p: LineProps) {
           <View style={st.lineBody}>
             <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false}
               submitBehavior="submit" returnKeyType="next" {...p.inputProps}
-              style={[st.ta, p.done && st.taDone]}
+              style={[st.ta, taH > 0 && { height: Math.max(46, taH) }, p.done && st.taDone]}
+              onContentSizeChange={e => setTaH(Math.ceil(e.nativeEvent.contentSize.height))}
               onChangeText={p.onChange} onSubmitEditing={p.onSubmit} onKeyPress={p.onKey}
               onSelectionChange={e => p.onSel(e.nativeEvent.selection)}
               onFocus={p.onFocus} onBlur={p.onBlur} />

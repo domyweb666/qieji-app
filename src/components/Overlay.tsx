@@ -1,32 +1,19 @@
-// 疊在所有畫面上面的一層：選單、確認框、toast、開花與茄子進籃的動畫。
-// 其他畫面用 ui.sheet() / ui.toast() / ui.pop() / ui.toBasket() 呼叫。
-import { Image } from 'expo-image';
+// 疊在所有畫面上面的一層：選單、確認框、toast。其他畫面用 ui.sheet() / ui.confirm() / ui.toast() 呼叫。
 import { useEffect, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Easing, FadeIn, FadeOut, interpolate, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion,
-  useSharedValue, withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
-import type { Kind } from '../lib/model';
-import { ART, C, F } from '../lib/theme';
-import { HarvestLayer } from './Harvest';
+import { C, F } from '../lib/theme';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
 type SheetSpec = { title?: string; rows: Row[] };
 type ToastSpec = { msg: string; action?: { label: string; fn: () => void } };
-type Pt = { x: number; y: number };
-type Fx = { key: number; kind: Kind; at: Pt; fly: boolean };
 
 let host: {
   sheet: (s: SheetSpec | null) => void;
   confirm: (c: { msg: string; ok: () => void } | null) => void;
   toast: (t: ToastSpec | null) => void;
-  fx: (f: Fx) => void;
 } | null = null;
-let calm = false;
-let fxKey = 0;
 
 export const ui = {
   // iOS 用系統的動作表單與確認框，其他平台（網頁預覽）用自己畫的
@@ -44,27 +31,19 @@ export const ui = {
     Alert.alert(msg, undefined, [{ text: '取消', style: 'cancel' }, { text: okLabel, style: 'destructive', onPress: ok }]);
   },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
-  // 行尾冒出一朵花（或茄子）往上飄；at = 那一行右側中間的螢幕座標
-  pop: (at: Pt, kind: Kind) => host?.fx({ key: ++fxKey, kind, at, fly: false }),
-  // 劃掉時小茄子飛進右下角的籃子（動畫在 Harvest.tsx）；系統開「減少動態效果」時改回原地彈出
-  toBasket: (at: Pt, kind: Kind) => host?.fx({ key: ++fxKey, kind, at, fly: !calm }),
 };
 
 export function OverlayHost() {
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [confirm, setConfirm] = useState<{ msg: string; ok: () => void } | null>(null);
   const [toast, setToast] = useState<ToastSpec | null>(null);
-  const [fx, setFx] = useState<Fx[]>([]);
   const insets = useSafeAreaInsets();
-  const reduce = useReducedMotion();
-  useEffect(() => { calm = reduce; }, [reduce]);
 
   useEffect(() => {
     const mine: typeof host = {
       sheet: setSheet,
       confirm: setConfirm,
       toast: setToast,
-      fx: f => setFx(a => [...a, f]),
     };
     host = mine;
     return () => { if (host === mine) host = null; };
@@ -77,13 +56,9 @@ export function OverlayHost() {
   }, [toast]);
 
   const closeSheet = () => setSheet(null);
-  const dropFx = (key: number) => setFx(a => a.filter(f => f.key !== key));
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {fx.filter(f => !f.fly).map(f => <Pop key={f.key} f={f} onDone={() => dropFx(f.key)} />)}
-      <HarvestLayer flights={fx.filter(f => f.fly)} bottom={insets.bottom} onDone={dropFx} />
-
       {toast && (
         <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)}
           style={[s.toast, { bottom: insets.bottom + 76 }]}>
@@ -132,34 +107,6 @@ export function OverlayHost() {
         </Animated.View>
       )}
     </View>
-  );
-}
-
-const artOf = (k: Kind) => (k === 'f' ? ART.flower : k === 'g' ? ART['egg-gold'] : ART['egg-small']);
-
-function Pop({ f, onDone }: { f: Fx; onDone: () => void }) {
-  const t = useSharedValue(0);
-  const w = f.kind === 'f' ? 34 : 40;
-  const a = artOf(f.kind);
-  useEffect(() => {
-    t.value = withTiming(1, { duration: 1150, easing: Easing.linear }, done => { if (done) scheduleOnRN(onDone); });
-  }, []);
-  const st = useAnimatedStyle(() => {
-    const v = t.value;
-    return {
-      opacity: interpolate(v, [0, 0.22, 0.75, 1], [0, 1, 1, 0]),
-      transform: [
-        { translateY: interpolate(v, [0, 0.22, 0.36, 0.75, 1], [8, -4, 0, -22, -38]) },
-        { scale: interpolate(v, [0, 0.22, 0.36, 0.75, 1], [0.2, 1.18, 1, 1, 0.9]) },
-      ],
-    };
-  });
-  const left = f.at.x - (f.kind === 'f' ? 50 : 58);
-  const top = f.at.y - (f.kind === 'f' ? 20 : 30);
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left, top, width: w, height: w / a.r }, st]}>
-      <Image source={a.src} style={{ width: w, height: w / a.r }} />
-    </Animated.View>
   );
 }
 

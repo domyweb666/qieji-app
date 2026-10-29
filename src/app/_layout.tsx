@@ -38,7 +38,11 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerTransparent: false, headerStyle: { backgroundColor: C.groupedBg } }} />
           <Stack.Screen name="folder/[kind]" options={{ headerLargeTitleEnabled: true }} />
           {/* iOS 26 預設整個畫面往右滑都會返回，會搶走「往右滑劃掉」；改成只有從螢幕左緣滑才返回 */}
-          <Stack.Screen name="note/[id]" options={{ headerTransparent: false, contentStyle: { backgroundColor: C.page }, fullScreenGestureEnabled: false }} />
+          {/* 打開 app 直接回到上次的筆記時不播推入動畫，看起來就是停在那裡 */}
+          <Stack.Screen name="note/[id]" options={({ route }) => ({
+            headerTransparent: false, contentStyle: { backgroundColor: C.page }, fullScreenGestureEnabled: false,
+            animation: (route.params as { restore?: string } | undefined)?.restore ? 'none' : 'default',
+          })} />
           <Stack.Screen name="color/[id]" options={{
             presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: 24,
             headerShown: false, contentStyle: { backgroundColor: C.card },
