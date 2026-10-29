@@ -34,11 +34,15 @@ export default function RootLayout() {
           freezeOnBlur: true,
           contentStyle: { backgroundColor: C.groupedBg },
         }}>
-          <Stack.Screen name="index" options={{ headerLargeTitleEnabled: true }} />
+          {/* 首頁：標題列不透明、不放標題（像提醒事項），底下是左右滑的三頁 */}
+          <Stack.Screen name="index" options={{ headerTransparent: false, headerStyle: { backgroundColor: C.groupedBg } }} />
           <Stack.Screen name="folder/[kind]" options={{ headerLargeTitleEnabled: true }} />
           {/* iOS 26 預設整個畫面往右滑都會返回，會搶走「往右滑劃掉」；改成只有從螢幕左緣滑才返回 */}
-          <Stack.Screen name="note/[id]" options={{ contentStyle: { backgroundColor: C.page }, fullScreenGestureEnabled: false }} />
-          <Stack.Screen name="garden" options={{ presentation: 'modal', sheetGrabberVisible: true, headerTitle: '茄子田' }} />
+          <Stack.Screen name="note/[id]" options={{ headerTransparent: false, contentStyle: { backgroundColor: C.page }, fullScreenGestureEnabled: false }} />
+          <Stack.Screen name="color/[id]" options={{
+            presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: 24,
+            headerShown: false, contentStyle: { backgroundColor: C.card },
+          }} />
         </Stack>
       ) : <View style={{ flex: 1, backgroundColor: C.groupedBg }} />}
       <OverlayHost />

@@ -16,10 +16,10 @@ import { ui } from '../../components/Overlay';
 import { Sym } from '../../components/Sym';
 import { GlassBtn, native, WebTop } from '../../components/WebBars';
 import {
-  ago, bloom, CKEYS, col, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Kind, type Note,
+  ago, bloom, col, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Kind, type Note,
 } from '../../lib/model';
-import { newNote, store, useStore } from '../../lib/store';
-import { C, DOTS, F } from '../../lib/theme';
+import { store, useStore } from '../../lib/store';
+import { C, F } from '../../lib/theme';
 
 const KBAR = 'kbar';
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
@@ -307,16 +307,13 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     router.back();
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
   }
-  // 新增：換成一則新的（跟備忘錄一樣，不會一層層疊上去）
-  function compose(type: Note['type']) {
-    const m = newNote(n.color, type);
-    router.replace({ pathname: '/note/[id]', params: { id: m.id, fresh: '1' } });
+  // 顏色：從下方升起一個色塊面板（原生選單放不了色塊）
+  function pickColor() {
+    Keyboard.dismiss();
+    router.push({ pathname: '/color/[id]', params: { id: n.id } });
   }
-  const newActs: Act[] = [
-    { label: '記事', icon: 'text.alignleft', fn: () => compose('text') },
-    { label: '清單', icon: 'checklist', fn: () => compose('check') },
-  ];
   const moreActs: Act[] = [
+    { label: '顏色', icon: 'paintpalette', fn: pickColor },
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
     { label: '清單', inline: true, hidden: n.type !== 'check' || (n.items.length < 2 && !anyDone), sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => { n.items.reverse(); changed(true); } },
@@ -326,41 +323,30 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } },
     { label: '刪除', icon: 'trash', destructive: true, fn: del },
   ];
-  const colorActs: Act[] = CKEYS.map(k => ({ label: col(k).name, img: DOTS[k], on: n.color === k, fn: () => { n.color = k; changed(); } }));
 
   const showHint = n.type === 'check' && !store.hintSeen && n.items.some(i => i.t.trim());
   const inputProps = native ? { inputAccessoryViewID: KBAR } : {};
-  const editing = focusId !== null;
   // 整頁跟著筆記的顏色走；分隔線用同色系深一階，才看得清楚
   const tone = { bg: col(n.color).bg, rule: col(n.color).rule };
 
   return (
     <View style={{ flex: 1, backgroundColor: tone.bg }} collapsable={false}>
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
-        scrollEnabled={!dragging} onLayout={e => setBodyH(e.nativeEvent.layout.height)}>
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="分享" onPress={share} />
-          <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="更多">{menuItems(moreActs)}</Stack.Toolbar.Menu>
-        </Stack.Toolbar>
-        {/* 打字時底部工具列讓位，改用鍵盤上方那一條 */}
-        {!editing && (
-          <Stack.Toolbar placement="bottom">
-            <Stack.Toolbar.Menu icon="paintpalette" accessibilityLabel="顏色" title="顏色">{menuItems(colorActs)}</Stack.Toolbar.Menu>
-            <Stack.Toolbar.Button icon={n.pinned ? 'pin.fill' : 'pin'} accessibilityLabel="釘選" onPress={togglePin} />
-            <Stack.Toolbar.Spacer />
-            <Stack.Toolbar.Menu icon="square.and.pencil" accessibilityLabel="新增" title="新增">{menuItems(newActs)}</Stack.Toolbar.Menu>
-          </Stack.Toolbar>
-        )}
-        <WebTop left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
-          right={(
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <GlassBtn icon="square.and.arrow.up" label="分享" onPress={share} />
-              <GlassBtn icon="ellipsis" label="更多" onPress={() => showActs(moreActs)} />
-            </View>
-          )} />
+      {/* 標題列底色跟著筆記的顏色 */}
+      <Stack.Screen options={{ headerStyle: { backgroundColor: tone.bg } }} />
+      <Stack.Toolbar placement="right">
+        <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="分享" onPress={share} />
+        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="更多">{menuItems(moreActs)}</Stack.Toolbar.Menu>
+      </Stack.Toolbar>
+      <WebTop left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
+        right={(
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <GlassBtn icon="square.and.arrow.up" label="分享" onPress={share} />
+            <GlassBtn icon="ellipsis" label="更多" onPress={() => showActs(moreActs)} />
+          </View>
+        )} />
 
-        <View style={st.paper}>
+      {/* 標題和日期固定在上面，往下捲只有內容在動 */}
+      <View style={[st.head, { borderBottomColor: tone.rule }]}>
           <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="標題" {...inputProps}
             placeholderTextColor={C.placeholder} style={st.title} multiline scrollEnabled={false}
             returnKeyType="next" submitBehavior="submit"
@@ -375,7 +361,12 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
             <View style={[st.metaDot, { backgroundColor: col(n.color).hd }]} />
             <Text style={st.metaText}>{fullDate(n.updated)}　{ago(n.updated)}</Text>
           </View>
+      </View>
 
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
+        scrollEnabled={!dragging} onLayout={e => setBodyH(e.nativeEvent.layout.height)}>
+        <View style={st.paper}>
           {n.type === 'text' ? (
             <TextInput ref={bodyRef} key={`body${epoch}`} defaultValue={n.body} placeholder="開始輸入…" multiline scrollEnabled={false}
               placeholderTextColor={C.placeholder} style={[st.body, { minHeight: Math.max(bodyH - 160, 200) }]} {...inputProps}
@@ -565,9 +556,10 @@ function InkBar({ m, ink }: { m: Mark; ink: SharedValue<number> }) {
 }
 
 const st = StyleSheet.create({
+  head: { paddingHorizontal: 20, borderBottomWidth: 1 },
   paper: { paddingHorizontal: 20 },
   title: { fontSize: F.title, fontWeight: '700', color: C.label, paddingTop: 8, paddingBottom: 2, paddingHorizontal: 0 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 14 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 12 },
   metaDot: { width: 8, height: 8, borderRadius: 4 },
   metaText: { fontSize: F.footnote, color: C.secondary },
   body: { fontSize: F.body, lineHeight: 25, color: C.label, paddingTop: 0, paddingBottom: 160, paddingHorizontal: 0, textAlignVertical: 'top' },

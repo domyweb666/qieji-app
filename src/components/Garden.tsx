@@ -1,17 +1,16 @@
-// 茄子田：只顯示本週，茄子依收成順序一顆顆掉到田畦上
+// 茄子田（首頁往右滑那一頁）：只顯示本週，茄子依收成順序一顆顆掉到田畦上。
+// visit＝第幾次滑到這一頁，每次滑過來就重新掉一次；還沒滑過來前先不放茄子。
 import { Image } from 'expo-image';
-import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, Keyframe, useReducedMotion } from 'react-native-reanimated';
-import { GlassBtn, WebTop } from '../components/WebBars';
 import { SLOTS, weekGarden } from '../lib/model';
 import { useStore } from '../lib/store';
 import { ART, C, F } from '../lib/theme';
 
 const FW = 941, FH = 800;
 
-export default function GardenScreen() {
+export function GardenView({ visit, top }: { visit: number; top: number }) {
   const s = useStore();
   const calm = useReducedMotion();
   const [fieldW, setFieldW] = useState(0);
@@ -26,19 +25,14 @@ export default function GardenScreen() {
   const planted = shown.map((n, i) => ({ n, xy: SLOTS[i], i })).sort((a, b) => a.xy[1] - b.xy[1]);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: C.groupedBg }} contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingBottom: 40 }}>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button icon="xmark" accessibilityLabel="關閉" onPress={() => router.back()} />
-      </Stack.Toolbar>
-      <WebTop title="茄子田" right={<GlassBtn icon="xmark" label="關閉" onPress={() => router.back()} />} />
-
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: top, paddingBottom: 120 }}>
+      <Text style={st.h1}>茄子田</Text>
       <View style={st.fieldCard} onLayout={e => setFieldW(e.nativeEvent.layout.width)}>
         <Image source={ART.field.src} style={StyleSheet.absoluteFill} contentFit="fill" />
-        {fieldW > 0 && planted.map(({ n, xy: [x, y], i }) => {
+        {fieldW > 0 && visit > 0 && planted.map(({ n, xy: [x, y], i }) => {
           const a = ART[n], h = eggW / a.r;
           return (
-            <Animated.View key={i}
+            <Animated.View key={`${visit}-${i}`}
               entering={calm ? undefined : drop(h).delay(200 + Math.min(i * 75, 1500))}
               style={[st.egg, { left: (x / FW) * fieldW - eggW / 2, top: (y / FH) * fieldH - h * 0.9, width: eggW, height: h }]}>
               <Image source={a.src} style={{ width: eggW, height: h }} />
@@ -85,7 +79,8 @@ function Stat({ art, n, label }: { art: 'flower' | 'egg'; n: number; label: stri
 }
 
 const st = StyleSheet.create({
-  fieldCard: { marginHorizontal: 16, marginTop: 8, aspectRatio: FW / FH, borderRadius: 16, overflow: 'hidden', backgroundColor: C.card },
+  h1: { fontSize: F.largeTitle, fontWeight: '700', color: C.label, marginHorizontal: 20, marginTop: 4, marginBottom: 12 },
+  fieldCard: { marginHorizontal: 16, aspectRatio: FW / FH, borderRadius: 16, overflow: 'hidden', backgroundColor: C.card },
   egg: { position: 'absolute', shadowColor: '#3C1E14', shadowOpacity: 0.25, shadowRadius: 2, shadowOffset: { width: 0, height: 2 } },
   sign: { position: 'absolute', left: '72%', width: '15%', top: '6.5%', transform: [{ rotate: '4deg' }], fontSize: 12, fontWeight: '700',
     color: '#6B4423', textAlign: 'center', lineHeight: 14 },
