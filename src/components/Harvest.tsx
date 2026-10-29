@@ -17,9 +17,8 @@ import { Sym } from './Sym';
 
 export type Flight = { key: number; kind: Kind; at: { x: number; y: number } };
 
-const BW = 76;          // 籃子寬
+const BW = 80;          // 籃子寬
 const UP = 64;          // 離底部安全區的距離（讓出底部工具列）
-const EW = 38;          // 飛的茄子寬
 const T_POP = 260, T_ARC = 560, T_DROP = 200; // 彈出、飛、落下（毫秒）
 const T_ALL = T_POP + T_ARC + T_DROP;
 const STAY = 900;       // 最後一顆落下後籃子再停多久
@@ -31,10 +30,11 @@ const weekEggs = () => weekGarden(store.s).eggs.length;
 // 籃子的位置與籃口（螢幕座標）
 function useBox(bottom: number) {
   const { width: W, height: H } = useWindowDimensions();
-  const r = HARVEST.baskets[0].r;
-  const h = BW / r;
+  // 三張籃子圖高度差一點點，框子用最高的那張，圖都貼齊底部
+  const h = Math.max(...HARVEST.baskets.map(b => BW / b.r));
   const x = W - 16 - BW, y = H - (bottom + UP) - h;
-  return { x, y, w: BW, h, cx: x + BW / 2, mouth: y + h * HARVEST.rim };
+  const h0 = BW / HARVEST.baskets[0].r;
+  return { x, y, w: BW, h, cx: x + BW / 2, mouth: y + (h - h0) + h0 * HARVEST.rim };
 }
 
 export function HarvestLayer({ flights, bottom, onDone }: { flights: Flight[]; bottom: number; onDone: (key: number) => void }) {
@@ -89,19 +89,17 @@ export function HarvestLayer({ flights, bottom, onDone }: { flights: Flight[]; b
   // 還沒有茄子落下時，先顯示收成前的數量
   const img = HARVEST.baskets[lastLand ? fill : level(weekEggs() - flights.length)];
   const boxSt = { left: box.x, top: box.y, width: box.w, height: box.h };
-  const cut = box.h * HARVEST.rim;
+  const imgSt = { position: 'absolute' as const, bottom: 0, width: box.w, height: box.w / img.r };
   return (
     <>
       {/* 後層：整個籃子 */}
       <Animated.View pointerEvents="none" style={[st.basket, boxSt, { zIndex: 41 }, basketSt]}>
-        <Image source={img.src} style={{ width: box.w, height: box.h }} />
+        <Image source={img.src} style={imgSt} />
       </Animated.View>
       {flights.map(f => <Egg key={f.key} f={f} box={box} onLand={() => land(f)} />)}
-      {/* 前層：只留籃口以下，蓋住掉進去的茄子 */}
+      {/* 前層：只有籃口前緣以下，蓋住掉進去的茄子 */}
       <Animated.View pointerEvents="none" style={[st.basket, boxSt, { zIndex: 43 }, basketSt]}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: cut, bottom: 0, overflow: 'hidden' }}>
-          <Image source={img.src} style={{ position: 'absolute', top: -cut, width: box.w, height: box.h }} />
-        </View>
+        <Image source={img.front} style={imgSt} />
       </Animated.View>
       {pluses.map(p => (
         <Plus key={p.key} gold={p.gold} x={box.cx} y={box.y} show={show}
@@ -115,10 +113,11 @@ export function HarvestLayer({ flights, bottom, onDone }: { flights: Flight[]; b
 function Egg({ f, box, onLand }: { f: Flight; box: ReturnType<typeof useBox>; onLand: () => void }) {
   const t = useSharedValue(0);
   const a = HARVEST.fly[f.kind === 'g' ? 'g' : 'e'];
-  const eh = EW / a.r;
+  const EW = a.w, eh = EW / a.r;
   const sx = f.at.x - 56, sy = f.at.y - eh / 2;        // 從那一行右側出發
   const ax = box.cx - EW / 2, ay = box.mouth - eh - 26; // 籃口正上方
-  const iy = box.mouth - eh * 0.3;                      // 落進籃子後（大半被前緣蓋住）
+  // 落進籃子後：大半被前緣蓋住，但腳不能從籃底露出來
+  const iy = Math.min(box.mouth - eh * 0.3, box.y + box.h - 8 - eh * 0.94);
   const p1 = T_POP / T_ALL, p2 = (T_POP + T_ARC) / T_ALL;
   const spin = sx < ax ? 1 : -1;
 
