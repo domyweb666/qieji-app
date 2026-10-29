@@ -2,15 +2,16 @@
 // 其他畫面用 ui.sheet() / ui.toast() / ui.pop() / ui.toBasket() 呼叫。
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeOut, interpolate, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion,
-  useSharedValue, withSequence, withTiming,
+  useSharedValue, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Kind } from '../lib/model';
 import { ART, C, F } from '../lib/theme';
+import { HarvestLayer } from './Harvest';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
 type SheetSpec = { title?: string; rows: Row[] };
@@ -45,7 +46,7 @@ export const ui = {
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
   // 行尾冒出一朵花（或茄子）往上飄；at = 那一行右側中間的螢幕座標
   pop: (at: Pt, kind: Kind) => host?.fx({ key: ++fxKey, kind, at, fly: false }),
-  // 劃掉時小茄子沿拋物線飛進右下角的籃子；系統開「減少動態效果」時改回原地彈出
+  // 劃掉時小茄子飛進右下角的籃子（動畫在 Harvest.tsx）；系統開「減少動態效果」時改回原地彈出
   toBasket: (at: Pt, kind: Kind) => host?.fx({ key: ++fxKey, kind, at, fly: !calm }),
 };
 
@@ -54,7 +55,6 @@ export function OverlayHost() {
   const [confirm, setConfirm] = useState<{ msg: string; ok: () => void } | null>(null);
   const [toast, setToast] = useState<ToastSpec | null>(null);
   const [fx, setFx] = useState<Fx[]>([]);
-  const [basketOn, setBasketOn] = useState(false);
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   useEffect(() => { calm = reduce; }, [reduce]);
@@ -64,7 +64,7 @@ export function OverlayHost() {
       sheet: setSheet,
       confirm: setConfirm,
       toast: setToast,
-      fx: f => { setFx(a => [...a, f]); if (f.fly) setBasketOn(true); },
+      fx: f => setFx(a => [...a, f]),
     };
     host = mine;
     return () => { if (host === mine) host = null; };
@@ -76,23 +76,13 @@ export function OverlayHost() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // 籃子在最後一顆茄子落下 1.3 秒後收起
-  const [landed, setLanded] = useState(0);
-  useEffect(() => {
-    if (!landed) return;
-    const t = setTimeout(() => setBasketOn(false), 1300);
-    return () => clearTimeout(t);
-  }, [landed]);
-
   const closeSheet = () => setSheet(null);
   const dropFx = (key: number) => setFx(a => a.filter(f => f.key !== key));
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {fx.map(f => f.fly
-        ? <Fly key={f.key} f={f} bottom={insets.bottom} onLand={() => { dropFx(f.key); setLanded(Date.now()); }} />
-        : <Pop key={f.key} f={f} onDone={() => dropFx(f.key)} />)}
-      <Basket on={basketOn} bottom={insets.bottom} landed={landed} />
+      {fx.filter(f => !f.fly).map(f => <Pop key={f.key} f={f} onDone={() => dropFx(f.key)} />)}
+      <HarvestLayer flights={fx.filter(f => f.fly)} bottom={insets.bottom} onDone={dropFx} />
 
       {toast && (
         <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)}
@@ -169,87 +159,6 @@ function Pop({ f, onDone }: { f: Fx; onDone: () => void }) {
   return (
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', left, top, width: w, height: w / a.r }, st]}>
       <Image source={a.src} style={{ width: w, height: w / a.r }} />
-    </Animated.View>
-  );
-}
-
-const BASKET_W = 64;
-const BASKET_UP = 64; // 留出底部工具列的高度
-const basketBox = (W: number, H: number, bottom: number) => {
-  const h = BASKET_W / ART['basket-only'].r;
-  return { x: W - 16 - BASKET_W / 2, y: H - (bottom + BASKET_UP) - h + h * 0.45 }; // 籃口
-};
-
-function Fly({ f, bottom, onLand }: { f: Fx; bottom: number; onLand: () => void }) {
-  const { width: W, height: H } = useWindowDimensions();
-  const t = useSharedValue(0);
-  const a = artOf(f.kind);
-  const sx = f.at.x - 58, sy = f.at.y - 30; // 從那一行旁邊出發
-  const b = basketBox(W, H, bottom);
-  const tx = b.x - sx - 20, ty = b.y - sy - 40;
-  useEffect(() => {
-    t.value = withTiming(1, { duration: 1050, easing: Easing.linear }, done => { if (done) scheduleOnRN(onLand); });
-  }, []);
-  const st = useAnimatedStyle(() => {
-    const p = t.value;
-    if (p < 0.28) {
-      // 先在原地彈出來
-      return {
-        opacity: interpolate(p, [0, 0.16, 0.28], [0, 1, 1]),
-        transform: [
-          { translateX: sx },
-          { translateY: sy + interpolate(p, [0, 0.16, 0.28], [8, -6, 0]) },
-          { rotate: '0deg' },
-          { scale: interpolate(p, [0, 0.16, 0.28], [0.2, 1.18, 1]) },
-        ],
-      };
-    }
-    // 再沿拋物線轉著落進籃子
-    const u = (p - 0.28) / 0.72;
-    const lift = 90 * Math.sin(Math.PI * u) * (1 - u * 0.4);
-    return {
-      opacity: u > 0.875 ? interpolate(u, [0.875, 1], [1, 0]) : 1,
-      transform: [
-        { translateX: sx + tx * u },
-        { translateY: sy + ty * u * u - lift },
-        { rotate: `${u * 200}deg` },
-        { scale: 1 - 0.35 * u },
-      ],
-    };
-  });
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: 40, height: 40 / a.r, zIndex: 42 }, st]}>
-      <Image source={a.src} style={{ width: 40, height: 40 / a.r }} />
-    </Animated.View>
-  );
-}
-
-function Basket({ on, bottom, landed }: { on: boolean; bottom: number; landed: number }) {
-  const v = useSharedValue(0);
-  const sx = useSharedValue(1), sy = useSharedValue(1);
-  useEffect(() => {
-    v.value = withTiming(on ? 1 : 0, { duration: 250, easing: Easing.bezier(0.3, 1.4, 0.5, 1) });
-  }, [on]);
-  useEffect(() => {
-    if (!landed) return;
-    // 茄子落進去，籃子壓扁再回彈
-    const ease = { duration: 127, easing: Easing.out(Easing.quad) };
-    sx.value = withSequence(withTiming(1.16, ease), withTiming(0.95, ease), withTiming(1, ease));
-    sy.value = withSequence(withTiming(0.82, ease), withTiming(1.06, ease), withTiming(1, ease));
-  }, [landed]);
-  const st = useAnimatedStyle(() => ({
-    opacity: Math.min(1, v.value),
-    transform: [
-      { translateY: (1 - v.value) * 16 },
-      { scale: 0.85 + 0.15 * v.value },
-      { scaleX: sx.value },
-      { scaleY: sy.value },
-    ],
-  }));
-  const a = ART['basket-only'];
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', right: 16, bottom: bottom + BASKET_UP, zIndex: 41 }, st]}>
-      <Image source={a.src} style={{ width: BASKET_W, height: BASKET_W / a.r }} />
     </Animated.View>
   );
 }

@@ -54,3 +54,13 @@ export const DOTS = {
   black: require('../../assets/img/dot-black.png'),
   white: require('../../assets/img/dot-white.png'),
 } as const;
+
+// 劃掉動畫（茄子飛進籃子）用的圖。新圖生好後只要換這裡（見 docs/籃子動畫-美術需求.md）
+export const HARVEST = {
+  // 籃子：空的／裝了一些／滿的（依本週收成數換）。新圖到之前三個都先用同一張
+  baskets: [ART['basket-only'], ART['basket-only'], ART['basket-only']],
+  // 籃口在圖片高度的哪裡（0＝最上、1＝最下）。這條線以下是籃子前緣，會蓋住掉進去的茄子
+  rim: 0.47,
+  // 飛的茄子：一般／金色
+  fly: { e: ART['egg-small'], g: ART['egg-gold'] },
+} as const;

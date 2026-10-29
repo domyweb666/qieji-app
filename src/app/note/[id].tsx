@@ -9,7 +9,7 @@ import {
   type HostInstance, type TextInputInstance, type TextInputKeyPressEvent,
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { menuItems, showActs, type Act } from '../../components/Acts';
 import { ui } from '../../components/Overlay';
@@ -125,10 +125,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const kind = toggleStrike(store.s, it);
     changed(true);
     store.markHint();
-    if (kind) {
-      fx(id, kind, true);
-      Haptics.impactAsync(kind === 'g' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
+    // 這裡只輕點一下；茄子落進籃子時再震一下（金茄子震得比較明顯，見 Harvest.tsx）
+    if (kind) { fx(id, kind, true); Haptics.selectionAsync().catch(() => {}); }
   }
   function remove(id: string) {
     const idx = n.items.findIndex(i => i.id === id);
@@ -448,6 +446,38 @@ function Line(p: LineProps) {
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
   const id = p.it.id;
 
+  // 劃掉前先在字上畫一條線（從左到右、多行就一行接一行），畫完才真的劃掉、茄子起飛。
+  // 先用一個看不見的 Text 量出每一行字的位置和寬度。恢復（取消劃掉）不用畫。
+  const calm = useReducedMotion();
+  const ink = useSharedValue(0);
+  const [marks, setMarks] = useState<Mark[] | null>(null);
+  const inkT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  function finishStrike() {
+    clearTimeout(inkT.current);
+    setMarks(null);
+    onStrike();
+  }
+  // 手勢可能還拿著舊的 beginStrike，所以這一行現在的狀態從 ref 讀
+  const live = useRef(p);
+  live.current = p;
+  function beginStrike() {
+    const cur = live.current;
+    if (cur.done || calm || !cur.it.t.trim()) return onStrike();
+    ink.value = 0;
+    setMarks([]);
+    inkT.current = setTimeout(finishStrike, 150); // 量不到字（例如網頁）就直接劃掉
+  }
+  function onMeasured(lines: { x: number; y: number; width: number; height: number }[]) {
+    if (!marks || marks.length || !lines.length) return;
+    clearTimeout(inkT.current);
+    let off = 0;
+    const m = lines.filter(l => l.width > 0).map(l => { const r = { x: l.x, y: l.y + l.height * 0.56, w: l.width, off }; off += l.width; return r; });
+    setMarks(m);
+    ink.value = withTiming(off, { duration: Math.min(380, Math.max(170, off * 0.7)), easing: Easing.inOut(Easing.quad) },
+      done => { if (done) scheduleOnRN(finishStrike); });
+  }
+  useEffect(() => () => clearTimeout(inkT.current), []);
+
   const swipe = usePanGesture({
     activeOffsetX: [-14, 14],
     failOffsetY: [-12, 12],
@@ -457,7 +487,7 @@ function Line(p: LineProps) {
       'worklet';
       const dx = e.translationX, W = w.value;
       if (!e.canceled && dx > Math.min(90, W * 0.25)) {
-        tx.value = withTiming(0, { duration: 150 }, () => scheduleOnRN(onStrike));
+        tx.value = withTiming(0, { duration: 150 }, () => scheduleOnRN(beginStrike));
       } else if (!e.canceled && dx < -Math.min(110, W * 0.3)) {
         tx.value = withTiming(-W, { duration: 180 }, () => scheduleOnRN(onRemove));
       } else tx.value = withTiming(0, { duration: 180 });
@@ -502,6 +532,12 @@ function Line(p: LineProps) {
               onChangeText={p.onChange} onSubmitEditing={p.onSubmit} onKeyPress={p.onKey}
               onSelectionChange={e => p.onSel(e.nativeEvent.selection)}
               onFocus={p.onFocus} onBlur={p.onBlur} />
+            {marks && (
+              <View pointerEvents="none" style={st.inkBox}>
+                <Text style={[st.ta, st.inkMeasure]} onTextLayout={e => onMeasured(e.nativeEvent.lines)}>{p.it.t}</Text>
+                {marks.map((m, i) => <InkBar key={i} m={m} ink={ink} />)}
+              </View>
+            )}
             {p.focused
               ? (
                 <Pressable style={st.side} onPress={p.onX} accessibilityLabel="刪除這行">
@@ -517,6 +553,15 @@ function Line(p: LineProps) {
       </GestureDetector>
     </Animated.View>
   );
+}
+
+type Mark = { x: number; y: number; w: number; off: number };
+
+// 劃線的一段（一行字一段）：ink 走到這一段時從左往右長出來
+function InkBar({ m, ink }: { m: Mark; ink: SharedValue<number> }) {
+  const { off, w } = m;
+  const grow = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0, Math.min(1, (ink.value - off) / w)) }] }));
+  return <Animated.View style={[st.inkBar, { left: m.x, top: m.y, width: w }, grow]} />;
 }
 
 const st = StyleSheet.create({
@@ -537,6 +582,9 @@ const st = StyleSheet.create({
   lineBody: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
   ta: { flex: 1, minWidth: 0, fontSize: F.body, lineHeight: 23, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 0, minHeight: 46, color: C.label },
   taDone: { textDecorationLine: 'line-through', color: C.secondary },
+  inkBox: { position: 'absolute', left: 0, right: 36, top: 11, bottom: 0 },
+  inkMeasure: { position: 'absolute', left: 0, right: 0, top: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, opacity: 0 },
+  inkBar: { position: 'absolute', height: 1.6, borderRadius: 1, backgroundColor: C.secondary, transformOrigin: 'left' },
   side: { width: 36, height: 46, alignItems: 'center', justifyContent: 'center' },
   hint: { fontSize: F.footnote, color: C.secondary, textAlign: 'center', padding: 14 },
   kbar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: C.groupedBg,
