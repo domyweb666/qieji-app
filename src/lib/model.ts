@@ -77,11 +77,22 @@ export function fixGarden(s: any) {
 export const emptyState = (): State => ({ notes: [], sort: 'updated', garden: { days: {}, tot: { f: 0, e: 0 } } });
 
 // 讀進存檔字串（可能是 null、壞掉的 JSON、或任何舊版格式）
+// 同一個 id 出現兩次（同一則筆記被重複存進去）時只留最新的那份；不同 id 的筆記一則都不動
+function dedupe(notes: Note[]) {
+  const best = new Map<string, Note>();
+  for (const n of notes) {
+    const o = best.get(n.id);
+    if (!o || (n.updated || 0) > (o.updated || 0)) best.set(n.id, n);
+  }
+  return notes.filter(n => best.get(n.id) === n);
+}
+
 export function parseState(raw: string | null): State {
   try {
     const s = JSON.parse(raw as string);
     if (s && Array.isArray(s.notes)) {
       s.notes.forEach(fixNote);
+      s.notes = dedupe(s.notes);
       fixGarden(s);
       if (!SORTS[s.sort as SortKey]) s.sort = 'updated';
       return s;

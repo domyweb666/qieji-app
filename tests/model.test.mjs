@@ -131,3 +131,13 @@ test('列表依時間分組，釘選的排最上面', async () => {
   assert.equal(rowDate(at(2026, 9, 27), now), '昨天');
   assert.equal(rowDate(at(2026, 9, 26), now), '星期一');
 });
+
+test('同一則筆記被重複存兩次：只留最新那份，其他筆記不動', () => {
+  const raw = JSON.stringify({ notes: [
+    { id: 'x', type: 'text', title: '舊', body: '', color: 'yellow', created: 1, updated: 5 },
+    { id: 'y', type: 'text', title: '另一則', body: '', color: 'yellow', created: 1, updated: 1 },
+    { id: 'x', type: 'text', title: '新', body: '', color: 'yellow', created: 1, updated: 9 },
+  ] });
+  const s = parseState(raw);
+  assert.deepEqual(s.notes.map(n => n.id + n.title), ['y另一則', 'x新']);
+});

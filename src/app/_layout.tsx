@@ -30,6 +30,8 @@ export default function RootLayout() {
           headerTintColor: C.tint,
           headerBackButtonDisplayMode: 'minimal',
           headerTitle: '',
+          // 被蓋在下面的畫面（例如開著筆記時的首頁）先暫停，不跟著重畫
+          freezeOnBlur: true,
           contentStyle: { backgroundColor: C.groupedBg },
         }}>
           <Stack.Screen name="index" options={{ headerLargeTitleEnabled: true }} />

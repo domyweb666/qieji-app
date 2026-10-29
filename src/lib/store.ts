@@ -4,70 +4,80 @@ import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, type State } from './model';
 
-let state: State = emptyState();
-let loaded = false;
-let version = 0;
-let saveT: ReturnType<typeof setTimeout> | undefined;
-let onSaveError: (() => void) | undefined;
-const subs = new Set<() => void>();
-const emit = () => subs.forEach(f => f());
+// 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
+// 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
+type Box = {
+  state: State; loaded: boolean; version: number; hintSeen: boolean;
+  saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; subs: Set<() => void>; listening?: boolean;
+};
+const g = globalThis as { __qiejiStore?: Box };
+const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, subs: new Set() });
+const emit = () => box.subs.forEach(f => f());
 
 async function writeNow() {
-  clearTimeout(saveT);
-  if (!loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
+  clearTimeout(box.saveT);
+  if (!box.loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
   try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(state));
+    await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
   } catch {
-    onSaveError?.();
+    box.onSaveError?.();
   }
 }
 
 export const store = {
-  get s() { return state; },
-  get loaded() { return loaded; },
-  hintSeen: false,
+  get s() { return box.state; },
+  get loaded() { return box.loaded; },
+  get hintSeen() { return box.hintSeen; },
 
   async load() {
-    if (loaded) return;
+    if (box.loaded) return;
     const [raw, hint] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY)]);
-    state = parseState(raw);
-    store.hintSeen = hint === '1';
-    loaded = true;
-    version++;
+    if (box.loaded) return;
+    box.state = parseState(raw);
+    box.hintSeen = hint === '1';
+    box.loaded = true;
+    box.version++;
     emit();
   },
   // 改完資料後呼叫：重畫畫面，稍後存檔
   change() {
-    version++;
+    box.version++;
     emit();
-    clearTimeout(saveT);
-    saveT = setTimeout(writeNow, 250);
+    store.save();
+  },
+  // 打字用：只排程存檔、不重畫（輸入框自己會顯示字，每打一個字就重畫整頁會卡）
+  save() {
+    clearTimeout(box.saveT);
+    box.saveT = setTimeout(writeNow, 250);
   },
   flush: writeNow,
   markHint() {
-    if (store.hintSeen) return;
-    store.hintSeen = true;
+    if (box.hintSeen) return;
+    box.hintSeen = true;
     AsyncStorage.setItem(HINT_KEY, '1').catch(() => {});
   },
-  onSaveError(fn: () => void) { onSaveError = fn; },
+  onSaveError(fn: () => void) { box.onSaveError = fn; },
 };
 
-// app 進背景時立刻存，不等計時器
-AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); });
+// app 進背景時立刻存，不等計時器（重跑檔案時不重複註冊）
+if (!box.listening) {
+  box.listening = true;
+  AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); });
+}
 
-const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
-const getVersion = () => version;
+const subscribe = (f: () => void) => { box.subs.add(f); return () => { box.subs.delete(f); }; };
+const getVersion = () => box.version;
 
 export function useStore() {
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  return state;
+  return box.state;
 }
 
-// 新增筆記：直接開一張清單，點子就是一行一行記，少一次「文字還是清單」的選擇
+// 新增筆記：type 由新增選單決定（記事或清單）
 export function newNote(color: ColorKey = 'purple', type: Note['type'] = 'check') {
   const n: Note = { id: uid(), type, title: '', body: '', items: [], color,
     pinned: false, deleted: false, created: Date.now(), updated: Date.now(), b: false };
-  state.notes.push(n);
+  box.state.notes.push(n);
   store.change();
   return n;
 }
