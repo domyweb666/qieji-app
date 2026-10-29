@@ -11,7 +11,7 @@ import { GlassBtn, native, WebBottom, WebTop } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
 import { CKEYS, col, SORTS, visibleNotes, weekGarden, type ColorKey, type Note, type SortKey } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
-import { ART, C, F } from '../lib/theme';
+import { ART, C, DOTS, F } from '../lib/theme';
 
 export default function Home() {
   const s = useStore();
@@ -25,10 +25,15 @@ export default function Home() {
   const trashed = s.notes.length - live.length;
   const week = weekGarden(s);
 
-  const compose = () => {
-    const n = newNote(filter !== 'all' ? filter : 'purple');
+  const compose = (type: Note['type']) => {
+    const n = newNote(filter !== 'all' ? filter : 'purple', type);
     router.push({ pathname: '/note/[id]', params: { id: n.id, fresh: '1' } });
   };
+  // 新增時先選要記事還是清單
+  const newActs: Act[] = [
+    { label: '記事', icon: 'text.alignleft', fn: () => compose('text') },
+    { label: '清單', icon: 'checklist', fn: () => compose('check') },
+  ];
   const open = (n: Note) => router.push({ pathname: '/note/[id]', params: { id: n.id } });
 
   const acts: Act[] = [
@@ -38,7 +43,7 @@ export default function Home() {
     })) },
     { label: '依顏色篩選', icon: 'circle.grid.2x2', sub: [
       { label: '全部', on: filter === 'all', fn: () => setFilter('all') },
-      ...CKEYS.map(k => ({ label: col(k).name, on: filter === k, fn: () => setFilter(k) })),
+      ...CKEYS.map(k => ({ label: col(k).name, img: DOTS[k], on: filter === k, fn: () => setFilter(k) })),
     ] },
     { label: '備份', inline: true, sub: [
       { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
@@ -58,7 +63,7 @@ export default function Home() {
         <Stack.Toolbar placement="bottom">
           <Stack.Toolbar.SearchBarSlot />
           <Stack.Toolbar.Spacer />
-          <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel="新增" onPress={compose} />
+          <Stack.Toolbar.Menu icon="square.and.pencil" accessibilityLabel="新增" title="新增">{menuItems(newActs)}</Stack.Toolbar.Menu>
         </Stack.Toolbar>
 
         <WebTop title="茄記" right={<GlassBtn icon="ellipsis" label="選單" onPress={() => showActs(acts, '選單')} />} />
@@ -100,7 +105,7 @@ export default function Home() {
           <Sym name="magnifyingglass" size={17} color={C.secondary} />
           <TextInput value={q} onChangeText={setQ} placeholder="搜尋" placeholderTextColor={C.placeholder} style={st.webSearchInput} />
         </View>
-        <GlassBtn icon="square.and.pencil" label="新增" onPress={compose} />
+        <GlassBtn icon="square.and.pencil" label="新增" onPress={() => showActs(newActs, '新增')} />
       </WebBottom>
     </View>
   );

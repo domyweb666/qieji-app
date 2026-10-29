@@ -1,5 +1,5 @@
 // 筆記編輯：文字筆記／清單筆記。清單的每一行就是一個點子：
-// 點左邊圓圈或往右滑＝劃掉結茄子，往左滑＝刪除，拉右邊的把手＝排序。
+// 往右滑＝劃掉結茄子，往左滑＝刪除，拉右邊的把手＝排序。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -19,9 +19,12 @@ import {
   ago, bloom, CKEYS, col, convertNote, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Kind, type Note,
 } from '../../lib/model';
 import { newNote, store, useStore } from '../../lib/store';
-import { C, F } from '../../lib/theme';
+import { C, DOTS, F } from '../../lib/theme';
 
 const KBAR = 'kbar';
+// 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
+const dismissKb = () => Keyboard.dismiss();
+const TINT = C.tint as string;
 
 export default function NoteScreen() {
   const { id, fresh } = useLocalSearchParams<{ id: string; fresh?: string }>();
@@ -299,13 +302,17 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
   }
   // 新增：換成一則新的（跟備忘錄一樣，不會一層層疊上去）
-  function compose() {
-    const m = newNote(n.color);
+  function compose(type: Note['type']) {
+    const m = newNote(n.color, type);
     router.replace({ pathname: '/note/[id]', params: { id: m.id, fresh: '1' } });
   }
+  const newActs: Act[] = [
+    { label: '記事', icon: 'text.alignleft', fn: () => compose('text') },
+    { label: '清單', icon: 'checklist', fn: () => compose('check') },
+  ];
   const moreActs: Act[] = [
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
-    { label: n.type === 'text' ? '轉為清單（每行一條）' : '轉為文字', icon: n.type === 'text' ? 'checklist' : 'text.alignleft', fn: convert },
+    { label: n.type === 'text' ? '轉為清單（每行一條）' : '轉為記事', icon: n.type === 'text' ? 'checklist' : 'text.alignleft', fn: convert },
     { label: '清單', inline: true, hidden: n.type !== 'check' || (n.items.length < 2 && !anyDone), sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => { n.items.reverse(); changed(true); } },
       { label: '全部恢復（取消劃線）', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => { n.items.forEach(i => (i.done = false)); changed(true); } },
@@ -314,7 +321,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } },
     { label: '刪除', icon: 'trash', destructive: true, fn: del },
   ];
-  const colorActs: Act[] = CKEYS.map(k => ({ label: col(k).name, on: n.color === k, fn: () => { n.color = k; changed(); } }));
+  const colorActs: Act[] = CKEYS.map(k => ({ label: col(k).name, img: DOTS[k], on: n.color === k, fn: () => { n.color = k; changed(); } }));
 
   const showHint = n.type === 'check' && !store.hintSeen && n.items.some(i => i.t.trim());
   const inputProps = native ? { inputAccessoryViewID: KBAR } : {};
@@ -332,12 +339,10 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         {/* 打字時底部工具列讓位，改用鍵盤上方那一條 */}
         {!editing && (
           <Stack.Toolbar placement="bottom">
-            <Stack.Toolbar.Button icon={n.type === 'check' ? 'text.alignleft' : 'checklist'}
-              accessibilityLabel={n.type === 'check' ? '轉為文字' : '轉為清單'} onPress={convert} />
             <Stack.Toolbar.Menu icon="paintpalette" accessibilityLabel="顏色" title="顏色">{menuItems(colorActs)}</Stack.Toolbar.Menu>
             <Stack.Toolbar.Button icon={n.pinned ? 'pin.fill' : 'pin'} accessibilityLabel="釘選" onPress={togglePin} />
             <Stack.Toolbar.Spacer />
-            <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel="新增" onPress={compose} />
+            <Stack.Toolbar.Menu icon="square.and.pencil" accessibilityLabel="新增" title="新增">{menuItems(newActs)}</Stack.Toolbar.Menu>
           </Stack.Toolbar>
         )}
         <WebTop left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
@@ -384,7 +389,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
                     onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
                 ))}
               </View>
-              {showHint && <Text style={st.hint}>點圓圈或往右滑＝劃掉，結一顆茄子　·　往左滑＝刪除</Text>}
+              {showHint && <Text style={st.hint}>往右滑＝劃掉，結一顆茄子　·　往左滑＝刪除</Text>}
               {/* tap empty space = jump to the new-idea field */}
               <Pressable style={{ height: 220 }} onPress={focusNew} />
             </>
@@ -425,12 +430,15 @@ type LineProps = {
 function Line(p: LineProps) {
   const tx = useSharedValue(0);
   const w = useSharedValue(1);
-  const { onStrike, onRemove, index } = p;
+  // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
+  const { onStrike, onRemove, index, dragIdx, dragTo, dragDy, dragH } = p;
+  const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
+  const id = p.it.id;
 
   const swipe = usePanGesture({
     activeOffsetX: [-14, 14],
     failOffsetY: [-12, 12],
-    onActivate: () => { 'worklet'; scheduleOnRN(Keyboard.dismiss); },
+    onActivate: () => { 'worklet'; scheduleOnRN(dismissKb); },
     onUpdate: e => { 'worklet'; tx.value = e.translationX; },
     onDeactivate: e => {
       'worklet';
@@ -445,22 +453,22 @@ function Line(p: LineProps) {
   const grip = usePanGesture({
     runOnJS: true,
     minDistance: 1,
-    onActivate: () => p.drag.start(p.it.id),
-    onUpdate: e => p.drag.move(e.translationY),
-    onFinalize: () => p.drag.end(),
+    onActivate: () => dragStart(id),
+    onUpdate: e => dragMove(e.translationY),
+    onFinalize: () => dragEnd(),
   });
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
-  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? (C.tint as string) : tx.value < 0 ? '#FF3B30' : 'transparent' }));
+  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? TINT : tx.value < 0 ? '#FF3B30' : 'transparent' }));
   const leftLabel = useAnimatedStyle(() => ({ opacity: tx.value > 0 ? 1 : 0 }));
   const rightLabel = useAnimatedStyle(() => ({ opacity: tx.value < 0 ? 1 : 0 }));
   const shift = useAnimatedStyle(() => {
-    const from = p.dragIdx.value, to = p.dragTo.value;
+    const from = dragIdx.value, to = dragTo.value;
     if (from < 0) return { zIndex: 0, transform: [{ translateY: 0 }], shadowOpacity: 0 };
-    if (index === from) return { zIndex: 5, transform: [{ translateY: p.dragDy.value }], shadowOpacity: 0.18 };
+    if (index === from) return { zIndex: 5, transform: [{ translateY: dragDy.value }], shadowOpacity: 0.18 };
     let y = 0;
-    if (from < to && index > from && index <= to) y = -p.dragH.value;
-    if (from > to && index < from && index >= to) y = p.dragH.value;
+    if (from < to && index > from && index <= to) y = -dragH.value;
+    if (from > to && index < from && index >= to) y = dragH.value;
     return { zIndex: 0, transform: [{ translateY: withTiming(y, { duration: 150 }) }], shadowOpacity: 0 };
   }, [index]);
 
@@ -474,12 +482,6 @@ function Line(p: LineProps) {
       </Animated.View>
       <GestureDetector gesture={swipe}>
         <Animated.View style={[st.cin, slide]}>
-          <Pressable style={st.circleHit} onPress={onStrike} hitSlop={6}
-            accessibilityRole="checkbox" accessibilityState={{ checked: p.done }} accessibilityLabel={p.done ? '恢復' : '劃掉'}>
-            <View style={[st.circle, p.done && st.circleOn]}>
-              {p.done && <Sym name="checkmark" size={12} color="#fff" weight="semibold" />}
-            </View>
-          </Pressable>
           <View style={st.lineBody}>
             <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false}
               submitBehavior="submit" returnKeyType="next" {...p.inputProps}
@@ -518,9 +520,6 @@ const st = StyleSheet.create({
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
   underText: { color: '#fff', fontSize: F.subhead, fontWeight: '600' },
   cin: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.page },
-  circleHit: { width: 36, paddingTop: 11, alignItems: 'flex-start' },
-  circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: C.tertiary, alignItems: 'center', justifyContent: 'center' },
-  circleOn: { backgroundColor: C.tint, borderColor: C.tint },
   lineBody: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.separator },
   ta: { flex: 1, minWidth: 0, fontSize: F.body, lineHeight: 23, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 0, minHeight: 46, color: C.label },
   taDone: { textDecorationLine: 'line-through', color: C.secondary },

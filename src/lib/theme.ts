@@ -41,3 +41,16 @@ export const ART = {
   field: { src: require('../../assets/img/field.webp'), r: 941 / 800 },
 } as const;
 export type ArtName = keyof typeof ART;
+
+// 選單裡的顏色圓點（原生選單只能放圖，不能直接塗色）
+export const DOTS = {
+  purple: require('../../assets/img/dot-purple.png'),
+  yellow: require('../../assets/img/dot-yellow.png'),
+  orange: require('../../assets/img/dot-orange.png'),
+  red: require('../../assets/img/dot-red.png'),
+  blue: require('../../assets/img/dot-blue.png'),
+  green: require('../../assets/img/dot-green.png'),
+  gray: require('../../assets/img/dot-gray.png'),
+  black: require('../../assets/img/dot-black.png'),
+  white: require('../../assets/img/dot-white.png'),
+} as const;

@@ -34,7 +34,8 @@ export default function RootLayout() {
         }}>
           <Stack.Screen name="index" options={{ headerLargeTitleEnabled: true }} />
           <Stack.Screen name="folder/[kind]" options={{ headerLargeTitleEnabled: true }} />
-          <Stack.Screen name="note/[id]" options={{ contentStyle: { backgroundColor: C.page } }} />
+          {/* iOS 26 預設整個畫面往右滑都會返回，會搶走「往右滑劃掉」；改成只有從螢幕左緣滑才返回 */}
+          <Stack.Screen name="note/[id]" options={{ contentStyle: { backgroundColor: C.page }, fullScreenGestureEnabled: false }} />
           <Stack.Screen name="garden" options={{ presentation: 'modal', sheetGrabberVisible: true, headerTitle: '茄子田' }} />
         </Stack>
       ) : <View style={{ flex: 1, backgroundColor: C.groupedBg }} />}
