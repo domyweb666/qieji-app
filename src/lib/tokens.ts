@@ -1,7 +1,7 @@
 // 茄記設計代號。畫面程式只准用這裡的名字（T、useColors、useNoteColors、haptic），
 // 不准直接寫色碼、rgba、字級、行高、動畫毫秒、圓角、間距數字（tools/check-tokens.mjs 會在提交前擋）。
 // 設計依據、對比檢查表、使用規則、詞彙表在 .uiux/05-設計代號/。改值要兩邊一起改，並重跑對比檢查。
-// 淺色值＝多米 2026-10-31 定案；深色、增加對比＝候選值，對比算過但還沒在真機看過。
+// 淺色、深色＝多米 2026-10-31 定案（深色在 iPhone 上看過）；增加對比（hcLight／hcDark）對比算過但沒有 API 接，還沒人看過。
 import * as Haptics from 'expo-haptics';
 import { useColorScheme } from 'react-native';
 
