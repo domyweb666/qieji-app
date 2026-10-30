@@ -80,8 +80,8 @@ export default function Home() {
 
         {!searching && (
           <View style={st.tiles}>
-            <Tile bg="#F09C5E" icon="pin.fill" count={pinned} label="釘選" onPress={() => router.push('/folder/pinned')} />
-            <Tile bg="#8E8E93" icon="trash.fill" count={trashed} label="最近刪除" onPress={() => router.push('/folder/trash')} />
+            <Tile bg="#E08A52" icon="pin.fill" count={pinned} label="釘選" onPress={() => router.push('/folder/pinned')} />
+            <Tile bg="#9C8C7A" icon="trash.fill" count={trashed} label="最近刪除" onPress={() => router.push('/folder/trash')} />
           </View>
         )}
 
@@ -128,9 +128,9 @@ const st = StyleSheet.create({
   tiles: { flexDirection: 'row', gap: 12, marginTop: 4 },
   tile: { flex: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12, minHeight: 92, justifyContent: 'space-between' },
   tileTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  tileIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  tileCount: { fontSize: F.title, fontWeight: '700', color: '#fff', lineHeight: 34 },
-  tileLabel: { fontSize: F.headline, fontWeight: '700', color: '#fff' },
+  tileIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
+  tileCount: { fontSize: F.title, fontWeight: '700', color: C.card, lineHeight: 34 },
+  tileLabel: { fontSize: F.headline, fontWeight: '700', color: C.card },
   chip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
     backgroundColor: C.card, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12 },
   chipDot: { width: 9, height: 9, borderRadius: 4.5 },

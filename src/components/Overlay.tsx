@@ -124,7 +124,7 @@ const s = StyleSheet.create({
   dlgText: { fontSize: F.headline, fontWeight: '600', color: C.label, textAlign: 'center', paddingHorizontal: 16, marginBottom: 18 },
   acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
   act: { flex: 1, color: C.tint, fontSize: F.body, paddingVertical: 12, paddingHorizontal: 30, textAlign: 'center' },
-  toast: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(28,28,30,0.9)', paddingVertical: 11, paddingHorizontal: 18,
+  toast: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(58,46,66,0.94)', paddingVertical: 11, paddingHorizontal: 18,
     borderRadius: 22, flexDirection: 'row', gap: 16, alignItems: 'center', zIndex: 50 },
   toastText: { color: '#fff', fontSize: F.subhead },
   toastBtn: { color: '#D7B8F3', fontWeight: '600', fontSize: F.subhead },

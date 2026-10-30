@@ -31,5 +31,5 @@ const s = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
   large: { fontSize: F.largeTitle, fontWeight: '700', color: C.label, marginTop: 4 },
   btn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+    shadowColor: '#3B2050', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
 });
