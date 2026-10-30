@@ -11,40 +11,40 @@ export type PageInit = { items: Item[]; bg: string; hd: string; rule: string; hi
 // 注意：下面的 CSS 和 JS 放在一個 template literal 裡，裡面不能用反引號，也不能出現錢字號接左大括號
 const CSS = `
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:#2A2230;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;
+html,body{margin:0;background:var(--bg);color:#2E2233;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;
   font-size:17px;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none}
 body{padding-bottom:200px;overscroll-behavior-y:contain}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 textarea{font:inherit;color:inherit;outline:0;-webkit-user-select:text;user-select:text}
 svg{display:block}
 .hidden{display:none!important}
-.addrow{display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 14px;height:54px;font-size:19px;color:rgba(0,0,0,.45);
+.addrow{display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 14px;height:54px;font-size:19px;color:rgba(46,34,51,.45);
   text-align:left;border-bottom:1px solid var(--rule)}
 .addrow span:first-child{font-size:22px}
 .ci{position:relative;border-bottom:1px solid var(--rule);overflow:hidden;touch-action:pan-y}
 .ci .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;
-  font-size:15px;font-weight:600;color:#fff}
-.ci.sw-r .under{background:#7a7a7a}
+  font-size:15px;font-weight:600;color:#FFFCF6}
+.ci.sw-r .under{background:#9C8C7A}
 .ci.sw-l .under{background:#d0443a}
 .ci.sw-r .under .r,.ci.sw-l .under .l{visibility:hidden}
 .ci .cin{position:relative;display:flex;align-items:flex-start;gap:2px;padding:0 0 0 14px;background:var(--bg);will-change:transform}
 .ci.focus .cin{background:var(--focus)}
 .ci textarea{flex:1;min-width:0;border:0;background:transparent;resize:none;font-size:20px;line-height:1.5;
   padding:12px 4px;height:54px;overflow:hidden;display:block}
-.ci.done textarea{text-decoration:line-through;text-decoration-thickness:2px;color:rgba(0,0,0,.38)}
-.ci .x{flex:none;width:40px;height:52px;display:none;place-items:center;color:rgba(0,0,0,.4);font-size:19px}
+.ci.done textarea{text-decoration:line-through;text-decoration-thickness:2px;color:rgba(46,34,51,.38)}
+.ci .x{flex:none;width:40px;height:52px;display:none;place-items:center;color:rgba(46,34,51,.4);font-size:19px}
 .ci.focus .x{display:grid}
-.ci .grip{flex:none;width:36px;height:52px;display:grid;place-items:center;color:rgba(0,0,0,.22);touch-action:none;font-size:18px;letter-spacing:-2px}
+.ci .grip{flex:none;width:36px;height:52px;display:grid;place-items:center;color:rgba(46,34,51,.22);touch-action:none;font-size:18px;letter-spacing:-2px}
 .ci.focus .grip{display:none}
-.ci.dragging{z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.2)}
-.hint{font-size:13px;color:rgba(0,0,0,.4);text-align:center;padding:14px}
+.ci.dragging{z-index:5;box-shadow:0 6px 18px rgba(46,34,51,.2)}
+.hint{font-size:13px;color:rgba(46,34,51,.4);text-align:center;padding:14px}
 .kbar{position:fixed;left:0;right:0;bottom:0;z-index:12;display:flex;align-items:center;gap:6px;
-  padding:6px 10px;background:var(--hd);border-top:1px solid rgba(0,0,0,.1);will-change:transform}
-.kbar button{height:40px;min-width:46px;display:grid;place-items:center;color:rgba(0,0,0,.65);border-radius:10px}
+  padding:6px 10px;background:var(--hd);border-top:1px solid rgba(46,34,51,.1);will-change:transform}
+.kbar button{height:40px;min-width:46px;display:grid;place-items:center;color:rgba(46,34,51,.65);border-radius:10px}
 .kbar button:disabled{opacity:.3}
 .kbar svg{width:26px;height:26px}
 .kbar .sp{flex:1}
-.kbar .done{background:rgba(0,0,0,.75);color:#fff;font-size:16px;padding:0 16px}
+.kbar .done{background:rgba(46,34,51,.75);color:#fff;font-size:16px;padding:0 16px}
 `;
 
 const JS = `

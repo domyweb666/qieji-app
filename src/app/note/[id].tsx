@@ -39,7 +39,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const [menu, setMenu] = useState(false);
   const c = col(n.color);
   // 標題列用筆記顏色最深的那一階；黑豆色太深，字改白的
-  const ink = n.color === 'black' ? '#fff' : '#1f1f1f';
+  const ink = n.color === 'black' ? C.card : C.label;
   // 網頁那邊的清單換掉重畫（⋮ 選單改了清單、復原刪除之後）
   const pushItems = () => web.current?.send({ t: 'set', items: n.items, hint: !store.hintSeen });
 
@@ -145,7 +145,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
           <Icon name="back" size={26} color={ink} />
         </Pressable>
         <TextInput ref={titleRef} defaultValue={n.title} placeholder="標題" allowFontScaling={false}
-          placeholderTextColor={n.color === 'black' ? 'rgba(255,255,255,.45)' : 'rgba(31,31,31,.45)'}
+          placeholderTextColor={n.color === 'black' ? 'rgba(255,252,246,.5)' : 'rgba(46,34,51,.45)'}
           style={[st.title, { color: ink }]} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onSubmitEditing={() => {
@@ -195,10 +195,10 @@ function vivid(hex: string) {
 const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingBottom: 6 },
   ib: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  ibOn: { backgroundColor: 'rgba(0,0,0,0.08)' },
+  ibOn: { backgroundColor: 'rgba(46,34,51,0.08)' },
   title: { flex: 1, minWidth: 0, height: 44, fontSize: 23, fontWeight: '500', paddingVertical: 0, paddingHorizontal: 6 },
-  swatch: { width: 30, height: 30, borderRadius: 7, marginHorizontal: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 } },
+  swatch: { width: 30, height: 30, borderRadius: 7, marginHorizontal: 6, borderWidth: 2, borderColor: 'rgba(255,252,246,0.85)',
+    shadowColor: '#3B2050', shadowOpacity: 0.15, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 } },
   meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14 },
-  metaText: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
+  metaText: { fontSize: 15, color: 'rgba(46,34,51,0.55)' },
 });
