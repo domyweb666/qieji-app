@@ -161,9 +161,9 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
           style={st.title} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onSubmitEditing={() => {
-            // 有行就跳到第一行；還沒有任何一行就開一行接著寫（使用者自己按了下一步才開，打開清單時不會自動多一行）
+            // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
             Keyboard.dismiss();
-            web.current?.send({ t: n.items[0] ? 'focusFirst' : 'add' });
+            if (n.items[0]) web.current?.send({ t: 'focusFirst' });
           }} />
         <GlassBtn label={`顏色：${c.hue}`} onPress={pickColor}>
           <View style={[st.dot, { backgroundColor: c.hd }]} />

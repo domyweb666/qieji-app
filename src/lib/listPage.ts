@@ -3,8 +3,7 @@
 // 標題列、⋯ 選單、存檔留在 app 這邊，兩邊用訊息溝通：
 //   網頁 → app：texts（打字停手 0.3 秒後，只送改過字的那幾行）、items（加行、刪行、劃掉、排序這類改了結構的，立刻送整份）、
 //              removed（刪掉了哪一行，給 toast 復原用）、seen（看過滑動提示了）、haptic
-//   app → 網頁：set（整份清單換掉重畫）、theme（換顏色）、focusFirst（標題按下一步）、add（標題按下一步但還沒有任何一行）、
-//              blur（收鍵盤）、flush（馬上送出還沒送的字）
+//   app → 網頁：set（整份清單換掉重畫）、theme（換顏色）、focusFirst（標題按下一步）、blur（收鍵盤）、flush（馬上送出還沒送的字）
 // 鍵盤上方只留 iOS 自己那條「︿ ﹀ ✓」（按 ✓ 收鍵盤），不再另外疊一條自己的工具列。
 import type { Item } from './model';
 
@@ -262,7 +261,6 @@ window.__recv = function(m){
   if (m.t === 'set'){ items = m.items; if (m.hint != null) hintOn = m.hint; render(); }
   else if (m.t === 'theme') theme(m);
   else if (m.t === 'focusFirst'){ if (items[0]) focusItem(items[0].id); }
-  else if (m.t === 'add') focusNew();
   else if (m.t === 'blur'){ flush(); if (document.activeElement) document.activeElement.blur(); }
   else if (m.t === 'flush') flush();
 };
