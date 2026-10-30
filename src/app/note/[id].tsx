@@ -23,8 +23,8 @@ import { col, convertNote, isEmpty, plain, uid, type Item, type Note } from '../
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
 
-// 鍵盤上面那條「完成」的高度。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
-const KBAR_H = 44;
+// 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
+const KBAR_H = 52;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
 // 滑動時卡片底下露出的顏色：往右（劃掉）是暖灰，往左（刪除）是紅
@@ -62,7 +62,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null);
   const c = col(n.color);
 
   // quiet＝打字：只存檔不重畫。新增、劃掉、刪除這類改了結構的才重畫。app 正要進背景時立刻寫入
@@ -132,14 +131,12 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   }
   function onFocus(id: string) {
     focused.current = id;
-    setFocusId(id);
     if (id !== 'title') requestAnimationFrame(() => ensureVisible(id));
   }
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
     setTimeout(() => {
       if (focused.current || !mounted.current || closed.current) return;
-      setFocusId(null);
       cleanupEmpty();
     }, 120);
   }
@@ -200,13 +197,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     n.items.splice(idx, 1);
     touch();
     focusItem(prev.id, prev.t.length);
-  }
-  // 正在打的那一行右邊的 ✕：刪掉這行，游標跳到下一行
-  function tapX(id: string) {
-    const idx = n.items.findIndex(i => i.id === id);
-    remove(id);
-    const next = n.items[Math.min(idx, n.items.length - 1)];
-    if (next) focusItem(next.id); else Keyboard.dismiss();
   }
 
   /* ---------- 拖曳排序 ---------- */
@@ -350,7 +340,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
           scrollEnabled={!dragging}>
           <View>
             {n.items.map((it, index) => (
-              <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} rule={c.rule}
+              <Line key={it.id} it={it} index={index} done={it.done} rule={c.rule}
                 count={n.items.length} calm={calm} fs={fs}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
                 refInput={r => { inputs.current[it.id] = r; }}
@@ -360,7 +350,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
                 }}
                 onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
-                onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)}
+                onStrike={() => strike(it.id)} onRemove={() => remove(it.id)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </View>
@@ -372,13 +362,14 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 
       {menu && <PopMenu acts={moreActs} top={insets.top + 58} onClose={() => setMenu(false)} />}
 
-      {/* 鍵盤上面那條：跟著鍵盤升降，鍵盤收起來就不見 */}
+      {/* 鍵盤上面那顆：奶油白膠囊，右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
       {kbPad > 0 && (
         <Animated.View style={[st.kbarWrap, barStyle]}>
           <View style={st.kbar}>
             <View style={{ flex: 1 }} />
-            <Pressable style={st.kb} onPress={() => Keyboard.dismiss()} accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
-              <Text style={st.kDone}>完成</Text>
+            <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: 0.6 }]} onPress={() => Keyboard.dismiss()}
+              accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
+              <Sym name="checkmark" size={20} color={C.label} weight="semibold" />
             </Pressable>
           </View>
         </Animated.View>
@@ -388,17 +379,17 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 }
 
 type LineProps = {
-  it: Item; index: number; done: boolean; focused: boolean; rule: string; count: number; calm: boolean; fs: number;
+  it: Item; index: number; done: boolean; rule: string; count: number; calm: boolean; fs: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
-  onStrike: () => void; onRemove: () => void; onX: () => void; onMove: (d: -1 | 1) => void;
+  onStrike: () => void; onRemove: () => void; onMove: (d: -1 | 1) => void;
   drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
 };
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
-const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.focused === b.focused && a.index === b.index
+const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
   && a.rule === b.rule && a.count === b.count && a.calm === b.calm && a.fs === b.fs);
 
 function LineRow(p: LineProps) {
@@ -476,18 +467,12 @@ function LineRow(p: LineProps) {
             <Field text={p.it.t} done={p.done} fs={p.fs} refInput={p.refInput} actions={actions} onAction={onAction}
               onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
           </View>
-          {p.focused
-            ? (
-              <Pressable style={st.side} onPress={p.onX} accessibilityRole="button" accessibilityLabel="刪除這行">
-                <Sym name="xmark" size={16} color="rgba(46,34,51,0.4)" />
-              </Pressable>
-            ) : (
-              <GestureDetector gesture={grip}>
-                <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
-                  <Text style={st.gripText} allowFontScaling={false}>⋮⋮</Text>
-                </View>
-              </GestureDetector>
-            )}
+          {/* 正在打的那行也是 ⋮⋮：右邊寬度一樣，字才不會在打字時多換一行（打字四行、瀏覽三行） */}
+          <GestureDetector gesture={grip}>
+            <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
+              <Text style={st.gripText} allowFontScaling={false}>⋮⋮</Text>
+            </View>
+          </GestureDetector>
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -545,13 +530,12 @@ const st = StyleSheet.create({
   mirror: { color: 'transparent', paddingRight: 5 },
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through', color: 'rgba(46,34,51,0.38)' },
-  side: { width: 40, height: 52, alignItems: 'center', justifyContent: 'center' },
   grip: { width: 36, height: 52, alignItems: 'center', justifyContent: 'center' },
   gripText: { fontSize: 18, letterSpacing: -2, color: 'rgba(46,34,51,0.22)' },
   hint: { fontSize: F.footnote, color: 'rgba(46,34,51,0.4)', textAlign: 'center', padding: 14 },
-  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  kbar: { height: KBAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, backgroundColor: C.groupedBg,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
-  kb: { height: 40, minWidth: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  kDone: { color: C.tint, fontSize: F.body, fontWeight: '600' },
+  // 鍵盤上面那顆：跟標題列的奶油白圓鈕同一套（底色、陰影），拉成跟清單卡片一樣寬的膠囊，底下留 8 跟鍵盤分開
+  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: 8, paddingHorizontal: 16 },
+  kbar: { height: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', backgroundColor: C.card,
+    shadowColor: '#3B2050', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  kb: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });
