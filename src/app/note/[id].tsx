@@ -419,14 +419,14 @@ function LineRow(p: LineProps) {
     onDeactivate: e => {
       'worklet';
       const dx = e.translationX, W = w.value;
-      if (!e.canceled && dx > G.strikeThreshold(W)) {
+      if (!e.canceled && dx > Math.min(G.strikeMax, W * G.strikeRatio)) {
         if (calm) {
           tx.value = 0;
           op.value = M.reducedDimFrom;
           op.value = withTiming(1, { duration: M.strikeReturn.reducedFade });
           scheduleOnRN(onStrike);
         } else tx.value = withTiming(0, { duration: M.strikeReturn.duration }, () => scheduleOnRN(onStrike));
-      } else if (!e.canceled && dx < -G.deleteThreshold(W)) {
+      } else if (!e.canceled && dx < -Math.min(G.deleteMax, W * G.deleteRatio)) {
         if (calm) {
           tx.value = 0;
           op.value = withTiming(0, { duration: M.deleteSlide.reducedFade }, () => scheduleOnRN(onRemove));

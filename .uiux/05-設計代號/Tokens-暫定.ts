@@ -136,10 +136,11 @@ export const T = {
   },
 
   // 非動畫的門檻與時間（放這裡是讓它有家，不是動畫）
+  // 只放純數字：滑動手勢在 UI 執行緒（worklet）算，呼叫一般 JS 函式會讓 app 崩潰（真機才會）
   gesture: {
     swipeActivate: 14, swipeFailY: 12,
-    strikeThreshold: (w: number) => Math.min(90, w * 0.25),
-    deleteThreshold: (w: number) => Math.min(110, w * 0.3),
+    strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 算劃掉
+    deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 算刪除
     dragActivate: 1,
   },
   timing: { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 },
