@@ -1,11 +1,11 @@
-// 筆記列表：上方沒有標題，右上角搜尋和選單，兩張方塊（釘選、最近刪除），下面依時間分組的筆記，右下角＋。
+// 筆記列表：上方沒有標題，右上角搜尋和選單（「最近刪除」在選單裡），下面是筆記（釘選的在最上面），右下角＋。
 // 打開 app 時，如果上次離開時還開著某則筆記，直接回到那則（從左緣往右滑回到這裡）。
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuItems, showActs, type Act } from '../components/Acts';
-import { EmptyArt } from '../components/Breathe';
+import { Empty } from '../components/Empty';
 import { listStyles, NoteSections } from '../components/NoteList';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native, WebTop } from '../components/WebBars';
@@ -30,12 +30,9 @@ export default function Home() {
     if (last) router.push({ pathname: '/note/[id]', params: { id: last.id, restore: '1' } });
   }, []);
 
-  const all = visibleNotes(s, { trash: false, filter, q, sort: s.sort });
-  // 釘選的筆記收在「釘選」方塊裡，列表只放其他的（搜尋時全部都找）
-  const notes = searching ? all : all.filter(n => !n.pinned);
-  const live = s.notes.filter(n => !n.deleted);
-  const pinned = live.filter(n => n.pinned).length;
-  const trashed = s.notes.length - live.length;
+  // 釘選的是最常看的，排在列表最上面的「已釘選」分組（分組在 groupNotes 做），不藏進方塊裡
+  const notes = visibleNotes(s, { trash: false, filter, q, sort: s.sort });
+  const trashed = s.notes.filter(n => n.deleted).length;
   const open = (n: Note) => router.push({ pathname: '/note/[id]', params: { id: n.id } });
 
   // 只有清單：按＋直接開一張新清單
@@ -56,6 +53,7 @@ export default function Home() {
       { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
       { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
     ] },
+    { label: trashed ? `最近刪除（${trashed}）` : '最近刪除', icon: 'trash', fn: () => router.push('/trash') },
   ];
 
   return (
@@ -78,13 +76,6 @@ export default function Home() {
           </View>
         )}
 
-        {!searching && (
-          <View style={st.tiles}>
-            <Tile bg="#E08A52" icon="pin.fill" count={pinned} label="釘選" onPress={() => router.push('/folder/pinned')} />
-            <Tile bg="#9C8C7A" icon="trash.fill" count={trashed} label="最近刪除" onPress={() => router.push('/folder/trash')} />
-          </View>
-        )}
-
         {filter !== 'all' && (
           <Pressable style={st.chip} onPress={() => setFilter('all')} accessibilityLabel="取消顏色篩選">
             <View style={[st.chipDot, { backgroundColor: col(filter).hd }]} />
@@ -96,8 +87,8 @@ export default function Home() {
         {notes.length
           ? <NoteSections notes={notes} sort={s.sort} trash={false} onPress={open} />
           : (searching || filter !== 'all')
-            ? <EmptyArt art="search" lines={['找不到符合的筆記']} />
-            : <EmptyArt art="basket" lines={['還沒有筆記', '點右下角的＋，寫下第一個想法']} />}
+            ? <Empty lines={['找不到符合的筆記']} />
+            : <Empty lines={['還沒有筆記', '點右下角的＋，寫下第一個想法']} />}
       </ScrollView>
 
       <Pressable onPress={add} accessibilityLabel="新增"
@@ -108,29 +99,7 @@ export default function Home() {
   );
 }
 
-// 提醒事項那種彩色方塊：左上圖示、右上數字、左下名稱
-function Tile({ bg, icon, count, label, onPress }: {
-  bg: string; icon: 'pin.fill' | 'trash.fill'; count: number; label: string; onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} accessibilityLabel={`${label} ${count}`}
-      style={({ pressed }) => [st.tile, { backgroundColor: bg }, pressed && { opacity: 0.8 }]}>
-      <View style={st.tileTop}>
-        <View style={st.tileIcon}><Sym name={icon} size={16} color={bg} /></View>
-        <Text style={st.tileCount}>{count}</Text>
-      </View>
-      <Text style={st.tileLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const st = StyleSheet.create({
-  tiles: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  tile: { flex: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12, minHeight: 92, justifyContent: 'space-between' },
-  tileTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  tileIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
-  tileCount: { fontSize: F.title, fontWeight: '700', color: C.card, lineHeight: 34 },
-  tileLabel: { fontSize: F.headline, fontWeight: '700', color: C.card },
   chip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
     backgroundColor: C.card, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12 },
   chipDot: { width: 9, height: 9, borderRadius: 4.5 },

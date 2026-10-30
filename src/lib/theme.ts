@@ -20,12 +20,3 @@ export const C = {
 
 // 系統字級（pt）
 export const F = { largeTitle: 34, title: 28, title2: 22, title3: 20, headline: 17, body: 17, callout: 16, subhead: 15, footnote: 13, caption: 12 };
-
-// 插圖（空白畫面用）：require 路徑＋原圖寬高比（寬/高），讓 Image 知道該留多高。
-// 列在這裡的圖才會被打包進 app；茄子花、茄子、籃子、茄子田的圖檔還在 assets/img，要用時再加回來
-export const ART = {
-  basket: { src: require('../../assets/img/basket.webp'), r: 640 / 451 },
-  sleep: { src: require('../../assets/img/sleep.webp'), r: 640 / 399 },
-  search: { src: require('../../assets/img/search.webp'), r: 600 / 588 },
-} as const;
-export type ArtName = keyof typeof ART;

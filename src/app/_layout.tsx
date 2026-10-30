@@ -36,7 +36,7 @@ export default function RootLayout() {
         }}>
           {/* 首頁：標題列不透明、不放標題（像提醒事項），底下是左右滑的三頁 */}
           <Stack.Screen name="index" options={{ headerTransparent: false, headerStyle: { backgroundColor: C.groupedBg } }} />
-          <Stack.Screen name="folder/[kind]" options={{ headerLargeTitleEnabled: true }} />
+          <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
           {/* iOS 26 預設整個畫面往右滑都會返回，會搶走「往右滑劃掉」；改成只有從螢幕左緣滑才返回 */}
           {/* 打開 app 直接回到上次的筆記時不播推入動畫，看起來就是停在那裡 */}
           {/* 清單頁不用系統標題列，自己畫一條窄的：返回鍵和清單名稱在同一行 */}
