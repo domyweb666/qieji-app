@@ -1,9 +1,9 @@
-// 清單編輯。上面的標題列跟首頁同一套（奶油白圓鈕：‹ 清單名稱 顏色點 ⋯）；「新增一行」固定在標題列下面不跟著捲；
-// 底下一行一張卡片，整頁底色是筆記顏色。往右滑＝劃掉，往左滑＝刪除，拉右邊的把手＝排序。
+// 清單編輯。上面的標題列跟首頁同一套（奶油白圓鈕：‹ 標題 顏色點 ⋯）；「新增一行」固定在標題列下面不跟著捲；
+// 底下一行一張卡片，整頁底色是清單顏色。往右滑＝劃掉，往左滑＝刪除，拉右邊的把手＝排序。
 // 只有點「新增一行」才會多一行；在一行裡按換行就是在同一格裡換行。
 // 2026-10-31 從 WebView 改回原生：字要能跟著系統放大、VoiceOver 要能劃掉。外觀和手勢的數字照 WebView 版。
+// 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams, useNavigation, type NativeStackNavigationProp } from 'expo-router';
 import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
@@ -21,20 +21,24 @@ import { Sym } from '../../components/Sym';
 import { GlassBtn } from '../../components/WebBars';
 import { col, convertNote, isEmpty, plain, uid, type Item, type Note } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
-import { C, F } from '../../lib/theme';
+import { haptic, T, useColors, useNoteColors, type Colors } from '../../lib/tokens';
 
 // 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
-const KBAR_H = 52;
+const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
-// 滑動時卡片底下露出的顏色：往右（劃掉）是暖灰，往左（刪除）是紅
-const STRIKE_BG = '#9C8C7A';
-const DELETE_BG = C.red as string;
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
+// 一行字的高度與上下留白（照 WebView 版：17pt 字、1.6 倍行距、上下各 12）
+const LINE_H = T.font.bodyLine.lineHeight;
+const PAD_V = T.space.m;
+const ROW_MIN = T.shape.rowMin;
+const ROW_GAP = T.space.s;
+const DOT = 16;
 
 export default function NoteScreen() {
   const { id, fresh } = useLocalSearchParams<{ id: string; fresh?: string }>();
+  const c = useColors();
   // 關閉空白筆記時它會被移出 state，這裡留住它，讓退場動畫期間畫面不會突然變空
   const keep = useRef<Note | undefined>(undefined);
   if (!keep.current) {
@@ -42,7 +46,7 @@ export default function NoteScreen() {
     // 已經沒有記事本了：舊的文字筆記打開時轉成清單（一段一行）
     if (keep.current?.type === 'text') { convertNote(keep.current); store.save(); }
   }
-  if (!keep.current) return <View style={{ flex: 1, backgroundColor: C.page }} />;
+  if (!keep.current) return <View style={{ flex: 1, backgroundColor: c.surface }} />;
   return <Editor n={keep.current} fresh={fresh === '1'} />;
 }
 
@@ -53,6 +57,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const navigation = useNavigation<NativeStackNavigationProp<Record<string, object | undefined>>>();
   const calm = useReducedMotion();
   const fs = useWindowDimensions().fontScale;
+  const c = useColors();
+  const nc = useNoteColors(n.color);
   const closed = useRef(false);
   const mounted = useRef(true);
   const titleRef = useRef<TextInputInstance>(null);
@@ -62,7 +68,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
-  const c = col(n.color);
 
   // quiet＝打字：只存檔不重畫。新增、劃掉、刪除這類改了結構的才重畫。app 正要進背景時立刻寫入
   function touch(quiet?: boolean) {
@@ -79,7 +84,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     it.done = !it.done;
     touch();
     store.markHint();
-    Haptics.selectionAsync().catch(() => {});
+    haptic('strike');
   }
   function remove(id: string) {
     const idx = n.items.findIndex(i => i.id === id);
@@ -138,7 +143,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     setTimeout(() => {
       if (focused.current || !mounted.current || closed.current) return;
       cleanupEmpty();
-    }, 120);
+    }, T.timing.blurCleanup);
   }
 
   /* ---------- 鍵盤：不讓系統自動推畫面 ---------- */
@@ -153,7 +158,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
     // 沒被鍵盤和工具列擋住的高度，底下留一點空
-    const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - 16;
+    const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - T.space.l;
     if (l.y < v.y) scrollTo(l.y);
     else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
   }
@@ -164,11 +169,12 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   }
   const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y; };
   useEffect(() => {
+    const [x1, y1, x2, y2] = T.motion.keyboardFollow.easing;
     const show = (e: { endCoordinates: { screenY: number }; duration?: number }) => {
       const v = view.current;
       v.kb = e.endCoordinates.screenY;
       const lift = Math.max(0, v.top + v.h - v.kb);
-      kbLift.value = withTiming(lift, { duration: e.duration || 250, easing: Easing.bezier(0.17, 0.59, 0.4, 0.77) });
+      kbLift.value = withTiming(lift, { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) });
       setKbPad(lift);
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
@@ -212,10 +218,10 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
       const idx = n.items.findIndex(i => i.id === id);
       const mids = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
       drag.current = { idx, mids };
-      dragH.value = (layouts.current[id]?.h ?? 54) + ROW_GAP;
+      dragH.value = (layouts.current[id]?.h ?? ROW_MIN) + ROW_GAP;
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       setDragging(true);
-      Haptics.selectionAsync().catch(() => {});
+      haptic('dragStart');
     },
     move(dy: number) {
       const d = drag.current;
@@ -258,7 +264,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     if (fresh) {
       const focus = () => { clearTimeout(t); off?.(); if (mounted.current) titleRef.current?.focus(); };
       off = navigation.addListener('transitionEnd', e => { if (!e.data.closing) focus(); });
-      t = setTimeout(focus, 700);
+      t = setTimeout(focus, T.timing.freshFocusFallback);
     }
     store.setLast(n.id); // 關掉 app 時還開著這則，下次打開就直接回到這裡
     return () => { clearTimeout(t); off?.(); mounted.current = false; closeNote(); store.setLast(null); };
@@ -287,7 +293,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
     { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
-      { label: '全部恢復（取消劃線）', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
+      { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
         const before = n.items;
         const left = before.filter(i => !i.done);
@@ -305,31 +311,31 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const showHint = !store.hintSeen && n.items.some(i => i.t.trim());
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }} collapsable={false}>
-      {/* 標題列跟首頁同一套：‹ 清單名稱 顏色點 ⋯，底色跟整頁一樣是筆記顏色。
+    <View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false}>
+      {/* 標題列跟首頁同一套：‹ 標題 顏色點 ⋯，底色跟整頁一樣是清單顏色。
           標題跟著系統字級放大，但最多 1.5 倍，不然會把兩邊的按鈕擠出去 */}
-      <View style={[st.bar, { paddingTop: insets.top + 6 }]}>
+      <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         <GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />
-        <TextInput ref={titleRef} defaultValue={n.title} placeholder="標題" maxFontSizeMultiplier={1.5}
-          placeholderTextColor={C.placeholder}
-          style={st.title} returnKeyType="next" submitBehavior="submit"
+        <TextInput ref={titleRef} defaultValue={n.title} placeholder="標題" maxFontSizeMultiplier={T.font.listTitleMaxScale}
+          placeholderTextColor={c.textMuted}
+          style={[st.title, { color: c.textPrimary }]} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
           onSubmitEditing={() => {
             // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
             if (n.items[0]) focusItem(n.items[0].id); else Keyboard.dismiss();
           }} />
-        <GlassBtn label={`顏色：${c.hue}`} onPress={pickColor}>
-          <View style={[st.dot, { backgroundColor: c.hd }]} />
+        <GlassBtn label={`顏色：${col(n.color).hue}`} onPress={pickColor}>
+          <View style={[st.dot, { backgroundColor: nc.hd, borderColor: c.dotOutline }]} />
         </GlassBtn>
-        <GlassBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
+        <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
       </View>
 
-      {/* 「新增一行」固定在標題列下面，清單捲到哪都按得到；字色在九種筆記底色上對比都超過 4.5 */}
-      <Pressable style={({ pressed }) => [st.addrow, pressed && { opacity: 0.6 }]} onPress={focusNew}
+      {/* 「新增一行」固定在標題列下面，清單捲到哪都按得到；字色在九種清單底色上對比都超過 4.5 */}
+      <Pressable style={({ pressed }) => [st.addrow, pressed && { opacity: T.motion.pressDim }]} onPress={focusNew}
         accessibilityRole="button" accessibilityLabel="新增一行">
-        <Text style={st.addPlus}>＋</Text>
-        <Text style={st.addText}>新增一行</Text>
+        <Text style={[st.addPlus, { color: c.textAddRow }]}>＋</Text>
+        <Text style={[st.addText, { color: c.textAddRow }]}>新增一行</Text>
       </Pressable>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
@@ -340,7 +346,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
           scrollEnabled={!dragging}>
           <View>
             {n.items.map((it, index) => (
-              <Line key={it.id} it={it} index={index} done={it.done} rule={c.rule}
+              <Line key={it.id} it={it} index={index} done={it.done} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
                 refInput={r => { inputs.current[it.id] = r; }}
@@ -354,22 +360,22 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </View>
-          {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
-          {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
+          {showHint && <Text style={[st.hint, { color: c.textMuted }]}>往右滑劃掉　·　往左滑刪除</Text>}
+          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + KBAR_H + insets.bottom }} />
         </ScrollView>
       </View>
 
-      {menu && <PopMenu acts={moreActs} top={insets.top + 58} onClose={() => setMenu(false)} />}
+      {menu && <PopMenu acts={moreActs} top={insets.top + T.shape.hitMin + T.space.m} onClose={() => setMenu(false)} />}
 
       {/* 鍵盤上面那顆：奶油白膠囊，右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
       {kbPad > 0 && (
         <Animated.View style={[st.kbarWrap, barStyle]}>
-          <View style={st.kbar}>
+          <View style={[st.kbar, { backgroundColor: c.surface }]}>
             <View style={{ flex: 1 }} />
-            <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: 0.6 }]} onPress={() => Keyboard.dismiss()}
+            <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]} onPress={() => Keyboard.dismiss()}
               accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
-              <Sym name="checkmark" size={20} color={C.label} weight="semibold" />
+              <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
             </Pressable>
           </View>
         </Animated.View>
@@ -379,7 +385,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 }
 
 type LineProps = {
-  it: Item; index: number; done: boolean; rule: string; count: number; calm: boolean; fs: number;
+  it: Item; index: number; done: boolean; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
@@ -390,42 +396,54 @@ type LineProps = {
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
 const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
-  && a.rule === b.rule && a.count === b.count && a.calm === b.calm && a.fs === b.fs);
+  && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs);
 
 function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
+  const op = useSharedValue(1);
   const w = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
   const { onStrike, onRemove, index, calm, dragIdx, dragTo, dragDy, dragH } = p;
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
+  const { swipeStrikeBg, swipeDeleteBg } = p.colors;
   const id = p.it.id;
+  const M = T.motion, G = T.gesture;
 
-  // 往右滑過門檻＝劃掉，往左滑過門檻＝刪除，沒滑夠就彈回。減少動態時不播滑回、滑出的動畫，直接生效
+  // 往右滑過門檻＝劃掉，往左滑過門檻＝刪除，沒滑夠就彈回。
+  // 減少動態：不播滑回、滑出，改成整行淡回／淡出（回饋要在，只是不移動）
   const swipe = usePanGesture({
-    activeOffsetX: [-14, 14],
-    failOffsetY: [-12, 12],
+    activeOffsetX: [-G.swipeActivate, G.swipeActivate],
+    failOffsetY: [-G.swipeFailY, G.swipeFailY],
     onActivate: () => { 'worklet'; scheduleOnRN(dismissKb); },
     onUpdate: e => { 'worklet'; tx.value = e.translationX; },
     onDeactivate: e => {
       'worklet';
       const dx = e.translationX, W = w.value;
-      if (!e.canceled && dx > Math.min(90, W * 0.25)) {
-        tx.value = withTiming(0, { duration: calm ? 0 : 150 }, () => scheduleOnRN(onStrike));
-      } else if (!e.canceled && dx < -Math.min(110, W * 0.3)) {
-        tx.value = withTiming(-W, { duration: calm ? 0 : 180 }, () => scheduleOnRN(onRemove));
-      } else tx.value = withTiming(0, { duration: calm ? 0 : 180 });
+      if (!e.canceled && dx > G.strikeThreshold(W)) {
+        if (calm) {
+          tx.value = 0;
+          op.value = M.reducedDimFrom;
+          op.value = withTiming(1, { duration: M.strikeReturn.reducedFade });
+          scheduleOnRN(onStrike);
+        } else tx.value = withTiming(0, { duration: M.strikeReturn.duration }, () => scheduleOnRN(onStrike));
+      } else if (!e.canceled && dx < -G.deleteThreshold(W)) {
+        if (calm) {
+          tx.value = 0;
+          op.value = withTiming(0, { duration: M.deleteSlide.reducedFade }, () => scheduleOnRN(onRemove));
+        } else tx.value = withTiming(-W, { duration: M.deleteSlide.duration }, () => scheduleOnRN(onRemove));
+      } else tx.value = calm ? 0 : withTiming(0, { duration: M.snapBack.duration });
     },
   });
   const grip = usePanGesture({
     runOnJS: true,
-    minDistance: 1,
+    minDistance: G.dragActivate,
     onActivate: () => dragStart(id),
     onUpdate: e => dragMove(e.translationY),
     onFinalize: () => dragEnd(),
   });
 
-  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
-  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? STRIKE_BG : tx.value < 0 ? DELETE_BG : 'transparent' }));
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }], opacity: op.value }));
+  const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? swipeStrikeBg : tx.value < 0 ? swipeDeleteBg : 'transparent' }));
   const leftLabel = useAnimatedStyle(() => ({ opacity: tx.value > 0 ? 1 : 0 }));
   const rightLabel = useAnimatedStyle(() => ({ opacity: tx.value < 0 ? 1 : 0 }));
   const shift = useAnimatedStyle(() => {
@@ -435,7 +453,7 @@ function LineRow(p: LineProps) {
     let y = 0;
     if (from < to && index > from && index <= to) y = -dragH.value;
     if (from > to && index < from && index >= to) y = dragH.value;
-    return { zIndex: 0, transform: [{ translateY: calm ? y : withTiming(y, { duration: 150 }) }] };
+    return { zIndex: 0, transform: [{ translateY: calm ? y : withTiming(y, { duration: M.dragShift.duration }) }] };
   }, WEB_DEPS ? [index, calm] : undefined);
 
   // VoiceOver：滑動和拖曳用不了，從輸入框的動作選單（上下滑）劃掉、刪除、移動
@@ -456,21 +474,21 @@ function LineRow(p: LineProps) {
   return (
     <Animated.View collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
-      style={[st.ci, { borderColor: p.rule }, shift]}>
+      style={[st.ci, { backgroundColor: p.colors.surface, borderColor: p.rule }, shift]}>
       <Animated.View style={[StyleSheet.absoluteFill, st.under, under]}>
-        <Animated.Text style={[st.underText, leftLabel]}>{p.done ? '恢復' : '劃掉'}</Animated.Text>
-        <Animated.Text style={[st.underText, rightLabel]}>刪除</Animated.Text>
+        <Animated.Text style={[st.underText, { color: p.colors.textOnSwipe }, leftLabel]}>{p.done ? '恢復' : '劃掉'}</Animated.Text>
+        <Animated.Text style={[st.underText, { color: p.colors.textOnSwipe }, rightLabel]}>刪除</Animated.Text>
       </Animated.View>
       <GestureDetector gesture={swipe}>
-        <Animated.View style={[st.cin, slide]}>
+        <Animated.View style={[st.cin, { backgroundColor: p.colors.surface }, slide]}>
           <View style={st.field}>
-            <Field text={p.it.t} done={p.done} fs={p.fs} refInput={p.refInput} actions={actions} onAction={onAction}
+            <Field text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
               onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
           </View>
-          {/* 正在打的那行也是 ⋮⋮：右邊寬度一樣，字才不會在打字時多換一行（打字四行、瀏覽三行） */}
+          {/* 正在打的那行也是把手：右邊寬度一樣，字才不會在打字時多換一行。把手熱區 44 寬 */}
           <GestureDetector gesture={grip}>
             <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
-              <Text style={st.gripText} allowFontScaling={false}>⋮⋮</Text>
+              <Sym name="line.3.horizontal" size={18} color={p.colors.textSecondary} />
             </View>
           </GestureDetector>
         </Animated.View>
@@ -483,8 +501,8 @@ function LineRow(p: LineProps) {
 // 輸入框疊在它上面撐滿，字打到超過一行就一定會長出下一行。打字時只有這一小塊重畫。
 // 字級跟著系統放大。行高不用自己乘倍數：iOS 上 React Native 會自動把行高一起放大，自己再乘一次行距會變兩倍大。
 // 最小高度不會自動放大，才要自己乘
-function Field({ text, done, fs, refInput, actions, onAction, onChange, onKey, onFocus, onBlur }: {
-  text: string; done: boolean; fs: number; refInput: (r: TextInputInstance | null) => void;
+function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChange, onKey, onFocus, onBlur }: {
+  text: string; done: boolean; fs: number; colors: Colors; refInput: (r: TextInputInstance | null) => void;
   actions: { name: string; label: string }[]; onAction: (e: AccessibilityActionEvent) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
 }) {
@@ -494,7 +512,7 @@ function Field({ text, done, fs, refInput, actions, onAction, onChange, onKey, o
     <>
       <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
       <TextInput ref={refInput} defaultValue={text} multiline scrollEnabled={false}
-        style={[st.ta, lh, st.taFill, done && st.taDone]}
+        style={[st.ta, lh, st.taFill, { color: done ? c.textMuted : c.textPrimary }, done && st.taDone]}
         accessibilityHint={done ? '已劃掉' : undefined}
         accessibilityActions={actions} onAccessibilityAction={onAction}
         onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={onKey}
@@ -503,39 +521,31 @@ function Field({ text, done, fs, refInput, actions, onAction, onChange, onKey, o
   );
 }
 
-// 一行字的高度與上下留白（照 WebView 版：17pt 字、1.6 倍行距、上下各 12）
-const LINE_H = 27;
-const PAD_V = 12;
-const ROW_MIN = 54; // 一行至少這麼高（跟 WebView 版一樣）
-const ROW_GAP = 8;
-
 const st = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingBottom: 6 },
-  title: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 20, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
-  // 跟首頁列表的顏色點同一種圓點，大一點好按
-  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(46,34,51,0.15)' },
-  addrow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 54, marginHorizontal: 16, paddingLeft: 12 },
-  addPlus: { fontSize: 20, color: 'rgba(46,34,51,0.72)' },
-  addText: { fontSize: 17, color: 'rgba(46,34,51,0.72)' },
-  list: { paddingHorizontal: 16 },
-  // 一行一張卡片，跟首頁列表的筆記卡片同一個樣子；卡片外面的底色是筆記顏色
-  ci: { marginBottom: ROW_GAP, backgroundColor: C.card, borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
-  under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
-  underText: { color: C.card, fontSize: F.subhead, fontWeight: '600' },
-  cin: { flexDirection: 'row', alignItems: 'flex-start', gap: 2, paddingLeft: 12, backgroundColor: C.card },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.m, paddingBottom: T.space.s },
+  title: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, ...T.font.listTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
+  // 跟首頁列表的顏色點同一種圓點，大一點好按；色點本身對比不夠，靠描邊
+  dot: { width: DOT, height: DOT, borderRadius: T.shape.pill(DOT), borderWidth: T.shape.borderCard },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.rowMin, marginHorizontal: T.space.l, paddingLeft: T.space.m },
+  addPlus: { ...T.font.plusGlyph },
+  addText: { ...T.font.body },
+  list: { paddingHorizontal: T.space.l },
+  // 一行一張卡片，跟首頁列表的卡片同一個樣子；卡片外面的底色是清單顏色
+  ci: { marginBottom: ROW_GAP, borderWidth: T.shape.borderCard, borderRadius: T.shape.radiusCard, overflow: 'hidden' },
+  under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.l },
+  underText: { ...T.font.subheadBold },
+  cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.m },
   field: { flex: 1, minWidth: 0 },
-  ta: { fontSize: 17, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: 4, color: C.label },
+  ta: { ...T.font.bodyLine, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: T.space.xs },
   // 撐高度用的隱形文字：右邊只比輸入框多留 1 點。留太多（之前 2 點）字快滿一行時隱形文字會先換行，
-  // 卡片底下就多出一整行空白；完全不留又可能反過來把最後一行切掉
+  // 卡片底下就多出一整行空白；完全不留又可能反過來把最後一行切掉。5 只用一次
   mirror: { color: 'transparent', paddingRight: 5 },
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
-  taDone: { textDecorationLine: 'line-through', color: 'rgba(46,34,51,0.38)' },
-  grip: { width: 36, height: 52, alignItems: 'center', justifyContent: 'center' },
-  gripText: { fontSize: 18, letterSpacing: -2, color: 'rgba(46,34,51,0.22)' },
-  hint: { fontSize: F.footnote, color: 'rgba(46,34,51,0.4)', textAlign: 'center', padding: 14 },
+  taDone: { textDecorationLine: 'line-through' },
+  grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
+  hint: { ...T.font.footnote, textAlign: 'center', padding: T.space.m },
   // 鍵盤上面那顆：跟標題列的奶油白圓鈕同一套（底色、陰影），拉成跟清單卡片一樣寬的膠囊，底下留 8 跟鍵盤分開
-  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: 8, paddingHorizontal: 16 },
-  kbar: { height: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', backgroundColor: C.card,
-    shadowColor: '#3B2050', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
-  kb: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
+  kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
+  kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
 });

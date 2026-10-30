@@ -27,20 +27,19 @@ export type Day = { f: number; e: number; g: number };
 export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } };
 export type State = { sort: SortKey; notes: Note[]; garden: Garden };
 
-// name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）
-// 色票照「黏土菜園」：hd（標題列）像黏土公仔的霧面色，飽和度壓低、帶一點暖；bg 是奶油白染一點該色。
-// 標題列上的深色字（C.label）對每個 hd 的對比都在 4.5 以上，黑豆是白字。
+// name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
+// 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
 // dot 是最接近的彩色圓點 emoji，給 iOS 系統選單當色塊（系統選單裡自己的圖片顯示不出來，文字一定會出現）。
-export const COLORS: Record<ColorKey, { bg: string; hd: string; rule: string; name: string; hue: string; dot: string }> = {
-  purple: { bg: '#F2E8EC', hd: '#A985AE', rule: '#DDCAD8', name: '茄子', hue: '紫色', dot: '🟣' },
-  yellow: { bg: '#FAF0D2', hd: '#E8C468', rule: '#EEDDA6', name: '玉米', hue: '黃色', dot: '🟡' },
-  orange: { bg: '#FBE6D3', hd: '#E8945C', rule: '#F0C7A4', name: '紅蘿蔔', hue: '橘色', dot: '🟠' },
-  red: { bg: '#F8E0D8', hd: '#D97C6C', rule: '#EBBBAE', name: '甜椒', hue: '紅色', dot: '🔴' },
-  blue: { bg: '#E7E8F0', hd: '#8E9BC6', rule: '#C7CBE0', name: '藍莓', hue: '藍色', dot: '🔵' },
-  green: { bg: '#EBEED9', hd: '#9DAF6A', rule: '#CED8AE', name: '青蔥', hue: '綠色', dot: '🟢' },
-  gray: { bg: '#F2EADF', hd: '#BFA88E', rule: '#DDCFBD', name: '香菇', hue: '奶茶色', dot: '🟤' },
-  black: { bg: '#E0D8D6', hd: '#4E3F4C', rule: '#C8BEBC', name: '黑豆', hue: '深灰', dot: '⚫' },
-  white: { bg: '#FFFCF6', hd: '#EDE3D2', rule: '#EFE6D8', name: '白蘿蔔', hue: '白色', dot: '⚪' },
+export const COLORS: Record<ColorKey, { name: string; hue: string; dot: string }> = {
+  purple: { name: '茄子', hue: '紫色', dot: '🟣' },
+  yellow: { name: '玉米', hue: '黃色', dot: '🟡' },
+  orange: { name: '紅蘿蔔', hue: '橘色', dot: '🟠' },
+  red: { name: '甜椒', hue: '紅色', dot: '🔴' },
+  blue: { name: '藍莓', hue: '藍色', dot: '🔵' },
+  green: { name: '青蔥', hue: '綠色', dot: '🟢' },
+  gray: { name: '香菇', hue: '奶茶色', dot: '🟤' },
+  black: { name: '黑豆', hue: '深灰', dot: '⚫' },
+  white: { name: '白蘿蔔', hue: '白色', dot: '⚪' },
 };
 export const CKEYS = Object.keys(COLORS) as ColorKey[];
 export const col = (c: string) => COLORS[c as ColorKey] || COLORS.yellow;

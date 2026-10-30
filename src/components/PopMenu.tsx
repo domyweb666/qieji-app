@@ -1,12 +1,17 @@
 // 右上角 ⋯ 打開的選單：從按鈕下方彈出一張白色卡片，後面整個畫面變暗，選單上的字才看得清楚。
 // 左邊圖示、右邊文字；inline 的子選單攤開成一個區塊，區塊之間用粗一點的分隔。
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
-import { C, F } from '../lib/theme';
+import Animated, { FadeIn, FadeOut, useReducedMotion, ZoomIn, ZoomOut } from 'react-native-reanimated';
+import { T, useColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Sym } from './Sym';
 
 export function PopMenu({ acts, top, onClose }: { acts: Act[]; top: number; onClose: () => void }) {
+  const c = useColors();
+  // 減少動態：放大縮小改成淡入淡出
+  const calm = useReducedMotion();
+  const cardIn = calm ? FadeIn.duration(T.motion.fade) : ZoomIn.duration(T.motion.menuPop.in);
+  const cardOut = calm ? FadeOut.duration(T.motion.fade) : ZoomOut.duration(T.motion.menuPop.out);
   // 一般項目連在一起算一個區塊，inline 子選單自成一個區塊
   const groups: Act[][] = [];
   for (const a of acts.filter(x => !x.hidden)) {
@@ -23,17 +28,18 @@ export function PopMenu({ acts, top, onClose }: { acts: Act[]; top: number; onCl
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(140)} style={[StyleSheet.absoluteFill, st.dim]}>
+      <Animated.View entering={FadeIn.duration(T.motion.menuBackdrop.in)} exiting={FadeOut.duration(T.motion.menuBackdrop.out)}
+        style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="關閉選單" />
       </Animated.View>
-      <Animated.View entering={ZoomIn.duration(170)} exiting={ZoomOut.duration(120)} style={[st.card, { top }]}>
+      <Animated.View entering={cardIn} exiting={cardOut} style={[st.card, { backgroundColor: c.surface, top }]}>
         {sections.map((g, gi) => (
-          <View key={gi} style={gi > 0 && st.gap}>
+          <View key={gi} style={gi > 0 && [st.gap, { borderTopColor: c.page }]}>
             {g.map((a, i) => (
               <Pressable key={a.label} onPress={() => pick(a)} accessibilityRole="menuitem"
-                style={({ pressed }) => [st.row, i > 0 && st.sep, pressed && { backgroundColor: C.fill }]}>
-                <View style={st.icon}>{a.icon ? <Sym name={a.icon} size={19} color={a.destructive ? C.red : C.label} /> : null}</View>
-                <Text style={[st.label, a.destructive && { color: C.red }]}>{a.label}</Text>
+                style={({ pressed }) => [st.row, i > 0 && [st.sep, { borderTopColor: c.separator }], pressed && { backgroundColor: c.pressedFill }]}>
+                <View style={st.icon}>{a.icon ? <Sym name={a.icon} size={19} color={a.destructive ? c.danger : c.textPrimary} /> : null}</View>
+                <Text style={[st.label, { color: a.destructive ? c.danger : c.textPrimary }]}>{a.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -44,13 +50,11 @@ export function PopMenu({ acts, top, onClose }: { acts: Act[]; top: number; onCl
 }
 
 const st = StyleSheet.create({
-  dim: { backgroundColor: 'rgba(0,0,0,0.32)' },
-  card: { position: 'absolute', right: 10, width: 250, backgroundColor: C.card, borderRadius: 16, overflow: 'hidden',
-    transformOrigin: 'top right',
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
-  gap: { borderTopWidth: 7, borderTopColor: C.groupedBg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 50, paddingHorizontal: 16 },
-  sep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
-  icon: { width: 24, alignItems: 'center' },
-  label: { flex: 1, fontSize: F.body, color: C.label },
+  card: { position: 'absolute', right: T.space.m, width: 250, borderRadius: T.shape.radiusCard, overflow: 'hidden', // width 只用一次
+    transformOrigin: 'top right', ...T.shape.shadowSoft, elevation: 12 },
+  gap: { borderTopWidth: T.space.s },
+  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l },
+  sep: { borderTopWidth: StyleSheet.hairlineWidth },
+  icon: { width: T.space.xl, alignItems: 'center' },
+  label: { flex: 1, ...T.font.body },
 });

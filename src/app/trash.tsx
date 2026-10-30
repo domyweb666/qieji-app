@@ -8,10 +8,11 @@ import { ui } from '../components/Overlay';
 import { GlassBtn, WebTop } from '../components/WebBars';
 import { label, visibleNotes, type Note } from '../lib/model';
 import { store, useStore } from '../lib/store';
-import { C, F } from '../lib/theme';
+import { T, useColors } from '../lib/tokens';
 
 export default function Trash() {
   const s = useStore();
+  const c = useColors();
   const title = '最近刪除';
   const notes = visibleNotes(s, { trash: true, filter: 'all', q: '', sort: s.sort });
 
@@ -23,11 +24,11 @@ export default function Trash() {
   }
   const acts: Act[] = [{
     label: `清空最近刪除（${notes.length}）`, icon: 'trash', destructive: true,
-    fn: () => ui.confirm('永久刪除這裡的所有筆記？', () => { s.notes = s.notes.filter(n => !n.deleted); store.change(); }),
+    fn: () => ui.confirm('永久刪除這裡的所有清單？', () => { s.notes = s.notes.filter(n => !n.deleted); store.change(); }),
   }];
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.groupedBg }} collapsable={false}>
+    <View style={{ flex: 1, backgroundColor: c.page }} collapsable={false}>
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={listStyles.wrap}>
         <Stack.Title large>{title}</Stack.Title>
         {notes.length > 0 && (
@@ -38,7 +39,7 @@ export default function Trash() {
         <WebTop title={title} left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
           right={notes.length > 0 ? <GlassBtn icon="ellipsis" label="選單" onPress={() => showActs(acts)} /> : undefined} />
 
-        {notes.length > 0 && <Text style={st.note}>點一下可以還原或永久刪除。</Text>}
+        {notes.length > 0 && <Text style={[st.note, { color: c.textSecondary }]}>點一下可以還原或永久刪除。</Text>}
         {notes.length
           ? <NoteSections notes={notes} trash onPress={onPress} />
           : <Empty lines={['最近刪除是空的']} />}
@@ -48,5 +49,5 @@ export default function Trash() {
 }
 
 const st = StyleSheet.create({
-  note: { fontSize: F.footnote, color: C.secondary, marginTop: 8, marginLeft: 4 },
+  note: { ...T.font.footnote, marginTop: T.space.s, marginLeft: T.space.xs },
 });

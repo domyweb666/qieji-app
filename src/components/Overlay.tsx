@@ -1,17 +1,18 @@
 // 疊在所有畫面上面的一層：選單、確認框、toast。其他畫面用 ui.sheet() / ui.confirm() / ui.toast() 呼叫。
 import { useEffect, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, F } from '../lib/theme';
+import { colors, T, useColors } from '../lib/tokens';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
 type SheetSpec = { title?: string; rows: Row[] };
+type ConfirmSpec = { msg: string; ok: () => void; okLabel: string };
 type ToastSpec = { msg: string; action?: { label: string; fn: () => void } };
 
 let host: {
   sheet: (s: SheetSpec | null) => void;
-  confirm: (c: { msg: string; ok: () => void } | null) => void;
+  confirm: (c: ConfirmSpec | null) => void;
   toast: (t: ToastSpec | null) => void;
 } | null = null;
 
@@ -21,13 +22,15 @@ export const ui = {
     if (Platform.OS !== 'ios') return host?.sheet({ rows, title });
     const opts = [...rows.map(r => (r.on ? `✓ ${r.label}` : r.label)), '取消'];
     const destructiveButtonIndex = rows.map((r, i) => (r.danger ? i : -1)).filter(i => i >= 0);
+    // 系統動作表單不在 React 樹裡，拿不到 hook，顏色照目前外觀算一次
     ActionSheetIOS.showActionSheetWithOptions(
-      { title, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: C.tint as string },
+      { title, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: colors('light').accent },
       i => { if (i < rows.length) rows[i].fn(); },
     );
   },
-  confirm: (msg: string, ok: () => void, okLabel = '刪除') => {
-    if (Platform.OS !== 'ios') return host?.confirm({ msg, ok });
+  // 按鈕名動詞帶對象，預設「永久刪除」（詞彙表 #13）
+  confirm: (msg: string, ok: () => void, okLabel = '永久刪除') => {
+    if (Platform.OS !== 'ios') return host?.confirm({ msg, ok, okLabel });
     Alert.alert(msg, undefined, [{ text: '取消', style: 'cancel' }, { text: okLabel, style: 'destructive', onPress: ok }]);
   },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
@@ -35,9 +38,14 @@ export const ui = {
 
 export function OverlayHost() {
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
-  const [confirm, setConfirm] = useState<{ msg: string; ok: () => void } | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmSpec | null>(null);
   const [toast, setToast] = useState<ToastSpec | null>(null);
   const insets = useSafeAreaInsets();
+  const c = useColors();
+  // 減少動態：滑入滑出改成淡入淡出（替換，不是關掉）
+  const calm = useReducedMotion();
+  const sheetIn = calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(T.motion.sheetSlide.in);
+  const sheetOut = calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(T.motion.sheetSlide.out);
 
   useEffect(() => {
     const mine: typeof host = {
@@ -51,7 +59,7 @@ export function OverlayHost() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3500);
+    const t = setTimeout(() => setToast(null), T.timing.toastStay);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -60,12 +68,12 @@ export function OverlayHost() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {toast && (
-        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)}
-          style={[s.toast, { bottom: insets.bottom + 76 }]}>
-          <Text style={s.toastText}>{toast.msg}</Text>
+        <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
+          style={[s.toast, { backgroundColor: c.toastBg, bottom: insets.bottom + 76 }]}>{/* 76 只用一次：toast 離底部的距離 */}
+          <Text style={[s.toastText, { color: c.toastText }]}>{toast.msg}</Text>
           {toast.action && (
-            <Pressable hitSlop={10} onPress={() => { toast.action!.fn(); setToast(null); }}>
-              <Text style={s.toastBtn}>{toast.action.label}</Text>
+            <Pressable hitSlop={T.space.m} onPress={() => { toast.action!.fn(); setToast(null); }}>
+              <Text style={[s.toastBtn, { color: c.toastAction }]}>{toast.action.label}</Text>
             </Pressable>
           )}
         </Animated.View>
@@ -73,19 +81,20 @@ export function OverlayHost() {
 
       {sheet && (
         <View style={StyleSheet.absoluteFill}>
-          <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, s.backdrop]}>
+          <Animated.View entering={FadeIn.duration(T.motion.sheetBackdrop.in)} exiting={FadeOut.duration(T.motion.sheetBackdrop.out)}
+            style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
           </Animated.View>
-          <Animated.View entering={SlideInDown.duration(220)} exiting={SlideOutDown.duration(180)}
-            style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
+          <Animated.View entering={sheetIn} exiting={sheetOut}
+            style={[s.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + T.space.s }]}>
             <ScrollView bounces={false}>
-              {sheet.title ? <Text style={s.sheetTitle}>{sheet.title}</Text> : null}
+              {sheet.title ? <Text style={[s.sheetTitle, { color: c.textSecondary }]}>{sheet.title}</Text> : null}
               {sheet.rows.map((r, i) => (
-                <Pressable key={i} style={({ pressed }) => [s.opt, pressed && { backgroundColor: C.fill }]}
+                <Pressable key={i} style={({ pressed }) => [s.opt, pressed && { backgroundColor: c.pressedFill }]}
                   onPress={() => { closeSheet(); r.fn(); }}>
-                  {r.dot ? <View style={[s.dot, { backgroundColor: r.dot }]} /> : null}
-                  <Text style={[s.optText, r.danger && { color: C.red }]}>{r.label}</Text>
-                  {r.on ? <Text style={s.on}>✓</Text> : null}
+                  {r.dot ? <View style={[s.dot, { backgroundColor: r.dot, borderColor: c.dotOutline }]} /> : null}
+                  <Text style={[s.optText, { color: r.danger ? c.danger : c.accent }]}>{r.label}</Text>
+                  {r.on ? <Text style={[s.on, { color: c.accent }]}>✓</Text> : null}
                 </Pressable>
               ))}
             </ScrollView>
@@ -94,13 +103,14 @@ export function OverlayHost() {
       )}
 
       {confirm && (
-        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)} style={[StyleSheet.absoluteFill, s.backdrop, s.center]}>
-          <View style={s.dlg}>
-            <Text style={s.dlgText}>{confirm.msg}</Text>
-            <View style={s.acts}>
-              <Pressable hitSlop={8} onPress={() => setConfirm(null)}><Text style={s.act}>取消</Text></Pressable>
-              <Pressable hitSlop={8} onPress={() => { const ok = confirm.ok; setConfirm(null); ok(); }}>
-                <Text style={[s.act, { color: C.red }]}>刪除</Text>
+        <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
+          style={[StyleSheet.absoluteFill, s.center, { backgroundColor: c.scrim }]}>
+          <View style={[s.dlg, { backgroundColor: c.surface }]}>
+            <Text style={[s.dlgText, { color: c.textPrimary }]}>{confirm.msg}</Text>
+            <View style={[s.acts, { borderTopColor: c.separator }]}>
+              <Pressable hitSlop={T.space.s} onPress={() => setConfirm(null)}><Text style={[s.act, { color: c.accent }]}>取消</Text></Pressable>
+              <Pressable hitSlop={T.space.s} onPress={() => { const ok = confirm.ok; setConfirm(null); ok(); }}>
+                <Text style={[s.act, { color: c.danger }]}>{confirm.okLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -110,23 +120,23 @@ export function OverlayHost() {
   );
 }
 
+const SHEET_DOT = 14;
 const s = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,.3)' },
-  center: { alignItems: 'center', justifyContent: 'center', padding: 40 },
-  sheet: { position: 'absolute', left: 8, right: 8, bottom: 0, maxHeight: '80%', backgroundColor: C.card,
-    borderRadius: 14, paddingTop: 4, marginBottom: 8 },
-  sheetTitle: { marginTop: 10, marginBottom: 4, fontSize: F.footnote, color: C.secondary, textAlign: 'center' },
-  opt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, paddingHorizontal: 20 },
-  optText: { fontSize: F.body + 3, color: C.tint },
-  dot: { width: 14, height: 14, borderRadius: 7 },
-  on: { color: C.tint, fontWeight: '600', fontSize: F.body },
-  dlg: { backgroundColor: C.card, borderRadius: 14, width: '100%', maxWidth: 300, paddingTop: 20, overflow: 'hidden' },
-  dlgText: { fontSize: F.headline, fontWeight: '600', color: C.label, textAlign: 'center', paddingHorizontal: 16, marginBottom: 18 },
-  acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
-  act: { flex: 1, color: C.tint, fontSize: F.body, paddingVertical: 12, paddingHorizontal: 30, textAlign: 'center' },
+  center: { alignItems: 'center', justifyContent: 'center', padding: T.space.xxl },
+  sheet: { position: 'absolute', left: T.space.s, right: T.space.s, bottom: 0, maxHeight: '80%',
+    borderRadius: T.shape.radiusCard, paddingTop: T.space.xs, marginBottom: T.space.s },
+  sheetTitle: { marginTop: T.space.m, marginBottom: T.space.xs, ...T.font.footnote, textAlign: 'center' },
+  opt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.m, paddingVertical: T.space.l, paddingHorizontal: T.space.l },
+  optText: { ...T.font.sheetOption },
+  dot: { width: SHEET_DOT, height: SHEET_DOT, borderRadius: T.shape.pill(SHEET_DOT), borderWidth: T.shape.borderCard },
+  on: { ...T.font.emphasis },
+  dlg: { borderRadius: T.shape.radiusCard, width: '100%', maxWidth: 300, paddingTop: T.space.l, overflow: 'hidden' }, // maxWidth 只用一次
+  dlgText: { ...T.font.emphasis, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
+  acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
+  act: { flex: 1, ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
   // 長的提示（例如存檔失敗）要能換行，不能超出螢幕
-  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '90%', backgroundColor: 'rgba(58,46,66,0.94)', paddingVertical: 11, paddingHorizontal: 18,
-    borderRadius: 22, flexDirection: 'row', gap: 16, alignItems: 'center', zIndex: 50 },
-  toastText: { color: '#fff', fontSize: F.subhead, flexShrink: 1 },
-  toastBtn: { color: '#D7B8F3', fontWeight: '600', fontSize: F.subhead },
+  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '90%', paddingVertical: T.space.m, paddingHorizontal: T.space.l,
+    borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', gap: T.space.l, alignItems: 'center', zIndex: 50 },
+  toastText: { ...T.font.subhead, flexShrink: 1 },
+  toastBtn: { ...T.font.subheadBold },
 });

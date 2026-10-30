@@ -3,7 +3,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 type Name = 'back' | 'check' | 'dots' | 'plus' | 'notes' | 'search' | 'trash' | 'close' | 'menu' | 'undo' | 'redo';
 
-export function Icon({ name, size = 26, color = '#1f1f1f' }: { name: Name; size?: number; color?: string }) {
+// 顏色一律由呼叫的人從代號給，這裡沒有預設色
+export function Icon({ name, size = 26, color }: { name: Name; size?: number; color: string }) {
   const line = (w: number) => ({ fill: 'none', stroke: color, strokeWidth: w, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const });
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
