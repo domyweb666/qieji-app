@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import {
   InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, View,
-  type TextInputInstance, type TextInputKeyPressEvent,
+  type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -20,7 +20,7 @@ import { PopMenu } from '../../components/PopMenu';
 import { Sym } from '../../components/Sym';
 import { native } from '../../components/WebBars';
 import {
-  ago, bloom, col, convertNote, fullDate, isEmpty, plain, toggleStrike, uid, type Item, type Note,
+  bloom, col, convertNote, isEmpty, plain, toggleStrike, uid, type Item, type Note,
 } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
@@ -163,7 +163,36 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     focused.current = id;
     setFocusId(id);
     bloomCheck(id === 'title' ? null : id);
+    if (id !== 'title') requestAnimationFrame(() => ensureVisible(id));
   }
+
+  /* ---------- 鍵盤：照網頁版，不讓系統自動推畫面 ---------- */
+  // 系統的自動推畫面，在鍵盤和上面那條工具列先後出現時會推兩次（新的一行先往上跑再往下掉）。
+  // 改成自己記住鍵盤頂在哪：正在打的那一行被擋住才捲，沒被擋住就一動也不動。
+  const boxRef = useRef<ViewInstance>(null);
+  const view = useRef({ top: 0, h: 0, y: 0, kb: Infinity }); // 清單在螢幕上的頂、高，目前捲到哪，鍵盤頂
+  const [kbPad, setKbPad] = useState(0);
+  function ensureVisible(id: string | null) {
+    const l = id && layouts.current[id], v = view.current;
+    if (!l || !v.h) return;
+    const shown = Math.min(v.h, v.kb - v.top) - 16; // 沒被鍵盤擋住的高度，底下留一點空
+    if (l.y < v.y) scrollRef.current?.scrollTo({ y: l.y, animated: true });
+    else if (l.y + l.h > v.y + shown) scrollRef.current?.scrollTo({ y: l.y + l.h - shown, animated: true });
+  }
+  useEffect(() => {
+    const show = (e: { endCoordinates: { screenY: number } }) => {
+      const v = view.current;
+      v.kb = e.endCoordinates.screenY;
+      setKbPad(Math.max(0, v.top + v.h - v.kb));
+      requestAnimationFrame(() => ensureVisible(focused.current));
+    };
+    const hide = () => { view.current.kb = Infinity; setKbPad(0); };
+    const subs = [
+      Keyboard.addListener('keyboardWillShow', show), Keyboard.addListener('keyboardDidShow', show),
+      Keyboard.addListener('keyboardWillHide', hide), Keyboard.addListener('keyboardDidHide', hide),
+    ];
+    return () => subs.forEach(s => s.remove());
+  }, []);
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
     setTimeout(() => {
@@ -313,10 +342,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         <BarBtn icon="square.and.arrow.up" label="分享" onPress={share} />
         <BarBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
       </View>
-      <View style={[st.meta, { borderBottomColor: tone.rule }]}>
-        <Text style={st.metaText}>{ago(n.updated)}</Text>
-        <Text style={st.metaText}>{fullDate(n.updated)}</Text>
-      </View>
 
       {/* 「新增一行」固定在日期下面，不跟著清單捲，按下去不會被鍵盤推走；樣子跟一般的行一樣低調 */}
       <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { backgroundColor: 'rgba(255,255,255,0.45)' }]}
@@ -325,8 +350,11 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         <Text style={st.addText}>新增一行</Text>
       </Pressable>
 
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
+      <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
+        onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; })}>
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
+        scrollEventThrottle={16} onScroll={e => { view.current.y = e.nativeEvent.contentOffset.y; }}
         scrollEnabled={!dragging}>
         <View>
           {n.items.map((it, index) => (
@@ -334,7 +362,10 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
               inputKey={`${it.id}:${epoch}`} inputProps={inputProps}
               dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
               refInput={r => { inputs.current[it.id] = r; }}
-              onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
+              onLayoutRow={(y, h) => {
+                layouts.current[it.id] = { y, h };
+                if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
+              }}
               onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
               onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
               onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
@@ -342,8 +373,9 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         </View>
         {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
         {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
-        <View style={{ height: 220 }} />
+        <View style={{ height: 220 + kbPad + insets.bottom }} />
       </ScrollView>
+      </View>
 
       {menu && <PopMenu acts={moreActs} top={insets.top + 46} onClose={() => setMenu(false)} />}
 
@@ -526,8 +558,6 @@ const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
   barBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 6, borderBottomWidth: 1 },
-  metaText: { fontSize: F.footnote, color: C.secondary },
   addrow: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingLeft: 18, paddingRight: 20, borderBottomWidth: 1 },
   addText: { fontSize: 19, color: C.secondary },
   ci: { overflow: 'hidden', borderBottomWidth: 1, shadowColor: '#000', shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
