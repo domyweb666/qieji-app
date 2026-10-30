@@ -27,16 +27,17 @@ export type Day = { f: number; e: number; g: number };
 export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } };
 export type State = { sort: SortKey; notes: Note[]; garden: Garden };
 
-export const COLORS: Record<ColorKey, { bg: string; hd: string; rule: string; name: string }> = {
-  purple: { bg: '#EDE4F3', hd: '#8E6AAE', rule: '#D6C6E6', name: '茄子' },
-  yellow: { bg: '#FBF2C9', hd: '#EECF5E', rule: '#EEDF9A', name: '玉米' },
-  orange: { bg: '#FCE2CB', hd: '#F09C5E', rule: '#F2C49E', name: '紅蘿蔔' },
-  red: { bg: '#F9D7D2', hd: '#E07A6F', rule: '#EDADA5', name: '甜椒' },
-  blue: { bg: '#DCE5F4', hd: '#7F99D0', rule: '#B7C7E7', name: '藍莓' },
-  green: { bg: '#E0ECD2', hd: '#8DAF62', rule: '#C3D8A9', name: '青蔥' },
-  gray: { bg: '#EEE7DE', hd: '#B6A895', rule: '#DACFC1', name: '香菇' },
-  black: { bg: '#DAD5DB', hd: '#4A3F4E', rule: '#C4BDC6', name: '黑豆' },
-  white: { bg: '#FFFDF9', hd: '#E8E0D3', rule: '#EFE8DC', name: '白蘿蔔' },
+// name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）
+export const COLORS: Record<ColorKey, { bg: string; hd: string; rule: string; name: string; hue: string }> = {
+  purple: { bg: '#EDE4F3', hd: '#8E6AAE', rule: '#D6C6E6', name: '茄子', hue: '紫色' },
+  yellow: { bg: '#FBF2C9', hd: '#EECF5E', rule: '#EEDF9A', name: '玉米', hue: '黃色' },
+  orange: { bg: '#FCE2CB', hd: '#F09C5E', rule: '#F2C49E', name: '紅蘿蔔', hue: '橘色' },
+  red: { bg: '#F9D7D2', hd: '#E07A6F', rule: '#EDADA5', name: '甜椒', hue: '紅色' },
+  blue: { bg: '#DCE5F4', hd: '#7F99D0', rule: '#B7C7E7', name: '藍莓', hue: '藍色' },
+  green: { bg: '#E0ECD2', hd: '#8DAF62', rule: '#C3D8A9', name: '青蔥', hue: '綠色' },
+  gray: { bg: '#EEE7DE', hd: '#B6A895', rule: '#DACFC1', name: '香菇', hue: '奶茶色' },
+  black: { bg: '#DAD5DB', hd: '#4A3F4E', rule: '#C4BDC6', name: '黑豆', hue: '深灰' },
+  white: { bg: '#FFFDF9', hd: '#E8E0D3', rule: '#EFE8DC', name: '白蘿蔔', hue: '白色' },
 };
 export const CKEYS = Object.keys(COLORS) as ColorKey[];
 export const col = (c: string) => COLORS[c as ColorKey] || COLORS.yellow;

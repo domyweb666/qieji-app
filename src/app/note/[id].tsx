@@ -1,8 +1,9 @@
-// 筆記編輯：文字筆記／清單筆記。清單的每一行就是一個點子：
+// 清單編輯。清單的每一行就是一個點子：
 // 往右滑＝劃掉，往左滑＝刪除，拉右邊的把手＝排序。
+// 只有點「新增一行」才會多一行；在一行裡按換行就是在同一格裡換行。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import {
   InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, View,
@@ -10,13 +11,15 @@ import {
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { menuItems, showActs, type Act } from '../../components/Acts';
+import type { SFSymbol } from 'sf-symbols-typescript';
+import { showActs, type Act } from '../../components/Acts';
 import { ui } from '../../components/Overlay';
 import { Sym } from '../../components/Sym';
-import { GlassBtn, native, WebTop } from '../../components/WebBars';
+import { native } from '../../components/WebBars';
 import {
-  ago, bloom, col, fullDate, isEmpty, plain, splitLines, toggleStrike, uid, type Item, type Note,
+  ago, bloom, col, convertNote, fullDate, isEmpty, plain, toggleStrike, uid, type Item, type Note,
 } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
@@ -32,7 +35,11 @@ export default function NoteScreen() {
   const { id, fresh } = useLocalSearchParams<{ id: string; fresh?: string }>();
   // 關閉空白筆記時它會被移出 state，這裡留住它，讓退場動畫期間畫面不會突然變空
   const keep = useRef<Note | undefined>(undefined);
-  if (!keep.current) keep.current = store.s.notes.find(n => n.id === id);
+  if (!keep.current) {
+    keep.current = store.s.notes.find(n => n.id === id);
+    // 已經沒有記事本了：舊的文字筆記打開時轉成清單（一段一行）
+    if (keep.current?.type === 'text') { convertNote(keep.current); store.save(); }
+  }
   if (!keep.current) return <View style={{ flex: 1, backgroundColor: C.page }} />;
   return <Editor n={keep.current} fresh={fresh === '1'} />;
 }
@@ -40,29 +47,25 @@ export default function NoteScreen() {
 function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   useStore();
   const [, force] = useReducer((x: number) => x + 1, 0);
+  const insets = useSafeAreaInsets();
 
   const closed = useRef(false);
   const mounted = useRef(true);
-  const scrollRef = useRef<any>(null);
   const titleRef = useRef<TextInputInstance>(null);
-  const bodyRef = useRef<TextInputInstance>(null);
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
-  const sel = useRef<Record<string, { start: number; end: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  // 程式改了某一行的字（拆行、合併、復原）時，換 key 讓那個輸入框重新掛載
-  const rev = useRef<Record<string, number>>({});
+  // 復原／重做改了字時，換 key 讓輸入框重新掛載
   const [epoch, setEpoch] = useState(0);
-  const [bodyH, setBodyH] = useState(0);
 
   /* ---------- undo / redo ---------- */
   const hist = useRef<string[]>([]);
   const hpos = useRef(-1);
   const histT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const snapPending = useRef(false);
-  const snap = () => JSON.stringify({ title: n.title, body: n.body, items: n.items, type: n.type });
+  const snap = () => JSON.stringify({ title: n.title, items: n.items });
   function snapshot() {
     snapPending.current = false;
     const sn = snap();
@@ -139,6 +142,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
     inp.setSelection?.(at, at);
   });
+  // 新增一行：唯一會多出一行的地方
   function focusNew() {
     const first = n.items[0];
     if (first && !first.t.trim()) return focusItem(first.id, 0);
@@ -147,13 +151,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     changed();
     focusItem(it.id, 0);
   }
-  function insertAfter(id: string, text: string) {
-    const it: Item = { id: uid(), t: text, done: false, b: false };
-    n.items.splice(n.items.findIndex(i => i.id === id) + 1, 0, it);
-    changed();
-    focusItem(it.id, 0);
-    bloomCheck(it.id);
-  }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
     if (keep.length !== n.items.length) { n.items = keep; store.change(); }
@@ -161,55 +158,35 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   function onFocus(id: string) {
     focused.current = id;
     setFocusId(id);
-    if (n.type === 'check') bloomCheck(id === 'title' ? null : id);
+    bloomCheck(id === 'title' ? null : id);
   }
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
     setTimeout(() => {
       if (focused.current || !mounted.current || closed.current) return;
       setFocusId(null);
-      if (n.type === 'check') { bloomCheck(); cleanupEmpty(); }
+      bloomCheck();
+      cleanupEmpty();
     }, 120);
   }
 
   /* ---------- typing in a line ---------- */
+  // 換行、貼上多行都留在同一格，不會自己拆成好幾行
   function onChange(id: string, v: string) {
     const it = n.items.find(i => i.id === id);
     if (!it) return;
-    if (!/\r?\n/.test(v)) { it.t = v; return changed(false, true); }
-    // 貼上多行 → 拆成多行（Enter 由 onSubmit 處理，不會走到這裡）
-    const [head, ...more] = v.split(/\r?\n/);
-    it.t = head;
-    rev.current[id] = (rev.current[id] || 0) + 1;
-    let prev = it;
-    for (const t of splitLines(more.join('\n'))) {
-      const x: Item = { id: uid(), t, done: false, b: false };
-      n.items.splice(n.items.indexOf(prev) + 1, 0, x);
-      prev = x;
-    }
-    changed(true);
-    focusItem(prev.id, prev.t.length);
+    it.t = v;
+    changed(false, true);
   }
-  function onSubmit(id: string) {
-    const it = n.items.find(i => i.id === id);
-    if (!it) return;
-    if (!it.t.trim()) return Keyboard.dismiss(); // Enter on empty line = stop
-    const pos = Math.min(sel.current[id]?.start ?? it.t.length, it.t.length);
-    const after = it.t.slice(pos);
-    if (after) { it.t = it.t.slice(0, pos); rev.current[id] = (rev.current[id] || 0) + 1; }
-    insertAfter(id, after);
-  }
+  // 空的一行按刪除 → 這行拿掉，回到上一行的最後面（有字的行不會被併到上一行）
   function onKey(id: string, e: TextInputKeyPressEvent) {
     if (e.nativeEvent.key !== 'Backspace') return;
-    const p = sel.current[id], idx = n.items.findIndex(i => i.id === id);
-    if (!p || p.start !== 0 || p.end !== 0 || idx <= 0) return;
-    // 在行首按刪除 → 併到上一行
-    const prev = n.items[idx - 1], caret = prev.t.length;
-    prev.t += n.items[idx].t;
+    const idx = n.items.findIndex(i => i.id === id);
+    if (idx <= 0 || n.items[idx].t) return;
+    const prev = n.items[idx - 1];
     n.items.splice(idx, 1);
-    rev.current[prev.id] = (rev.current[prev.id] || 0) + 1;
     changed(true);
-    focusItem(prev.id, caret);
+    focusItem(prev.id, prev.t.length);
   }
   function tapX(id: string) {
     const idx = n.items.findIndex(i => i.id === id);
@@ -231,7 +208,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
       const idx = n.items.findIndex(i => i.id === id);
       const mids = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
       drag.current = { idx, mids };
-      dragH.value = layouts.current[id]?.h ?? 46;
+      dragH.value = layouts.current[id]?.h ?? 52;
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       setDragging(true);
       Haptics.selectionAsync().catch(() => {});
@@ -261,7 +238,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     Keyboard.dismiss();
     clearTimeout(histT.current);
     bloomCheck();
-    if (n.type === 'check') n.items = n.items.filter(i => i.t.trim());
+    n.items = n.items.filter(i => i.t.trim());
     if (isEmpty(n)) store.s.notes = store.s.notes.filter(x => x !== n);
     store.change();
     store.flush();
@@ -274,19 +251,19 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     closed.current = false;
     let t: ReturnType<typeof setTimeout> | undefined;
     // 新的清單先停在標題，不自動多一行；要寫點子就點「新增一行」
-    if (fresh) t = setTimeout(() => (n.type === 'text' ? bodyRef.current : titleRef.current)?.focus(), 60);
+    if (fresh) t = setTimeout(() => titleRef.current?.focus(), 60);
     store.setLast(n.id); // 關掉 app 時還開著這則，下次打開就直接回到這裡
     return () => { clearTimeout(t); mounted.current = false; closeNote(); store.setLast(null); };
   }, []);
 
   /* ---------- actions ---------- */
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
-  const anyDone = n.type === 'check' && n.items.some(i => i.done);
+  const anyDone = n.items.some(i => i.done);
   function togglePin() { n.pinned = !n.pinned; changed(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); }
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function del() {
     n.deleted = true; n.pinned = false;
-    if (n.type === 'check') n.items = n.items.filter(i => i.t.trim());
+    n.items = n.items.filter(i => i.t.trim());
     const empty = isEmpty(n);
     if (empty) store.s.notes = store.s.notes.filter(x => x !== n);
     closed.current = true;
@@ -294,7 +271,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     router.back();
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
   }
-  // 顏色：從下方升起一個色塊面板（原生選單放不了色塊）
+  // 顏色：從下方升起一個色塊面板
   function pickColor() {
     Keyboard.dismiss();
     router.push({ pathname: '/color/[id]', params: { id: n.id } });
@@ -302,7 +279,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const moreActs: Act[] = [
     { label: '顏色', icon: 'paintpalette', fn: pickColor },
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
-    { label: '清單', inline: true, hidden: n.type !== 'check' || (n.items.length < 2 && !anyDone), sub: [
+    { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => { n.items.reverse(); changed(true); } },
       { label: '全部恢復（取消劃線）', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => { n.items.forEach(i => (i.done = false)); changed(true); } },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => { n.items = n.items.filter(i => !i.done); changed(true); } },
@@ -311,79 +288,54 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     { label: '刪除', icon: 'trash', destructive: true, fn: del },
   ];
 
-  const showHint = n.type === 'check' && !store.hintSeen && n.items.some(i => i.t.trim());
+  const showHint = !store.hintSeen && n.items.some(i => i.t.trim());
   const inputProps = native ? { inputAccessoryViewID: KBAR } : {};
-  // 整頁跟著筆記的顏色走；分隔線用同色系深一階，才看得清楚
+  // 整頁跟著筆記的顏色走；上方標題列和分隔線用同色系深一階
   const tone = { bg: col(n.color).bg, rule: col(n.color).rule };
 
   return (
     <View style={{ flex: 1, backgroundColor: tone.bg }} collapsable={false}>
-      {/* 標題列底色跟著筆記的顏色 */}
-      <Stack.Screen options={{ headerStyle: { backgroundColor: tone.bg } }} />
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="分享" onPress={share} />
-        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="更多">{menuItems(moreActs)}</Stack.Toolbar.Menu>
-      </Stack.Toolbar>
-      <WebTop left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
-        right={(
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <GlassBtn icon="square.and.arrow.up" label="分享" onPress={share} />
-            <GlassBtn icon="ellipsis" label="更多" onPress={() => showActs(moreActs)} />
-          </View>
-        )} />
-
-      {/* 標題和日期固定在上面，往下捲只有內容在動 */}
-      <View style={[st.head, { borderBottomColor: tone.rule }]}>
-          <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="標題" {...inputProps}
-            placeholderTextColor={C.placeholder} style={st.title} multiline scrollEnabled={false}
-            returnKeyType="next" submitBehavior="submit"
-            onChangeText={v => { n.title = v.replace(/\r?\n/g, ' '); changed(false, true); }}
-            onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
-            onSubmitEditing={() => {
-              if (n.type === 'text') return bodyRef.current?.focus();
-              // 清單：有行就跳到第一行，沒有就收鍵盤（不自動多一行）
-              if (n.items[0]) focusItem(n.items[0].id); else Keyboard.dismiss();
-            }} />
-          <View style={st.meta}>
-            <View style={[st.metaDot, { backgroundColor: col(n.color).hd }]} />
-            <Text style={st.metaText}>{fullDate(n.updated)}　{ago(n.updated)}</Text>
-          </View>
+      {/* 上方一條窄窄的標題列：返回、清單名稱、分享、更多，全部在同一行 */}
+      <View style={[st.bar, { paddingTop: insets.top, backgroundColor: tone.rule }]}>
+        <BarBtn icon="chevron.left" label="返回" onPress={() => router.back()} />
+        <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="清單名稱" {...inputProps}
+          placeholderTextColor={C.placeholder} style={st.title} returnKeyType="next" submitBehavior="submit"
+          onChangeText={v => { n.title = v; changed(false, true); }}
+          onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
+          onSubmitEditing={() => {
+            // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
+            if (n.items[0]) focusItem(n.items[0].id); else Keyboard.dismiss();
+          }} />
+        <BarBtn icon="square.and.arrow.up" label="分享" onPress={share} />
+        <BarBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); showActs(moreActs); }} />
+      </View>
+      <View style={[st.meta, { borderBottomColor: tone.rule }]}>
+        <Text style={st.metaText}>{ago(n.updated)}</Text>
+        <Text style={st.metaText}>{fullDate(n.updated)}</Text>
       </View>
 
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
+      <ScrollView style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
-        scrollEnabled={!dragging} onLayout={e => setBodyH(e.nativeEvent.layout.height)}>
-        <View style={st.paper}>
-          {n.type === 'text' ? (
-            <TextInput ref={bodyRef} key={`body${epoch}`} defaultValue={n.body} placeholder="開始輸入…" multiline scrollEnabled={false}
-              placeholderTextColor={C.placeholder} style={[st.body, { minHeight: Math.max(bodyH - 160, 200) }]} {...inputProps}
-              onChangeText={v => { n.body = v; changed(false, true); }}
-              onFocus={() => onFocus('body')} onBlur={() => onBlur('body')} />
-          ) : (
-            <>
-              <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { opacity: 0.5 }]} onPress={focusNew}>
-                <View style={st.addIcon}><Sym name="plus" size={14} color={C.tint} weight="semibold" /></View>
-                <Text style={st.addText}>新增一行</Text>
-              </Pressable>
-              <View style={st.lines}>
-                {n.items.map((it, index) => (
-                  <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} tone={tone}
-                    inputKey={`${it.id}:${rev.current[it.id] || 0}:${epoch}`} inputProps={inputProps}
-                    dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
-                    refInput={r => { inputs.current[it.id] = r; }}
-                    onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
-                    onSel={v => { sel.current[it.id] = v; }}
-                    onChange={v => onChange(it.id, v)} onSubmit={() => onSubmit(it.id)} onKey={e => onKey(it.id, e)}
-                    onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
-                    onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
-                ))}
-              </View>
-              {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
-              {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
-              <View style={{ height: 220 }} />
-            </>
-          )}
+        scrollEnabled={!dragging}>
+        <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { opacity: 0.5 }]} onPress={focusNew}>
+          <View style={st.addIcon}><Sym name="plus" size={14} color={C.tint} weight="semibold" /></View>
+          <Text style={st.addText}>新增一行</Text>
+        </Pressable>
+        <View>
+          {n.items.map((it, index) => (
+            <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} tone={tone}
+              inputKey={`${it.id}:${epoch}`} inputProps={inputProps}
+              dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
+              refInput={r => { inputs.current[it.id] = r; }}
+              onLayoutRow={(y, h) => { layouts.current[it.id] = { y, h }; }}
+              onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
+              onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
+              onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onX={() => tapX(it.id)} drag={dragApi} />
+          ))}
         </View>
+        {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
+        {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
+        <View style={{ height: 220 }} />
       </ScrollView>
 
       {native && (
@@ -406,12 +358,19 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   );
 }
 
+function BarBtn({ icon, label, onPress }: { icon: SFSymbol; label: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [st.barBtn, pressed && { opacity: 0.4 }]} onPress={onPress} accessibilityLabel={label} hitSlop={4}>
+      <Sym name={icon} size={icon === 'chevron.left' ? 22 : 20} color={C.label} weight={icon === 'chevron.left' ? 'semibold' : 'regular'} />
+    </Pressable>
+  );
+}
+
 type LineProps = {
   it: Item; index: number; done: boolean; focused: boolean; inputKey: string; inputProps: object; tone: { bg: string; rule: string };
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
-  onSel: (v: { start: number; end: number }) => void; onChange: (v: string) => void; onSubmit: () => void;
-  onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
   onStrike: () => void; onRemove: () => void; onX: () => void;
   drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
 };
@@ -423,8 +382,12 @@ function Line(p: LineProps) {
   const { onStrike, onRemove, index, dragIdx, dragTo, dragDy, dragH } = p;
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
   const id = p.it.id;
-  // 每一行的高度跟著字數長：打到超過一行就自動換到下一行（不靠系統自己算，iPhone 和網頁都一樣）
-  const [taH, setTaH] = useState(0);
+
+  // 每一行有多高，由底下一份看不見的同樣文字決定：它跟一般文字一樣會自動換行、自動長高，
+  // 輸入框疊在它上面撐滿。字打到超過一行就一定會長出下一行，不靠輸入框回報的高度。
+  const [txt, setTxt] = useState(p.it.t);
+  const [txtKey, setTxtKey] = useState(p.inputKey);
+  if (txtKey !== p.inputKey) { setTxtKey(p.inputKey); setTxt(p.it.t); }
 
   // 劃掉前先在字上畫一條線（從左到右、多行就一行接一行），畫完才真的劃掉。
   // 先用一個看不見的 Text 量出每一行字的位置和寬度。恢復（取消劃掉）不用畫。
@@ -505,13 +468,13 @@ function Line(p: LineProps) {
       </Animated.View>
       <GestureDetector gesture={swipe}>
         <Animated.View style={[st.cin, { backgroundColor: p.tone.bg }, slide]}>
-          <View style={st.lineBody}>
-            <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false}
-              submitBehavior="submit" returnKeyType="next" {...p.inputProps}
-              style={[st.ta, taH > 0 && { height: Math.max(46, taH) }, p.done && st.taDone]}
-              onContentSizeChange={e => setTaH(Math.ceil(e.nativeEvent.contentSize.height))}
-              onChangeText={p.onChange} onSubmitEditing={p.onSubmit} onKeyPress={p.onKey}
-              onSelectionChange={e => p.onSel(e.nativeEvent.selection)}
+          {/* 正在打的那一行亮一點，看得出游標在哪一格 */}
+          {p.focused && <View pointerEvents="none" style={[StyleSheet.absoluteFill, st.wash]} />}
+          <View style={st.field}>
+            <Text style={[st.ta, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
+            <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false} {...p.inputProps}
+              style={[st.ta, st.taFill, p.done && st.taDone]}
+              onChangeText={v => { setTxt(v); p.onChange(v); }} onKeyPress={p.onKey}
               onFocus={p.onFocus} onBlur={p.onBlur} />
             {marks && (
               <View pointerEvents="none" style={st.inkBox}>
@@ -519,17 +482,17 @@ function Line(p: LineProps) {
                 {marks.map((m, i) => <InkBar key={i} m={m} ink={ink} />)}
               </View>
             )}
-            {p.focused
-              ? (
-                <Pressable style={st.side} onPress={p.onX} accessibilityLabel="刪除這行">
-                  <Sym name="xmark.circle.fill" size={18} color={C.tertiary} />
-                </Pressable>
-              ) : (
-                <GestureDetector gesture={grip}>
-                  <View style={st.side} accessibilityLabel="拖曳排序"><Sym name="line.3.horizontal" size={16} color={C.tertiary} /></View>
-                </GestureDetector>
-              )}
           </View>
+          {p.focused
+            ? (
+              <Pressable style={st.side} onPress={p.onX} accessibilityLabel="刪除這行">
+                <Sym name="xmark.circle.fill" size={18} color={C.tertiary} />
+              </Pressable>
+            ) : (
+              <GestureDetector gesture={grip}>
+                <View style={st.side} accessibilityLabel="拖曳排序"><Sym name="line.3.horizontal" size={16} color={C.tertiary} /></View>
+              </GestureDetector>
+            )}
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -545,29 +508,35 @@ function InkBar({ m, ink }: { m: Mark; ink: SharedValue<number> }) {
   return <Animated.View style={[st.inkBar, { left: m.x, top: m.y, width: w }, grow]} />;
 }
 
+// 一行字的高度與上下留白（照網頁版：字大一點、行距寬一點，打起來比較舒服）
+const LINE_H = 29;
+const PAD_V = 12;
+const ROW_H = LINE_H + PAD_V * 2;
+
 const st = StyleSheet.create({
-  head: { paddingHorizontal: 20, borderBottomWidth: 1 },
-  paper: { paddingHorizontal: 20 },
-  title: { fontSize: F.title, fontWeight: '700', color: C.label, paddingTop: 8, paddingBottom: 2, paddingHorizontal: 0 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 12 },
-  metaDot: { width: 8, height: 8, borderRadius: 4 },
+  bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
+  barBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
+  title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
+  meta: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 6, borderBottomWidth: 1 },
   metaText: { fontSize: F.footnote, color: C.secondary },
-  body: { fontSize: F.body, lineHeight: 25, color: C.label, paddingTop: 0, paddingBottom: 160, paddingHorizontal: 0, textAlignVertical: 'top' },
-  addrow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50, marginHorizontal: -20, paddingHorizontal: 20, borderBottomWidth: 1 },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50, paddingHorizontal: 20, borderBottomWidth: 1 },
   addIcon: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.tintSoft, alignItems: 'center', justifyContent: 'center' },
   addText: { fontSize: F.body, color: C.tint },
-  lines: { marginHorizontal: -20 },
   ci: { overflow: 'hidden', borderBottomWidth: 1, shadowColor: '#000', shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
   underText: { color: '#fff', fontSize: F.subhead, fontWeight: '600' },
   cin: { flexDirection: 'row', alignItems: 'flex-start', paddingLeft: 20, paddingRight: 6 },
-  lineBody: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
-  ta: { flex: 1, minWidth: 0, fontSize: F.body, lineHeight: 23, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 0, minHeight: 46, color: C.label },
+  wash: { backgroundColor: 'rgba(255,255,255,0.45)' },
+  field: { flex: 1, minWidth: 0 },
+  ta: { fontSize: 19, lineHeight: LINE_H, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: 0, minHeight: ROW_H, color: C.label },
+  // 撐高度用的隱形文字：右邊少 2 點，寧可早一點換行、多留一點空，也不要字被切掉
+  mirror: { color: 'transparent', paddingRight: 2 },
+  taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through', color: C.secondary },
-  inkBox: { position: 'absolute', left: 0, right: 36, top: 11, bottom: 0 },
+  inkBox: { position: 'absolute', left: 0, right: 0, top: PAD_V, bottom: 0 },
   inkMeasure: { position: 'absolute', left: 0, right: 0, top: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, opacity: 0 },
   inkBar: { position: 'absolute', height: 1.6, borderRadius: 1, backgroundColor: C.secondary, transformOrigin: 'left' },
-  side: { width: 36, height: 46, alignItems: 'center', justifyContent: 'center' },
+  side: { width: 36, height: ROW_H, alignItems: 'center', justifyContent: 'center' },
   hint: { fontSize: F.footnote, color: C.secondary, textAlign: 'center', padding: 14 },
   kbar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: C.groupedBg,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },

@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuItems, showActs, type Act } from '../components/Acts';
 import { EmptyArt } from '../components/Breathe';
 import { listStyles, NoteSections } from '../components/NoteList';
-import { ui } from '../components/Overlay';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native, WebTop } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
@@ -39,14 +38,11 @@ export default function Home() {
   const trashed = s.notes.length - live.length;
   const open = (n: Note) => router.push({ pathname: '/note/[id]', params: { id: n.id } });
 
-  const compose = (type: Note['type']) => {
-    const n = newNote(filter !== 'all' ? filter : 'purple', type);
+  // 只有清單：按＋直接開一張新清單
+  const add = () => {
+    const n = newNote(filter !== 'all' ? filter : 'purple', 'check');
     router.push({ pathname: '/note/[id]', params: { id: n.id, fresh: '1' } });
   };
-  const add = () => ui.sheet([
-    { label: '記事', fn: () => compose('text') },
-    { label: '清單', fn: () => compose('check') },
-  ], '新增');
 
   const menu: Act[] = [
     { label: '依顏色篩選', icon: 'circle.grid.2x2', sub: [

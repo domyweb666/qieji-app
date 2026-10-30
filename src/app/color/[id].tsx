@@ -23,9 +23,13 @@ export default function ColorSheet() {
           const on = n?.color === k;
           return (
             <Pressable key={k} onPress={() => pick(k)} accessibilityRole="button"
-              accessibilityLabel={col(k).name} accessibilityState={{ selected: on }}
-              style={({ pressed }) => [st.cell, on && st.cellOn, pressed && { opacity: 0.6 }]}>
-              <View style={[st.swatch, { backgroundColor: col(k).hd }]} />
+              accessibilityLabel={`${col(k).hue}（${col(k).name}）`} accessibilityState={{ selected: on }}
+              style={({ pressed }) => [st.cell, pressed && { opacity: 0.6 }]}>
+              <View style={[st.box, on && st.boxOn]}>
+                <View style={[st.swatch, { backgroundColor: col(k).hd }]} />
+              </View>
+              <Text style={[st.hue, on && st.hueOn]} numberOfLines={1}>{col(k).hue}</Text>
+              <Text style={st.veg} numberOfLines={1}>{col(k).name}</Text>
             </Pressable>
           );
         })}
@@ -38,8 +42,12 @@ const st = StyleSheet.create({
   wrap: { paddingTop: 26, paddingBottom: 36, paddingHorizontal: 18, backgroundColor: C.card },
   title: { fontSize: F.subhead, fontWeight: '600', color: C.secondary, marginBottom: 14, marginLeft: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  // 一排五格
-  cell: { width: '20%', aspectRatio: 1, padding: 5, borderRadius: 16, borderWidth: 3, borderColor: 'transparent' },
-  cellOn: { borderColor: C.tint },
+  // 一排五格：色塊，下面標顏色和蔬菜名
+  cell: { width: '20%', alignItems: 'center', marginBottom: 12 },
+  box: { width: '100%', aspectRatio: 1, padding: 5, borderRadius: 16, borderWidth: 3, borderColor: 'transparent' },
+  boxOn: { borderColor: C.tint },
   swatch: { flex: 1, borderRadius: 11, borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' },
+  hue: { marginTop: 2, fontSize: F.footnote, fontWeight: '600', color: C.label },
+  hueOn: { color: C.tint },
+  veg: { fontSize: F.caption, color: C.secondary },
 });
