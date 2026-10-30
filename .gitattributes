@@ -1,0 +1,2 @@
+# git hook 是 shell 腳本，換行一定要是 LF（CRLF 在 sh 裡會「\r: command not found」）
+tools/githooks/* text eol=lf
