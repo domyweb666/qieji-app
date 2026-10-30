@@ -18,6 +18,7 @@ export type Note = {
   color: ColorKey;
   pinned: boolean;
   deleted: boolean;
+  deletedAt?: number; // 丟進最近刪除的時間，30 天自動清掉用；還原時拿掉
   created: number;
   updated: number;
   b: boolean;
@@ -216,4 +217,44 @@ export function groupNotes(notes: Note[], o: { trash: boolean }): Section[] {
     else push(n.pinned ? '已釘選' : '其他', n);
   }
   return out;
+}
+
+/* ---------------- 最近刪除 30 天自動清掉 ---------------- */
+// 會真的刪掉使用者資料，所以規則是「拿不準就不刪」：只有在最近刪除裡、刪除時間可信、而且已經滿 30 天才清。
+// 規則細節都在 tests/trash.test.mjs。注意：目前還沒有任何地方呼叫 purgeExpiredTrash，要等工程師看過才接上。
+export const TRASH_DAYS = 30;
+const TRASH_MS = TRASH_DAYS * 86400000;
+const validTime = (t: unknown): t is number => typeof t === 'number' && Number.isFinite(t) && t > 0;
+
+export function isExpiredTrash(n: Note, now: number) {
+  if (!n.deleted) return false;
+  if (!validTime(now) || !validTime(n.deletedAt)) return false;
+  if (n.deletedAt > now) return false; // 手機時間被往前調過
+  return now - n.deletedAt >= TRASH_MS;
+}
+
+export function markDeleted(n: Note, now: number) {
+  n.deleted = true;
+  n.deletedAt = now;
+}
+
+export function markRestored(n: Note) {
+  n.deleted = false;
+  delete n.deletedAt;
+}
+
+// 功能上線前就在最近刪除裡的（沒有可信的刪除時間）：從現在開始算 30 天。回傳補了幾則
+export function stampOldTrash(notes: Note[], now: number) {
+  let stamped = 0;
+  for (const n of notes) {
+    if (n.deleted && !validTime(n.deletedAt)) { n.deletedAt = now; stamped++; }
+  }
+  return stamped;
+}
+
+// 不改原本的陣列：回傳留下的和要清掉的，由呼叫的人決定要不要真的換掉
+export function purgeExpiredTrash(notes: Note[], now: number) {
+  const kept: Note[] = [], removed: Note[] = [];
+  for (const n of notes) (isExpiredTrash(n, now) ? removed : kept).push(n);
+  return { kept, removed };
 }
