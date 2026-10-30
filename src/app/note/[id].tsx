@@ -4,9 +4,9 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
-  InputAccessoryView, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, View,
+  Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, View,
   type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
 import { GestureDetector, ScrollView, usePanGesture } from 'react-native-gesture-handler';
@@ -18,14 +18,14 @@ import type { Act } from '../../components/Acts';
 import { ui } from '../../components/Overlay';
 import { PopMenu } from '../../components/PopMenu';
 import { Sym } from '../../components/Sym';
-import { native } from '../../components/WebBars';
 import {
   bloom, col, convertNote, isEmpty, plain, toggleStrike, uid, type Item, type Note,
 } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
 
-const KBAR = 'kbar';
+// 鍵盤上面那條「復原／重做／完成」的高度
+const KBAR_H = 48;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
 const TINT = C.tint as string;
@@ -101,6 +101,10 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     n.updated = Date.now();
     store.change();
     setEpoch(e => e + 1);
+    // 輸入框換新了，游標放回原本那一格，鍵盤不收起來
+    const f = focused.current;
+    if (f === 'title') requestAnimationFrame(() => titleRef.current?.focus());
+    else if (f && n.items.some(i => i.id === f)) focusItem(f);
   }
   const undo = () => { clearTimeout(histT.current); snapshot(); if (hpos.current > 0) { hpos.current--; restore(hist.current[hpos.current]); } };
   const redo = () => { if (hpos.current < hist.current.length - 1) { hpos.current++; restore(hist.current[hpos.current]); } };
@@ -135,7 +139,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 
   /* ---------- focus ---------- */
   function focusItem(id: string, caret?: number) { pending.current = { id, caret }; force(); }
-  useEffect(() => {
+  // 畫完立刻對焦（不等到畫面顯示後），換格時鍵盤不會先收再開
+  useLayoutEffect(() => {
     const p = pending.current;
     if (!p) return;
     const inp = inputs.current[p.id];
@@ -172,27 +177,34 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const boxRef = useRef<ViewInstance>(null);
   const view = useRef({ top: 0, h: 0, y: 0, kb: Infinity }); // 清單在螢幕上的頂、高，目前捲到哪，鍵盤頂
   const [kbPad, setKbPad] = useState(0);
+  // 鍵盤上面那條工具列也是自己畫的（照網頁版）：系統的 InputAccessoryView 在某些輸入法（例如 Typeless）
+  // 不會出現，變成打完字沒有地方按「完成」收鍵盤
+  const kbLift = useSharedValue(0);
+  const barStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -kbLift.value }] }));
   function ensureVisible(id: string | null) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
-    const shown = Math.min(v.h, v.kb - v.top) - 16; // 沒被鍵盤擋住的高度，底下留一點空
+    // 沒被鍵盤和工具列擋住的高度，底下留一點空
+    const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - 16;
     if (l.y < v.y) scrollRef.current?.scrollTo({ y: l.y, animated: true });
     else if (l.y + l.h > v.y + shown) scrollRef.current?.scrollTo({ y: l.y + l.h - shown, animated: true });
   }
   useEffect(() => {
-    const show = (e: { endCoordinates: { screenY: number } }) => {
+    const show = (e: { endCoordinates: { screenY: number }; duration?: number }) => {
       const v = view.current;
       v.kb = e.endCoordinates.screenY;
-      setKbPad(Math.max(0, v.top + v.h - v.kb));
+      const lift = Math.max(0, v.top + v.h - v.kb);
+      kbLift.value = withTiming(lift, { duration: e.duration || 250, easing: Easing.bezier(0.17, 0.59, 0.4, 0.77) });
+      setKbPad(lift);
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
-    const hide = () => { view.current.kb = Infinity; setKbPad(0); };
+    const hide = () => { view.current.kb = Infinity; kbLift.value = 0; setKbPad(0); };
     const subs = [
       Keyboard.addListener('keyboardWillShow', show), Keyboard.addListener('keyboardDidShow', show),
       Keyboard.addListener('keyboardWillHide', hide), Keyboard.addListener('keyboardDidHide', hide),
     ];
     return () => subs.forEach(s => s.remove());
-  }, []);
+  }, [kbLift]);
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
     setTimeout(() => {
@@ -322,7 +334,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   ];
 
   const showHint = !store.hintSeen && n.items.some(i => i.t.trim());
-  const inputProps = native ? { inputAccessoryViewID: KBAR } : {};
   // 整頁跟著筆記的顏色走；上方標題列和分隔線用同色系深一階
   const tone = { bg: col(n.color).bg, rule: col(n.color).rule };
 
@@ -331,7 +342,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
       {/* 上方一條窄窄的標題列：返回、清單名稱、分享、更多，全部在同一行 */}
       <View style={[st.bar, { paddingTop: insets.top, backgroundColor: tone.rule }]}>
         <BarBtn icon="chevron.left" label="返回" onPress={() => router.back()} />
-        <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="清單名稱" {...inputProps}
+        <TextInput ref={titleRef} key={`title${epoch}`} defaultValue={n.title} placeholder="清單名稱"
           placeholderTextColor={C.placeholder} style={st.title} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; changed(false, true); }}
           onFocus={() => onFocus('title')} onBlur={() => onBlur('title')}
@@ -353,13 +364,13 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; })}>
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
-        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
         scrollEventThrottle={16} onScroll={e => { view.current.y = e.nativeEvent.contentOffset.y; }}
         scrollEnabled={!dragging}>
         <View>
           {n.items.map((it, index) => (
             <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} tone={tone}
-              inputKey={`${it.id}:${epoch}`} inputProps={inputProps}
+              inputKey={`${it.id}:${epoch}`}
               dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
               refInput={r => { inputs.current[it.id] = r; }}
               onLayoutRow={(y, h) => {
@@ -373,14 +384,15 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         </View>
         {showHint && <Text style={st.hint}>往右滑劃掉　·　往左滑刪除</Text>}
         {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
-        <View style={{ height: 220 + kbPad + insets.bottom }} />
+        <View style={{ height: 220 + kbPad + KBAR_H + insets.bottom }} />
       </ScrollView>
       </View>
 
       {menu && <PopMenu acts={moreActs} top={insets.top + 46} onClose={() => setMenu(false)} />}
 
-      {native && (
-        <InputAccessoryView nativeID={KBAR}>
+      {/* 鍵盤上面那條：跟著鍵盤升降，鍵盤收起來就不見 */}
+      {kbPad > 0 && (
+        <Animated.View style={[st.kbarWrap, barStyle]}>
           <View style={st.kbar}>
             <Pressable style={[st.kb, !canUndo && st.kbOff]} disabled={!canUndo} onPress={undo} accessibilityLabel="復原">
               <Sym name="arrow.uturn.backward" size={19} color={C.tint} />
@@ -393,7 +405,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
               <Text style={st.kDone}>完成</Text>
             </Pressable>
           </View>
-        </InputAccessoryView>
+        </Animated.View>
       )}
     </View>
   );
@@ -408,7 +420,7 @@ function BarBtn({ icon, label, onPress }: { icon: SFSymbol; label: string; onPre
 }
 
 type LineProps = {
-  it: Item; index: number; done: boolean; focused: boolean; inputKey: string; inputProps: object; tone: { bg: string; rule: string };
+  it: Item; index: number; done: boolean; focused: boolean; inputKey: string; tone: { bg: string; rule: string };
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
@@ -416,19 +428,18 @@ type LineProps = {
   drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
 };
 
-function Line(p: LineProps) {
+// 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
+// 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
+const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.focused === b.focused && a.inputKey === b.inputKey
+  && a.index === b.index && a.tone.bg === b.tone.bg && a.tone.rule === b.tone.rule);
+
+function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
   const w = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
   const { onStrike, onRemove, index, dragIdx, dragTo, dragDy, dragH } = p;
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
   const id = p.it.id;
-
-  // 每一行有多高，由底下一份看不見的同樣文字決定：它跟一般文字一樣會自動換行、自動長高，
-  // 輸入框疊在它上面撐滿。字打到超過一行就一定會長出下一行，不靠輸入框回報的高度。
-  const [txt, setTxt] = useState(p.it.t);
-  const [txtKey, setTxtKey] = useState(p.inputKey);
-  if (txtKey !== p.inputKey) { setTxtKey(p.inputKey); setTxt(p.it.t); }
 
   // 劃掉前先在字上畫一條線（從左到右、多行就一行接一行），畫完才真的劃掉。
   // 先用一個看不見的 Text 量出每一行字的位置和寬度。恢復（取消劃掉）不用畫。
@@ -512,11 +523,8 @@ function Line(p: LineProps) {
           {/* 正在打的那一行亮一點，看得出游標在哪一格 */}
           {p.focused && <View pointerEvents="none" style={[StyleSheet.absoluteFill, st.wash]} />}
           <View style={st.field}>
-            <Text style={[st.ta, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
-            <TextInput ref={p.refInput} key={p.inputKey} defaultValue={p.it.t} multiline scrollEnabled={false} {...p.inputProps}
-              style={[st.ta, st.taFill, p.done && st.taDone]}
-              onChangeText={v => { setTxt(v); p.onChange(v); }} onKeyPress={p.onKey}
-              onFocus={p.onFocus} onBlur={p.onBlur} />
+            <Field key={p.inputKey} text={p.it.t} done={p.done} refInput={p.refInput}
+              onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
             {marks && (
               <View pointerEvents="none" style={st.inkBox}>
                 <Text style={[st.ta, st.inkMeasure]} onTextLayout={e => onMeasured(e.nativeEvent.lines)}>{p.it.t}</Text>
@@ -537,6 +545,24 @@ function Line(p: LineProps) {
         </Animated.View>
       </GestureDetector>
     </Animated.View>
+  );
+}
+
+// 一行的字。高度由底下一份看不見的同樣文字決定：它跟一般文字一樣會自動換行、自動長高，
+// 輸入框疊在它上面撐滿，字打到超過一行就一定會長出下一行。打字時只有這一小塊重畫。
+function Field({ text, done, refInput, onChange, onKey, onFocus, onBlur }: {
+  text: string; done: boolean; refInput: (r: TextInputInstance | null) => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
+}) {
+  const [txt, setTxt] = useState(text);
+  return (
+    <>
+      <Text style={[st.ta, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
+      <TextInput ref={refInput} defaultValue={text} multiline scrollEnabled={false}
+        style={[st.ta, st.taFill, done && st.taDone]}
+        onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={onKey}
+        onFocus={onFocus} onBlur={onBlur} />
+    </>
   );
 }
 
@@ -576,7 +602,8 @@ const st = StyleSheet.create({
   inkBar: { position: 'absolute', height: 1.6, borderRadius: 1, backgroundColor: C.secondary, transformOrigin: 'left' },
   side: { width: 36, height: ROW_H, alignItems: 'center', justifyContent: 'center' },
   hint: { fontSize: F.footnote, color: C.secondary, textAlign: 'center', padding: 14 },
-  kbar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: C.groupedBg,
+  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  kbar: { height: KBAR_H, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, backgroundColor: C.groupedBg,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.separator },
   kb: { height: 40, minWidth: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   kbOff: { opacity: 0.3 },
