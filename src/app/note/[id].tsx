@@ -540,8 +540,9 @@ const st = StyleSheet.create({
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: 2, paddingLeft: 12, backgroundColor: C.card },
   field: { flex: 1, minWidth: 0 },
   ta: { fontSize: 17, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: 4, color: C.label },
-  // 撐高度用的隱形文字：右邊少 2 點，寧可早一點換行、多留一點空，也不要字被切掉
-  mirror: { color: 'transparent', paddingRight: 6 },
+  // 撐高度用的隱形文字：右邊只比輸入框多留 1 點。留太多（之前 2 點）字快滿一行時隱形文字會先換行，
+  // 卡片底下就多出一整行空白；完全不留又可能反過來把最後一行切掉
+  mirror: { color: 'transparent', paddingRight: 5 },
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through', color: 'rgba(46,34,51,0.38)' },
   side: { width: 40, height: 52, alignItems: 'center', justifyContent: 'center' },
