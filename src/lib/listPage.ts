@@ -85,8 +85,14 @@ function render(){
   // 重畫前記住游標在哪一行哪個位置，畫完放回去
   var a = document.activeElement, keep = null;
   if (a && a.tagName === 'TEXTAREA'){ var r = a.closest('.ci'); keep = {id:r.dataset.id, p:a.selectionStart}; }
-  $('#cl').innerHTML = items.map(itemHTML).join('');
+  // 重畫時每一行會先縮回一行高再量，整頁暫時變短，iOS 就把畫面往上推（它沒有自動補位）。
+  // 先撐住清單原本的高度，量完再放開，捲動位置放回原處
+  var cl = $('#cl'), y = window.scrollY;
+  cl.style.minHeight = cl.offsetHeight + 'px';
+  cl.innerHTML = items.map(itemHTML).join('');
   document.querySelectorAll('.ci textarea').forEach(sizeTA);
+  cl.style.minHeight = '';
+  window.scrollTo(0, y);
   $('#hint').classList.toggle('hidden', !(hintOn && items.some(function(i){ return i.t.trim(); })));
   if (keep && findItem(keep.id) >= 0) focusItem(keep.id, keep.p, true);
 }
