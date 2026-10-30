@@ -18,7 +18,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 textarea{font:inherit;color:inherit;outline:0;-webkit-user-select:text;user-select:text}
 svg{display:block}
 .hidden{display:none!important}
-.addrow{display:flex;align-items:center;gap:8px;width:100%;margin-top:10px;padding:0 20px 0 18px;height:52px;
+.addrow{display:flex;align-items:center;gap:8px;width:100%;padding:0 20px 0 18px;height:52px;
   font-size:19px;color:rgba(60,60,67,.6);text-align:left;border-bottom:1px solid var(--rule)}
 .addrow:active{background:rgba(255,255,255,.45)}
 .addrow svg{width:18px;height:18px}

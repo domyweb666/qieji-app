@@ -25,19 +25,11 @@ export const C = {
 // 系統字級（pt）
 export const F = { largeTitle: 34, title: 28, title2: 22, title3: 20, headline: 17, body: 17, callout: 16, subhead: 15, footnote: 13, caption: 12 };
 
-export const HAIRLINE = ios ? 0.33 : 0.5;
-
-// 插圖：require 路徑＋原圖寬高比（寬/高），讓 Image 知道該留多高
+// 插圖（空白畫面用）：require 路徑＋原圖寬高比（寬/高），讓 Image 知道該留多高。
+// 列在這裡的圖才會被打包進 app；茄子花、茄子、籃子、茄子田的圖檔還在 assets/img，要用時再加回來
 export const ART = {
-  'face-happy': { src: require('../../assets/img/face-happy.webp'), r: 240 / 393 },
   basket: { src: require('../../assets/img/basket.webp'), r: 640 / 451 },
   sleep: { src: require('../../assets/img/sleep.webp'), r: 640 / 399 },
   search: { src: require('../../assets/img/search.webp'), r: 600 / 588 },
-  flower: { src: require('../../assets/img/flower.webp'), r: 200 / 198 },
-  'egg-small': { src: require('../../assets/img/egg-small.webp'), r: 180 / 283 },
-  egg: { src: require('../../assets/img/egg.webp'), r: 180 / 252 },
-  'egg-gold': { src: require('../../assets/img/egg-gold.webp'), r: 180 / 209 },
-  'basket-only': { src: require('../../assets/img/basket-only.webp'), r: 154 / 129 },
-  field: { src: require('../../assets/img/field.webp'), r: 941 / 800 },
 } as const;
 export type ArtName = keyof typeof ART;

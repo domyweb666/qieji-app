@@ -4,8 +4,8 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, Share, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import { Keyboard, Pressable, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import type { Act } from '../../components/Acts';
@@ -13,7 +13,7 @@ import { ListWeb, type ListMsg, type ListWebHandle } from '../../components/List
 import { ui } from '../../components/Overlay';
 import { PopMenu } from '../../components/PopMenu';
 import { Sym } from '../../components/Sym';
-import { bloom, col, convertNote, isEmpty, plain, toggleStrike, type Item, type Note } from '../../lib/model';
+import { ago, bloom, col, convertNote, fullDate, isEmpty, plain, toggleStrike, type Item, type Note } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C, F } from '../../lib/theme';
 
@@ -157,9 +157,24 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         <BarBtn icon="ellipsis" label="更多" onPress={() => { hideKb(); setMenu(true); }} />
       </View>
 
+      {/* 什麼時候改過：左邊幾分鐘前、右邊日期，也把「新增一行」跟標題列隔開 */}
+      <Meta n={n} />
+
       <ListWeb ref={web} init={{ items: n.items, bg: tone.bg, rule: tone.rule, hint: !store.hintSeen }} onMessage={onMessage} />
 
       {menu && <PopMenu acts={moreActs} top={insets.top + 46} onClose={() => setMenu(false)} />}
+    </View>
+  );
+}
+
+// 打字只存檔不重畫整頁，所以這一小塊自己每 15 秒更新一次「剛剛／幾分鐘前」
+function Meta({ n }: { n: Note }) {
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => { const t = setInterval(tick, 15000); return () => clearInterval(t); }, []);
+  return (
+    <View style={st.meta}>
+      <Text style={st.metaText}>{ago(n.updated)}</Text>
+      <Text style={st.metaText}>{fullDate(n.updated)}</Text>
     </View>
   );
 }
@@ -175,5 +190,7 @@ function BarBtn({ icon, label, onPress }: { icon: SFSymbol; label: string; onPre
 const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
   barBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
+  meta: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 2 },
+  metaText: { fontSize: F.subhead, color: C.secondary },
   title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
 });

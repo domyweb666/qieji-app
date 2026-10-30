@@ -11,7 +11,7 @@ export function EmptyArt({ art, lines }: { art: ArtName; lines: string[] }) {
   useEffect(() => {
     if (calm) return;
     t.value = withRepeat(withTiming(1, { duration: 1900, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [calm]);
+  }, [calm, t]);
   const st = useAnimatedStyle(() => ({ transform: [{ translateY: -7 * t.value }, { scale: 1 + 0.012 * t.value }] }));
   const a = ART[art];
   return (

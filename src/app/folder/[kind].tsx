@@ -47,7 +47,7 @@ export default function Folder() {
           ? <NoteSections notes={notes} sort={s.sort} trash={trash} onPress={onPress} />
           : trash
             ? <EmptyArt art="sleep" lines={['垃圾桶是空的', '茄子在睡覺']} />
-            : <EmptyArt art="search" lines={['還沒有釘選的筆記', '在筆記裡點底部的圖釘就能釘選']} />}
+            : <EmptyArt art="search" lines={['還沒有釘選的筆記', '在清單右上角的 ⋯ 選「釘選」']} />}
       </ScrollView>
     </View>
   );

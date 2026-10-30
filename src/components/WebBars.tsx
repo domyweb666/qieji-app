@@ -1,4 +1,4 @@
-// 網頁／Android 預覽用：iOS 的標題列與底部工具列由系統畫，其他平台用這兩條代替。
+// 網頁／Android 預覽用：iOS 的標題列由系統畫，其他平台用這條代替。
 import type { ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,12 +19,6 @@ export function WebTop({ title, left, right }: { title?: string; left?: ReactNod
   );
 }
 
-export function WebBottom({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets();
-  if (native) return null;
-  return <View style={[s.bottom, { bottom: insets.bottom + 8 }]}>{children}</View>;
-}
-
 export function GlassBtn({ icon, onPress, label, on }: { icon: SFSymbol; onPress: () => void; label: string; on?: boolean }) {
   return (
     <Pressable onPress={onPress} accessibilityLabel={label} style={({ pressed }) => [s.btn, pressed && { opacity: 0.6 }]}>
@@ -36,7 +30,6 @@ export function GlassBtn({ icon, onPress, label, on }: { icon: SFSymbol; onPress
 const s = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
   large: { fontSize: F.largeTitle, fontWeight: '700', color: C.label, marginTop: 4 },
-  bottom: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
   btn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
 });

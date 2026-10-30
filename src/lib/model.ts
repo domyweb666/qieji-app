@@ -103,12 +103,6 @@ export function parseState(raw: string | null): State {
 }
 
 /* ---------------- dates ---------------- */
-export function listDate(ts: number, now = new Date()) {
-  const d = new Date(ts);
-  if (d.toDateString() === now.toDateString()) return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`;
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
 export function fullDate(ts: number) {
   const d = new Date(ts);
   return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
@@ -140,11 +134,6 @@ export const label = (n: Note) =>
   (n.type === 'text' ? n.body : n.items.map(i => i.t).join('\n')).split('\n').find(l => l.trim()) ||
   '（無標題）';
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
-export const splitLines = (txt: string) =>
-  txt
-    .split(/\r?\n/)
-    .map(s => s.replace(/^\s*([-*•□☐✓☑]|\d+[.)、])\s*/, '').trim())
-    .filter(Boolean);
 
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {
   const q = o.q.trim().toLowerCase();
@@ -210,11 +199,6 @@ export function weekGarden(s: State, now = new Date()) {
   return { f, eggs };
 }
 
-// soil-ridge slots on field.webp (941x800), back ridge first so front ones overlap correctly
-const RIDGES = [[600, 170, 800, 440], [460, 230, 660, 480], [320, 280, 530, 530], [190, 340, 390, 590]];
-export const SLOTS = RIDGES.flatMap(([x1, y1, x2, y2]) =>
-  [0.1, 0.26, 0.42, 0.58, 0.74, 0.9].map(t => [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t] as const));
-
 /* ---------------- backup ---------------- */
 export function exportJSON(s: State, now = Date.now()) {
   return JSON.stringify({ app: 'colornotes', version: 1, exported: now, notes: s.notes, garden: s.garden }, null, 1);
@@ -265,20 +249,6 @@ export function rowDate(ts: number, now = new Date()) {
   if (days === 1) return '昨天';
   if (days < 7) return WEEK[d.getDay()];
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-// 列表第二行的灰字：清單顯示劃掉進度與第一個還沒劃的點子，文字筆記顯示標題之後的內容
-export function preview(n: Note) {
-  if (n.type === 'check') {
-    const lines = n.items.filter(i => i.t.trim());
-    if (!lines.length) return '沒有其他內容';
-    const done = lines.filter(i => i.done).length;
-    const next = lines.find(i => !i.done && i.t.trim() !== label(n));
-    return [`${done}/${lines.length} 劃掉`, next?.t.trim()].filter(Boolean).join('　');
-  }
-  const lines = n.body.split('\n').map(l => l.trim()).filter(Boolean);
-  const rest = n.title.trim() ? lines : lines.slice(1);
-  return rest[0] || '沒有其他內容';
 }
 
 export type Section = { title: string; notes: Note[] };
