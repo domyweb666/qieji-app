@@ -1,15 +1,15 @@
 // 分組列表：每組一個小標籤，底下一則筆記一張圓角卡片（跟清單頁裡一行一張卡片是同一個樣子）。
 // 每則只顯示顏色點和清單名稱，不放時間、進度、內容預覽（資訊太多看了會焦慮）
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { col, groupNotes, label, type Note, type SortKey } from '../lib/model';
+import { col, groupNotes, label, type Note } from '../lib/model';
 import { C, F } from '../lib/theme';
 
-export function NoteSections({ notes, sort, trash, onPress }: {
-  notes: Note[]; sort: SortKey; trash: boolean; onPress: (n: Note) => void;
+export function NoteSections({ notes, trash, onPress }: {
+  notes: Note[]; trash: boolean; onPress: (n: Note) => void;
 }) {
   return (
     <>
-      {groupNotes(notes, { sort, trash }).map(sec => (
+      {groupNotes(notes, { trash }).map(sec => (
         <View key={sec.title}>
           <Text style={s.head}>{sec.title}</Text>
           <View style={s.cards}>

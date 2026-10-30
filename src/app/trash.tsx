@@ -40,7 +40,7 @@ export default function Trash() {
 
         {notes.length > 0 && <Text style={st.note}>點一下可以還原或永久刪除。</Text>}
         {notes.length
-          ? <NoteSections notes={notes} sort={s.sort} trash onPress={onPress} />
+          ? <NoteSections notes={notes} trash onPress={onPress} />
           : <Empty lines={['最近刪除是空的']} />}
       </ScrollView>
     </View>

@@ -7,7 +7,8 @@ import { OverlayHost, ui } from '../components/Overlay';
 import { store } from '../lib/store';
 import { C } from '../lib/theme';
 
-store.onSaveError(() => ui.toast('儲存失敗：空間不足'));
+// 存不進去時字還在記憶體裡，下次有改動或 app 進背景會再存一次；但這時把 app 關掉就會不見，要講清楚
+store.onSaveError(() => ui.toast('沒存成功，手機空間可能不夠。字還在，先別關 app；清出空間後再改一下就會重存'));
 
 const ios = Platform.OS === 'ios';
 // iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊

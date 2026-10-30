@@ -86,7 +86,7 @@ export default function Home() {
         )}
 
         {notes.length
-          ? <NoteSections notes={notes} sort={s.sort} trash={false} onPress={open} />
+          ? <NoteSections notes={notes} trash={false} onPress={open} />
           : (searching || filter !== 'all')
             ? <Empty lines={['找不到符合的筆記']} />
             : <Empty lines={['還沒有筆記', '點右下角的＋，寫下第一個想法']} />}

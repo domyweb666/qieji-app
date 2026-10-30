@@ -4,15 +4,15 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams, useNavigation, type NativeStackNavigationProp } from 'expo-router';
-import { useEffect, useReducer, useRef, useState } from 'react';
-import { AppState, Keyboard, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Keyboard, Share, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Act } from '../../components/Acts';
 import { ListWeb, type ListMsg, type ListWebHandle } from '../../components/ListWeb';
 import { ui } from '../../components/Overlay';
 import { PopMenu } from '../../components/PopMenu';
 import { GlassBtn } from '../../components/WebBars';
-import { ago, col, convertNote, fullDate, isEmpty, plain, type Item, type Note } from '../../lib/model';
+import { col, convertNote, isEmpty, plain, type Item, type Note } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C } from '../../lib/theme';
 
@@ -136,7 +136,15 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復（取消劃線）', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
-      { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => setItems(n.items.filter(i => !i.done)) },
+      { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
+        const before = n.items;
+        const left = before.filter(i => !i.done);
+        setItems(left);
+        ui.toast(`已清掉 ${before.length - left.length} 行`, { label: '復原', fn: () => {
+          if (!mounted.current || closed.current) return;
+          setItems(before);
+        } });
+      } },
     ] },
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } },
     { label: '刪除', icon: 'trash', destructive: true, fn: del },
@@ -153,32 +161,19 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
           style={st.title} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onSubmitEditing={() => {
-            // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
+            // 有行就跳到第一行；還沒有任何一行就開一行接著寫（使用者自己按了下一步才開，打開清單時不會自動多一行）
             Keyboard.dismiss();
-            if (n.items[0]) web.current?.send({ t: 'focusFirst' });
+            web.current?.send({ t: n.items[0] ? 'focusFirst' : 'add' });
           }} />
         <GlassBtn label={`顏色：${c.hue}`} onPress={pickColor}>
           <View style={[st.dot, { backgroundColor: c.hd }]} />
         </GlassBtn>
         <GlassBtn icon="ellipsis" label="更多" onPress={() => { hideKb(); setMenu(true); }} />
       </View>
-      <Meta n={n} />
 
       <ListWeb ref={web} init={{ items: n.items, bg: c.bg, hd: c.hd, rule: c.rule, hint: !store.hintSeen }} onMessage={onMessage} />
 
       {menu && <PopMenu acts={moreActs} top={insets.top + 58} onClose={() => setMenu(false)} />}
-    </View>
-  );
-}
-
-// 打字只存檔不重畫整頁，所以這一小塊自己每 15 秒更新一次「剛剛／幾分鐘前」
-function Meta({ n }: { n: Note }) {
-  const [, tick] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => { const t = setInterval(tick, 15000); return () => clearInterval(t); }, []);
-  return (
-    <View style={st.meta}>
-      <Text style={st.metaText} allowFontScaling={false}>{ago(n.updated)}</Text>
-      <Text style={st.metaText} allowFontScaling={false}>{fullDate(n.updated)}</Text>
     </View>
   );
 }
@@ -188,6 +183,4 @@ const st = StyleSheet.create({
   title: { flex: 1, minWidth: 0, height: 44, fontSize: 20, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
   // 跟首頁列表的顏色點同一種圓點，大一點好按
   dot: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(46,34,51,0.15)' },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, paddingBottom: 2, paddingHorizontal: 20 },
-  metaText: { fontSize: 13, color: C.secondary },
 });

@@ -1,9 +1,14 @@
 {
-  "station": "impl",
-  "updated_at": "2026-10-31T12:00:00+08:00",
+  "station": "audit-batch",
+  "updated_at": "2026-10-31T13:00:00+08:00",
   "updated_by": "vibe-traffic-control",
-  "pieces": { "todo": 0, "machine_verified": 0, "human_verified": 0 },
-  "chunks": [],
+  "pieces": { "todo": 0, "machine_verified": 7, "human_verified": 0 },
+  "chunks": [
+    { "name": "UIUX 第一輪小修（7 項）", "total": 7, "machine_done": 7, "human_verified": false, "approved": true }
+  ],
   "pending_immediate_verify": [],
-  "skipped_gates": []
+  "skipped_gates": [],
+  "blocked": [
+    { "what": "最近刪除 30 天自動清掉", "why": "守門：自動刪除使用者資料，黑箱驗不到", "since": "2026-10-31" }
+  ]
 }

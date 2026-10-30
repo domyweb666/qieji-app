@@ -67,7 +67,7 @@ test('不是備份檔就丟錯，不動資料', () => {
   assert.equal(s.notes.length, 3);
 });
 
-test('列表依時間分組，釘選的排最上面', async () => {
+test('列表只分已釘選和其他，不用時間分組；最近刪除整頁一組', async () => {
   const { groupNotes, visibleNotes, parseState, rowDate } = await import('../src/lib/model.ts');
   const now = new Date(2026, 9, 28, 12, 0);
   const at = (y, m, d) => new Date(y, m, d, 9, 0).getTime();
@@ -79,9 +79,11 @@ test('列表依時間分組，釘選的排最上面', async () => {
     { id: 'o', type: 'text', body: '很久', created: 1, updated: at(2026, 2, 3) },
   ] }));
   const notes = visibleNotes(s, { trash: false, filter: 'all', q: '', sort: 'updated' });
-  const g = groupNotes(notes, { sort: 'updated', trash: false }, now);
+  const g = groupNotes(notes, { trash: false });
   assert.deepEqual(g.map(x => [x.title, x.notes.map(n => n.id).join('')]),
-    [['已釘選', 'p'], ['今天', 't'], ['昨天', 'y'], ['過去 7 天', 'w'], ['3月', 'o']]);
+    [['已釘選', 'p'], ['其他', 'tywo']]);
+  const gt = groupNotes(notes, { trash: true });
+  assert.deepEqual(gt.map(x => [x.title, x.notes.length]), [['最近刪除', 5]]);
   assert.equal(rowDate(at(2026, 9, 27), now), '昨天');
   assert.equal(rowDate(at(2026, 9, 26), now), '星期一');
 });

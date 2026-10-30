@@ -203,26 +203,17 @@ export function rowDate(ts: number, now = new Date()) {
 }
 
 export type Section = { title: string; notes: Note[] };
-export function groupNotes(notes: Note[], o: { sort: SortKey; trash: boolean }, now = new Date()): Section[] {
+// 只分「已釘選」和「其他」，不用今天／昨天／幾月這種時間標題（看了會覺得清單放太久，有壓力）。
+// 順序照使用者選的排序方式，由 visibleNotes 排好；最近刪除整頁一組。
+export function groupNotes(notes: Note[], o: { trash: boolean }): Section[] {
   const out: Section[] = [];
   const push = (title: string, n: Note) => {
     const last = out[out.length - 1];
     if (last && last.title === title) last.notes.push(n); else out.push({ title, notes: [n] });
   };
-  const today = startOfDay(now);
-  const bucket = (ts: number) => {
-    const days = Math.round((today - startOfDay(new Date(ts))) / 86400000);
-    if (days <= 0) return '今天';
-    if (days === 1) return '昨天';
-    if (days < 7) return '過去 7 天';
-    if (days < 30) return '過去 30 天';
-    const d = new Date(ts);
-    return d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}月` : `${d.getFullYear()}年`;
-  };
   for (const n of notes) {
-    if (!o.trash && n.pinned) push('已釘選', n);
-    else if (o.sort === 'updated' || o.sort === 'created') push(bucket(o.sort === 'created' ? n.created : n.updated), n);
-    else push(o.trash ? '最近刪除' : '筆記', n);
+    if (o.trash) push('最近刪除', n);
+    else push(n.pinned ? '已釘選' : '其他', n);
   }
   return out;
 }

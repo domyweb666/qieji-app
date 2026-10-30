@@ -3,7 +3,8 @@
 // 標題列、⋯ 選單、存檔留在 app 這邊，兩邊用訊息溝通：
 //   網頁 → app：texts（打字停手 0.3 秒後，只送改過字的那幾行）、items（加行、刪行、劃掉、排序這類改了結構的，立刻送整份）、
 //              removed（刪掉了哪一行，給 toast 復原用）、seen（看過滑動提示了）、haptic
-//   app → 網頁：set（整份清單換掉重畫）、theme（換顏色）、focusFirst（標題按下一步）、blur（收鍵盤）、flush（馬上送出還沒送的字）
+//   app → 網頁：set（整份清單換掉重畫）、theme（換顏色）、focusFirst（標題按下一步）、add（標題按下一步但還沒有任何一行）、
+//              blur（收鍵盤）、flush（馬上送出還沒送的字）
 // 鍵盤上方只留 iOS 自己那條「︿ ﹀ ✓」（按 ✓ 收鍵盤），不再另外疊一條自己的工具列。
 import type { Item } from './model';
 
@@ -19,11 +20,12 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 textarea{font:inherit;color:inherit;outline:0;-webkit-user-select:text;user-select:text}
 svg{display:block}
 .hidden{display:none!important}
-.addrow{display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 12px;height:54px;font-size:17px;color:rgba(46,34,51,.5);
-  text-align:left}
+/* 「新增一行」黏在最上面，清單捲到哪都按得到；字色在九種筆記底色上對比都超過 4.5 */
+.addrow{position:sticky;top:0;z-index:4;background:var(--bg);display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 12px;
+  height:54px;font-size:17px;color:rgba(46,34,51,.72);text-align:left}
 .addrow span:first-child{font-size:20px}
 /* 一行一張卡片，跟首頁列表的筆記卡片同一個樣子；卡片外面的底色是筆記顏色 */
-.ci{position:relative;margin-bottom:8px;background:#FFFCF6;border:1px solid var(--rule);border-radius:16px;overflow:hidden;touch-action:pan-y}
+.ci{position:relative;margin-bottom:8px;scroll-margin-top:54px;background:#FFFCF6;border:1px solid var(--rule);border-radius:16px;overflow:hidden;touch-action:pan-y}
 .ci .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;
   font-size:15px;font-weight:600;color:#FFFCF6}
 .ci.sw-r .under{background:#9C8C7A}
@@ -260,6 +262,7 @@ window.__recv = function(m){
   if (m.t === 'set'){ items = m.items; if (m.hint != null) hintOn = m.hint; render(); }
   else if (m.t === 'theme') theme(m);
   else if (m.t === 'focusFirst'){ if (items[0]) focusItem(items[0].id); }
+  else if (m.t === 'add') focusNew();
   else if (m.t === 'blur'){ flush(); if (document.activeElement) document.activeElement.blur(); }
   else if (m.t === 'flush') flush();
 };
