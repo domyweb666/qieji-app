@@ -14,8 +14,9 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { SFSymbol } from 'sf-symbols-typescript';
-import { showActs, type Act } from '../../components/Acts';
+import type { Act } from '../../components/Acts';
 import { ui } from '../../components/Overlay';
+import { PopMenu } from '../../components/PopMenu';
 import { Sym } from '../../components/Sym';
 import { native } from '../../components/WebBars';
 import {
@@ -52,6 +53,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const closed = useRef(false);
   const mounted = useRef(true);
   const titleRef = useRef<TextInputInstance>(null);
+  const scrollRef = useRef<any>(null);
+  const [menu, setMenu] = useState(false);
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
@@ -142,8 +145,9 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
     inp.setSelection?.(at, at);
   });
-  // 新增一行：唯一會多出一行的地方
+  // 新增一行：唯一會多出一行的地方。跟網頁版一樣先把清單捲回最上面，新的那行就在「新增一行」正下方
   function focusNew() {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
     const first = n.items[0];
     if (first && !first.t.trim()) return focusItem(first.id, 0);
     const it: Item = { id: uid(), t: '', done: false, b: false };
@@ -307,20 +311,23 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
             if (n.items[0]) focusItem(n.items[0].id); else Keyboard.dismiss();
           }} />
         <BarBtn icon="square.and.arrow.up" label="分享" onPress={share} />
-        <BarBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); showActs(moreActs); }} />
+        <BarBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
       </View>
       <View style={[st.meta, { borderBottomColor: tone.rule }]}>
         <Text style={st.metaText}>{ago(n.updated)}</Text>
         <Text style={st.metaText}>{fullDate(n.updated)}</Text>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
+      {/* 「新增一行」固定在日期下面，不跟著清單捲，按下去不會被鍵盤推走；樣子跟一般的行一樣低調 */}
+      <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { backgroundColor: 'rgba(255,255,255,0.45)' }]}
+        onPress={focusNew} accessibilityRole="button">
+        <Sym name="plus" size={18} color={C.secondary} />
+        <Text style={st.addText}>新增一行</Text>
+      </Pressable>
+
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets
         scrollEnabled={!dragging}>
-        <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { opacity: 0.5 }]} onPress={focusNew}>
-          <View style={st.addIcon}><Sym name="plus" size={14} color={C.tint} weight="semibold" /></View>
-          <Text style={st.addText}>新增一行</Text>
-        </Pressable>
         <View>
           {n.items.map((it, index) => (
             <Line key={it.id} it={it} index={index} done={it.done} focused={focusId === it.id} tone={tone}
@@ -337,6 +344,8 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         {/* 留白讓最後一行能捲上來；點這裡不會新增一行 */}
         <View style={{ height: 220 }} />
       </ScrollView>
+
+      {menu && <PopMenu acts={moreActs} top={insets.top + 46} onClose={() => setMenu(false)} />}
 
       {native && (
         <InputAccessoryView nativeID={KBAR}>
@@ -519,9 +528,8 @@ const st = StyleSheet.create({
   title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
   meta: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 6, borderBottomWidth: 1 },
   metaText: { fontSize: F.footnote, color: C.secondary },
-  addrow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50, paddingHorizontal: 20, borderBottomWidth: 1 },
-  addIcon: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.tintSoft, alignItems: 'center', justifyContent: 'center' },
-  addText: { fontSize: F.body, color: C.tint },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingLeft: 18, paddingRight: 20, borderBottomWidth: 1 },
+  addText: { fontSize: 19, color: C.secondary },
   ci: { overflow: 'hidden', borderBottomWidth: 1, shadowColor: '#000', shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
   underText: { color: '#fff', fontSize: F.subhead, fontWeight: '600' },
