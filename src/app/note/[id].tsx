@@ -152,7 +152,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   });
   // 新增一行：唯一會多出一行的地方。跟網頁版一樣先把清單捲回最上面，新的那行就在「新增一行」正下方
   function focusNew() {
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    scrollTo(0, false);
     const first = n.items[0];
     if (first && !first.t.trim()) return focusItem(first.id, 0);
     const it: Item = { id: uid(), t: '', done: false, b: false };
@@ -186,9 +186,15 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     if (!l || !v.h) return;
     // 沒被鍵盤和工具列擋住的高度，底下留一點空
     const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - 16;
-    if (l.y < v.y) scrollRef.current?.scrollTo({ y: l.y, animated: true });
-    else if (l.y + l.h > v.y + shown) scrollRef.current?.scrollTo({ y: l.y + l.h - shown, animated: true });
+    if (l.y < v.y) scrollTo(l.y);
+    else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
   }
+  // 捲到哪只在「停下來」和「自己捲」的時候記，捲動途中不回報（每一格畫面都回報一次會拖慢捲動）
+  function scrollTo(y: number, animated = true) {
+    view.current.y = Math.max(0, y);
+    scrollRef.current?.scrollTo({ y: view.current.y, animated });
+  }
+  const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y; };
   useEffect(() => {
     const show = (e: { endCoordinates: { screenY: number }; duration?: number }) => {
       const v = view.current;
@@ -354,7 +360,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         <BarBtn icon="ellipsis" label="更多" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
       </View>
 
-      {/* 「新增一行」固定在日期下面，不跟著清單捲，按下去不會被鍵盤推走；樣子跟一般的行一樣低調 */}
+      {/* 「新增一行」固定在標題列下面（上面留一點空，不要黏著標題列），不跟著清單捲，按下去不會被鍵盤推走；樣子跟一般的行一樣低調 */}
       <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: tone.rule }, pressed && { backgroundColor: 'rgba(255,255,255,0.45)' }]}
         onPress={focusNew} accessibilityRole="button">
         <Sym name="plus" size={18} color={C.secondary} />
@@ -365,7 +371,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; })}>
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
         keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
-        scrollEventThrottle={16} onScroll={e => { view.current.y = e.nativeEvent.contentOffset.y; }}
+        onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled}
         scrollEnabled={!dragging}>
         <View>
           {n.items.map((it, index) => (
@@ -584,7 +590,7 @@ const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
   barBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
-  addrow: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingLeft: 18, paddingRight: 20, borderBottomWidth: 1 },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 52, marginTop: 10, paddingLeft: 18, paddingRight: 20, borderBottomWidth: 1 },
   addText: { fontSize: 19, color: C.secondary },
   ci: { overflow: 'hidden', borderBottomWidth: 1, shadowColor: '#000', shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
