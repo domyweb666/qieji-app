@@ -496,14 +496,15 @@ function LineRow(p: LineProps) {
 
 // 一行的字。高度由底下一份看不見的同樣文字決定：它跟一般文字一樣會自動換行、自動長高，
 // 輸入框疊在它上面撐滿，字打到超過一行就一定會長出下一行。打字時只有這一小塊重畫。
-// 字級跟著系統放大；行高也要跟著乘上同樣的倍數，不然放大後上下行會疊在一起
+// 字級跟著系統放大。行高不用自己乘倍數：iOS 上 React Native 會自動把行高一起放大，自己再乘一次行距會變兩倍大。
+// 最小高度不會自動放大，才要自己乘
 function Field({ text, done, fs, refInput, actions, onAction, onChange, onKey, onFocus, onBlur }: {
   text: string; done: boolean; fs: number; refInput: (r: TextInputInstance | null) => void;
   actions: { name: string; label: string }[]; onAction: (e: AccessibilityActionEvent) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
 }) {
   const [txt, setTxt] = useState(text);
-  const lh = { lineHeight: Math.round(LINE_H * fs), minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
+  const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
     <>
       <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
