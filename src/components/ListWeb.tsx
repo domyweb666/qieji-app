@@ -6,11 +6,10 @@ import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-nati
 import { listPage, type PageInit } from '../lib/listPage';
 
 export type ListMsg =
+  | { t: 'texts'; v: [string, string][] }
   | { t: 'items'; items: PageInit['items'] }
-  | { t: 'strike'; id: string }
   | { t: 'removed'; idx: number; item: PageInit['items'][number] }
-  | { t: 'focus'; id: string | null }
-  | { t: 'blur' }
+  | { t: 'seen' }
   | { t: 'haptic' };
 export type ListWebHandle = { send: (m: object) => void };
 

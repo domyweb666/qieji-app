@@ -1,21 +1,20 @@
-// 清單編輯。上面的標題列（返回、清單名稱、分享、⋯）是 iOS 原生的；
-// 中間的清單（新增一行、每一行的打字、滑動劃掉／刪除、拖曳排序、鍵盤）直接用網頁版的程式畫，手感跟網頁版一樣。
-// 存檔、開花結茄子的計數、⋯ 選單都在這裡做，網頁那邊改了什麼會傳過來（見 components/ListWeb）。
+// 清單編輯。上面的標題列照網頁版的樣子（← 清單名稱 色塊 ⋮），用原生畫；
+// 中間的清單（新增一行、打字、滑動劃掉／刪除、拖曳排序、鍵盤）直接用網頁版的程式畫，手感跟網頁版一樣。
+// 存檔和 ⋮ 選單在這裡做，網頁那邊改了什麼會傳過來（見 components/ListWeb）。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { Keyboard, Pressable, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { AppState, Keyboard, Pressable, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SFSymbol } from 'sf-symbols-typescript';
 import type { Act } from '../../components/Acts';
+import { Icon } from '../../components/Icon';
 import { ListWeb, type ListMsg, type ListWebHandle } from '../../components/ListWeb';
 import { ui } from '../../components/Overlay';
 import { PopMenu } from '../../components/PopMenu';
-import { Sym } from '../../components/Sym';
-import { ago, bloom, col, convertNote, fullDate, isEmpty, plain, toggleStrike, type Item, type Note } from '../../lib/model';
+import { ago, col, convertNote, fullDate, isEmpty, plain, type Item, type Note } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
-import { C, F } from '../../lib/theme';
+import { C } from '../../lib/theme';
 
 export default function NoteScreen() {
   const { id, fresh } = useLocalSearchParams<{ id: string; fresh?: string }>();
@@ -38,59 +37,55 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const titleRef = useRef<TextInputInstance>(null);
   const web = useRef<ListWebHandle>(null);
   const [menu, setMenu] = useState(false);
-  // 整頁跟著筆記的顏色走；上方標題列和分隔線用同色系深一階
-  const tone = { bg: col(n.color).bg, rule: col(n.color).rule };
-  // 網頁那邊的清單換掉重畫（⋯ 選單改了清單、劃掉、復原刪除之後）
+  const c = col(n.color);
+  // 標題列用筆記顏色最深的那一階；黑豆色太深，字改白的
+  const ink = n.color === 'black' ? '#fff' : '#1f1f1f';
+  // 網頁那邊的清單換掉重畫（⋮ 選單改了清單、復原刪除之後）
   const pushItems = () => web.current?.send({ t: 'set', items: n.items, hint: !store.hintSeen });
 
-  // 開過花的行（整個打開期間都記著）：網頁那邊送回來的舊資料（復原、復原刪除）不能把它變回沒開過，不然會重複計數
-  const bloomed = useRef<Set<string> | null>(null);
-  if (!bloomed.current) bloomed.current = new Set(n.items.filter(i => i.b).map(i => i.id));
-  const remember = () => n.items.forEach(i => { if (i.b) bloomed.current!.add(i.id); });
-
+  // quiet＝打字：只存檔不重畫。app 正要進背景時立刻寫入，不等計時器
   function touch(quiet?: boolean) {
     n.updated = Date.now();
-    if (quiet) store.save(); else store.change();
+    if (!quiet) store.change();
+    else if (AppState.currentState === 'active') store.save();
+    else store.flush();
   }
 
   /* ---------- 網頁傳來的訊息 ---------- */
   function onMessage(m: ListMsg) {
     if (closed.current) return;
-    if (m.t === 'items') {
-      n.items = m.items.map(i => ({ ...i, b: i.b || bloomed.current!.has(i.id) }));
+    if (m.t === 'texts') {
+      for (const [id, t] of m.v) { const it = n.items.find(i => i.id === id); if (it) it.t = t; }
       touch(true);
-    } else if (m.t === 'strike') {
-      const it = n.items.find(i => i.id === m.id);
-      if (it) toggleStrike(store.s, it);
-      store.markHint();
-      touch();
-      pushItems();
+    } else if (m.t === 'items') {
+      n.items = m.items;
+      touch(true);
     } else if (m.t === 'removed') {
-      store.markHint();
       if (m.item.t.trim()) ui.toast('已刪除', { label: '復原', fn: () => {
         if (!mounted.current || closed.current) return;
-        n.items.splice(Math.min(m.idx, n.items.length), 0, { ...m.item, b: m.item.b || bloomed.current!.has(m.item.id) });
+        n.items.splice(Math.min(m.idx, n.items.length), 0, m.item);
         touch();
         pushItems();
       } });
-    } else if (m.t === 'focus') {
-      if (bloom(store.s, n, m.id).length) store.save();
-    } else if (m.t === 'blur') {
-      if (bloom(store.s, n).length) store.save();
+    } else if (m.t === 'seen') {
+      store.markHint();
     } else if (m.t === 'haptic') {
       Haptics.selectionAsync().catch(() => {});
     }
-    remember();
   }
   // 從顏色面板回來換了顏色，網頁那塊也跟著換
-  useEffect(() => { web.current?.send({ t: 'theme', bg: tone.bg, rule: tone.rule }); }, [tone.bg, tone.rule]);
+  useEffect(() => { web.current?.send({ t: 'theme', bg: c.bg, hd: c.hd, rule: c.rule }); }, [c.bg, c.hd, c.rule]);
+  // app 要進背景時，叫網頁把還沒送的字馬上送過來
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => { if (s !== 'active') web.current?.send({ t: 'flush' }); });
+    return () => sub.remove();
+  }, []);
 
   /* ---------- open / close ---------- */
   function closeNote() {
     if (closed.current) return;
     closed.current = true;
     Keyboard.dismiss();
-    bloom(store.s, n);
     n.items = n.items.filter(i => i.t.trim());
     if (isEmpty(n)) store.s.notes = store.s.notes.filter(x => x !== n);
     store.change();
@@ -112,9 +107,11 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   /* ---------- actions ---------- */
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
+  // 收鍵盤（網頁那邊收鍵盤時會順便把還沒送的字送過來）
   const hideKb = () => { Keyboard.dismiss(); web.current?.send({ t: 'blur' }); };
+  function back() { web.current?.send({ t: 'flush' }); router.back(); }
   function togglePin() { n.pinned = !n.pinned; touch(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); }
-  function share() { hideKb(); Share.share({ message: shareText() }).catch(() => {}); }
+  function share() { Share.share({ message: shareText() }).catch(() => {}); }
   function del() {
     n.deleted = true; n.pinned = false;
     n.items = n.items.filter(i => i.t.trim());
@@ -126,10 +123,10 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { n.deleted = false; store.change(); } });
   }
   // 顏色：從下方升起一個色塊面板
-  function pickColor() { router.push({ pathname: '/color/[id]', params: { id: n.id } }); }
+  function pickColor() { hideKb(); router.push({ pathname: '/color/[id]', params: { id: n.id } }); }
   const setItems = (items: Item[]) => { n.items = items; touch(); pushItems(); };
   const moreActs: Act[] = [
-    { label: '顏色', icon: 'paintpalette', fn: pickColor },
+    { label: '分享', icon: 'square.and.arrow.up', fn: share },
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
     { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
@@ -141,28 +138,32 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: tone.bg }} collapsable={false}>
-      {/* 上方一條窄窄的標題列：返回、清單名稱、分享、更多，全部在同一行 */}
-      <View style={[st.bar, { paddingTop: insets.top, backgroundColor: tone.rule }]}>
-        <BarBtn icon="chevron.left" label="返回" onPress={() => router.back()} />
-        <TextInput ref={titleRef} defaultValue={n.title} placeholder="清單名稱"
-          placeholderTextColor={C.placeholder} style={st.title} returnKeyType="next" submitBehavior="submit"
+    <View style={{ flex: 1, backgroundColor: c.bg }} collapsable={false}>
+      {/* 標題列照網頁版：← 清單名稱 色塊 ⋮。字級固定，不跟著系統字體大小放大（網頁版也不會） */}
+      <View style={[st.bar, { paddingTop: insets.top + 6, backgroundColor: c.hd }]}>
+        <Pressable style={({ pressed }) => [st.ib, pressed && st.ibOn]} onPress={back} accessibilityLabel="返回">
+          <Icon name="back" size={26} color={ink} />
+        </Pressable>
+        <TextInput ref={titleRef} defaultValue={n.title} placeholder="標題" allowFontScaling={false}
+          placeholderTextColor={n.color === 'black' ? 'rgba(255,255,255,.45)' : 'rgba(31,31,31,.45)'}
+          style={[st.title, { color: ink }]} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onSubmitEditing={() => {
             // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
             Keyboard.dismiss();
             if (n.items[0]) web.current?.send({ t: 'focusFirst' });
           }} />
-        <BarBtn icon="square.and.arrow.up" label="分享" onPress={share} />
-        <BarBtn icon="ellipsis" label="更多" onPress={() => { hideKb(); setMenu(true); }} />
+        <Pressable onPress={pickColor} accessibilityLabel={`顏色：${c.hue}`} hitSlop={8}
+          style={({ pressed }) => [st.swatch, { backgroundColor: vivid(c.hd) }, pressed && { opacity: 0.7 }]} />
+        <Pressable style={({ pressed }) => [st.ib, pressed && st.ibOn]} onPress={() => { hideKb(); setMenu(true); }} accessibilityLabel="更多">
+          <Icon name="dots" size={26} color={ink} />
+        </Pressable>
       </View>
-
-      {/* 什麼時候改過：左邊幾分鐘前、右邊日期，也把「新增一行」跟標題列隔開 */}
       <Meta n={n} />
 
-      <ListWeb ref={web} init={{ items: n.items, bg: tone.bg, rule: tone.rule, hint: !store.hintSeen }} onMessage={onMessage} />
+      <ListWeb ref={web} init={{ items: n.items, bg: c.bg, hd: c.hd, rule: c.rule, hint: !store.hintSeen }} onMessage={onMessage} />
 
-      {menu && <PopMenu acts={moreActs} top={insets.top + 46} onClose={() => setMenu(false)} />}
+      {menu && <PopMenu acts={moreActs} top={insets.top + 58} onClose={() => setMenu(false)} />}
     </View>
   );
 }
@@ -173,24 +174,31 @@ function Meta({ n }: { n: Note }) {
   useEffect(() => { const t = setInterval(tick, 15000); return () => clearInterval(t); }, []);
   return (
     <View style={st.meta}>
-      <Text style={st.metaText}>{ago(n.updated)}</Text>
-      <Text style={st.metaText}>{fullDate(n.updated)}</Text>
+      <Text style={st.metaText} allowFontScaling={false}>{ago(n.updated)}</Text>
+      <Text style={st.metaText} allowFontScaling={false}>{fullDate(n.updated)}</Text>
     </View>
   );
 }
 
-function BarBtn({ icon, label, onPress }: { icon: SFSymbol; label: string; onPress: () => void }) {
-  return (
-    <Pressable style={({ pressed }) => [st.barBtn, pressed && { opacity: 0.4 }]} onPress={onPress} accessibilityLabel={label} hitSlop={4}>
-      <Sym name={icon} size={icon === 'chevron.left' ? 22 : 20} color={C.label} weight={icon === 'chevron.left' ? 'semibold' : 'regular'} />
-    </Pressable>
-  );
+// 色塊比標題列的底色再飽和、暗一點才看得出來（網頁版是 CSS 的 saturate(1.5) brightness(.9)）
+function vivid(hex: string) {
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(1 + i, 3 + i), 16));
+  const s = 1.5;
+  const out = [
+    (0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b,
+  ].map(v => Math.round(Math.max(0, Math.min(255, v)) * 0.9));
+  return `rgb(${out.join(',')})`;
 }
 
 const st = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
-  barBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 2 },
-  metaText: { fontSize: F.subhead, color: C.secondary },
-  title: { flex: 1, minWidth: 0, height: 46, fontSize: F.title3, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingBottom: 6 },
+  ib: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  ibOn: { backgroundColor: 'rgba(0,0,0,0.08)' },
+  title: { flex: 1, minWidth: 0, height: 44, fontSize: 23, fontWeight: '500', paddingVertical: 0, paddingHorizontal: 6 },
+  swatch: { width: 30, height: 30, borderRadius: 7, marginHorizontal: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 } },
+  meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14 },
+  metaText: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
 });

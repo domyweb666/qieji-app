@@ -7,7 +7,6 @@ export const HINT_KEY = 'cn.hint';
 
 export type ColorKey = 'purple' | 'yellow' | 'orange' | 'red' | 'blue' | 'green' | 'gray' | 'black' | 'white';
 export type SortKey = 'updated' | 'created' | 'title' | 'color';
-export type Kind = 'f' | 'e' | 'g'; // 花、茄子、金茄子
 
 export type Item = { id: string; t: string; done: boolean; b: boolean };
 export type Note = {
@@ -60,7 +59,8 @@ export function fixNote(n: any): Note {
   return n as Note;
 }
 
-/* garden: days['YYYY-MM-DD'] = {f: flowers, e: eggplants, g: golden}; tot = all-time */
+/* garden: days['YYYY-MM-DD'] = {f: flowers, e: eggplants, g: golden}; tot = all-time
+   app 不再計數，這份資料只是原樣保留、跟著備份匯出，讓網頁版的茄子田不會被弄壞 */
 export function fixGarden(s: any) {
   if (s.garden && s.garden.days && s.garden.tot) return;
   // first run: count what already exists so past ideas aren't lost
@@ -116,15 +116,6 @@ export function ago(ts: number) {
   if (s < 86400 * 365) return `${Math.floor(s / 86400 / 30)} 個月前`;
   return `${Math.floor(s / 86400 / 365)} 年前`;
 }
-export const dayKey = (d = new Date()) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
-export function weekKeys(d = new Date()) {
-  const back = (d.getDay() + 6) % 7; // Monday-start week
-  return [...Array(back + 1)].map((_, i) => {
-    const x = new Date(d);
-    x.setDate(d.getDate() - back + i);
-    return dayKey(x);
-  });
-}
 
 /* ---------------- note helpers ---------------- */
 export const plain = (n: Note) =>
@@ -151,52 +142,6 @@ export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | '
     }
   });
   return notes;
-}
-
-/* ---------------- garden rules ---------------- */
-export function gday(s: State, k = dayKey()) {
-  return s.garden.days[k] || (s.garden.days[k] = { f: 0, e: 0, g: 0 });
-}
-// an idea "blooms" the first time it is left with text in it; returns the ids that bloomed
-export function bloom(s: State, n: Note, skipId?: string | null): string[] {
-  const out: string[] = [];
-  if (n.type === 'text') {
-    if (!n.b && n.body.trim()) { n.b = true; out.push(n.id); }
-  } else n.items.forEach(it => {
-    if (!it.b && it.t.trim() && it.id !== skipId) { it.b = true; out.push(it.id); }
-  });
-  if (out.length) { gday(s).f += out.length; s.garden.tot.f += out.length; }
-  return out;
-}
-// every 10th eggplant is golden — never random
-export function harvest(s: State, on: boolean): Kind | null {
-  const d = gday(s), t = s.garden.tot;
-  if (on) { t.e++; d.e++; if (t.e % 10 === 0) { d.g++; return 'g'; } return 'e'; }
-  // un-striking only takes back an eggplant picked today, never an old one
-  if (d.e > 0) { if (t.e % 10 === 0 && d.g > 0) d.g--; d.e--; t.e--; }
-  return null;
-}
-// strike / unstrike one line; returns what was picked (null when unstriking or the line is blank)
-export function toggleStrike(s: State, it: Item): Kind | null {
-  if (!it.t.trim()) return null;
-  it.done = !it.done;
-  const kind = harvest(s, it.done);
-  if (!it.b) { it.b = true; gday(s).f++; s.garden.tot.f++; }
-  return kind;
-}
-
-export type EggArt = 'egg-gold' | 'egg-small' | 'egg';
-export function weekGarden(s: State, now = new Date()) {
-  const days = s.garden.days, today = dayKey(now);
-  let f = 0;
-  const eggs: EggArt[] = [];
-  weekKeys(now).forEach(k => {
-    const d = days[k];
-    if (!d) return;
-    f += d.f;
-    for (let i = 0; i < d.e; i++) eggs.push(i < d.g ? 'egg-gold' : k === today ? 'egg-small' : 'egg');
-  });
-  return { f, eggs };
 }
 
 /* ---------------- backup ---------------- */

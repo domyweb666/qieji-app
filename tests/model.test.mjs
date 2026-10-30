@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseState, bloom, toggleStrike, harvest, weekGarden, importBackup, exportJSON, dayKey, KEY,
+  parseState, importBackup, exportJSON, KEY,
 } from '../src/lib/model.ts';
 
 // 最早期的網頁版存檔：沒有 garden、沒有 b 欄位、還有已廢除的 pink 色
@@ -41,52 +41,6 @@ test('壞掉或空的存檔回到空白狀態', () => {
 test('已經有 garden 的存檔不會重算', () => {
   const s = parseState(JSON.stringify({ notes: [], garden: { days: { '2026-01-01': { f: 1, e: 2, g: 0 } }, tot: { f: 9, e: 9 } } }));
   assert.deepEqual(s.garden.tot, { f: 9, e: 9 });
-});
-
-test('開花只開一次，略過正在打字的那行', () => {
-  const s = parseState(JSON.stringify({ notes: [] }));
-  const n = { id: 'n', type: 'check', title: '', body: '', items: [
-    { id: 'x', t: '新點子', done: false, b: false }, { id: 'y', t: '打字中', done: false, b: false }, { id: 'z', t: '  ', done: false, b: false },
-  ], color: 'purple', pinned: false, deleted: false, created: 0, updated: 0, b: false };
-  assert.deepEqual(bloom(s, n, 'y'), ['x']);
-  assert.deepEqual(bloom(s, n, 'y'), []);
-  assert.deepEqual(bloom(s, n), ['y']);
-  assert.equal(s.garden.tot.f, 2);
-  assert.equal(s.garden.days[dayKey()].f, 2);
-});
-
-test('劃掉結茄子、每第 10 顆是金色、取消只收回今天的', () => {
-  const s = parseState(JSON.stringify({ notes: [], garden: { days: {}, tot: { f: 0, e: 8 } } }));
-  const it = { id: 'i', t: '點子', done: false, b: false };
-  assert.equal(toggleStrike(s, it), 'e');          // 第 9 顆
-  assert.equal(it.b, true);                         // 劃掉時順便開花
-  assert.equal(s.garden.tot.f, 1);
-  const it2 = { id: 'j', t: '點子二', done: false, b: true };
-  assert.equal(toggleStrike(s, it2), 'g');         // 第 10 顆 → 金色
-  assert.deepEqual(s.garden.days[dayKey()], { f: 1, e: 2, g: 1 });
-  assert.equal(toggleStrike(s, it2), null);        // 取消劃掉，收回金色那顆
-  assert.deepEqual(s.garden.days[dayKey()], { f: 1, e: 1, g: 0 });
-  assert.equal(s.garden.tot.e, 9);
-  assert.equal(toggleStrike(s, { id: 'k', t: '  ', done: false, b: false }), null); // 空白行不能劃
-});
-
-test('取消劃掉不會拿走以前的茄子', () => {
-  const s = parseState(JSON.stringify({ notes: [], garden: { days: { '2020-01-01': { f: 0, e: 5, g: 0 } }, tot: { f: 0, e: 5 } } }));
-  assert.equal(harvest(s, false), null);
-  assert.equal(s.garden.tot.e, 5);
-  assert.equal(s.garden.days['2020-01-01'].e, 5);
-});
-
-test('茄子田只算本週（週一開始），今天的是小茄子、金色排前面', () => {
-  const wed = new Date(2026, 9, 28); // 2026-10-28 星期三
-  const s = parseState(JSON.stringify({ notes: [], garden: { tot: { f: 0, e: 0 }, days: {
-    '2026-10-25': { f: 9, e: 9, g: 0 },   // 上週日，不算
-    '2026-10-26': { f: 2, e: 3, g: 1 },   // 週一
-    '2026-10-28': { f: 1, e: 2, g: 0 },   // 今天
-  } } }));
-  const w = weekGarden(s, wed);
-  assert.equal(w.f, 3);
-  assert.deepEqual(w.eggs, ['egg-gold', 'egg', 'egg', 'egg-small', 'egg-small']);
 });
 
 test('匯入網頁版備份：依 updated 合併、茄子田每天取較大值', () => {
