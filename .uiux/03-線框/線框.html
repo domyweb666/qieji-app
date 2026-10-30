@@ -1,0 +1,329 @@
+<title>茄記線框 v0</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 版面：上方說明＋校正方塊＋切換列，下面三個方向並排（手機上一欄一個），首頁另一段。全螢幕模式＝iPhone 17 實際尺寸 */
+:root{
+  --paper:#ECEBE8;   /* 頁面底 */
+  --screen:#FFFFFF;  /* 手機畫面 */
+  --ink:#1E1E1D;     /* 字、圖示 */
+  --mute:#6A6A67;    /* 次要字 */
+  --line:#A3A29E;    /* 線框邊 */
+  --fill:#E6E5E2;    /* 淺灰塊 */
+  --fill2:#CBCAC6;   /* 深灰塊 */
+  --hit:#3D3D3B;     /* 點擊範圍虛線 */
+  --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--font)}
+.wrap{max-width:1320px;margin:0 auto;padding-block:24px 72px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 32px;align-items:start}
+h1{font-size:26px;margin:0 0 6px;text-wrap:balance}
+.lede{margin:0;color:var(--mute);font-size:14px;line-height:1.6;max-width:62ch}
+.cal{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--mute);line-height:1.4}
+.cal i{display:block;width:44px;height:44px;border:1.5px solid var(--ink);flex:none}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:22px 0 8px}
+.seg{display:inline-flex;background:var(--fill);border-radius:10px;padding:3px}
+.seg button{font:inherit;font-size:14px;border:0;background:none;color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--screen);box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:600}
+.seg button:focus-visible,.fsbtn:focus-visible,.tog input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.tog{display:inline-flex;gap:6px;align-items:center;font-size:14px}
+h2{font-size:15px;letter-spacing:.06em;color:var(--mute);margin:36px 0 14px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),402px));gap:28px;justify-content:center}
+figure{margin:0;min-width:0;display:grid;gap:10px}
+figcaption{font-size:14px;line-height:1.55}
+figcaption b{display:block;font-size:15px}
+figcaption span{color:var(--mute)}
+.fsbtn{font:inherit;font-size:13px;justify-self:start;border:1px solid var(--line);background:var(--screen);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer}
+.slot{width:100%;max-width:402px;position:relative;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.scaler{width:402px;height:874px;transform-origin:top left;position:absolute;left:0;top:0}
+
+/* ---- 線框元件（座標都是 pt） ---- */
+.frame{position:relative;width:402px;height:874px;background:var(--screen);overflow:hidden;font-family:var(--font);color:var(--ink)}
+.b{position:absolute;box-sizing:border-box}
+.clip{overflow:hidden}
+.statusbar{background:var(--screen)}
+.clock{font-size:16px;font-weight:600;text-align:center;line-height:22px}
+.island{background:var(--ink);border-radius:20px}
+.batt{border:1.5px solid var(--ink);border-radius:4px}
+.homebar{background:var(--ink);border-radius:3px}
+.navbg{background:var(--screen)}
+.circ{border-radius:50%;background:var(--fill);display:grid;place-items:center;font-size:22px;line-height:1}
+.dot{width:16px;height:16px;border-radius:50%;background:var(--fill2);border:1px solid var(--line)}
+.titlein{font-size:20px;font-weight:700;line-height:44px;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.titlein.ph{color:var(--mute);font-weight:600}
+.card{background:var(--screen);border:1px solid var(--line);border-radius:16px}
+.card .txt{position:absolute;left:12px;right:40px;top:0;padding:12px 4px;font-size:17px;line-height:27.2px}
+.card.done .txt{text-decoration:line-through;text-decoration-thickness:2px;color:var(--mute)}
+.card .grip{position:absolute;right:0;top:0;width:36px;height:52px;display:grid;place-items:center;color:var(--fill2);font-size:17px;letter-spacing:-2px}
+.card .x{position:absolute;right:0;top:0;width:40px;height:52px;display:grid;place-items:center;color:var(--mute);font-size:18px}
+.card.focus{border-color:var(--ink);border-width:1.5px}
+.caret{display:inline-block;width:2px;height:22px;background:var(--ink);vertical-align:-4px;margin-left:1px}
+.addrow{font-size:17px;color:var(--mute);line-height:54px;padding-left:12px}
+.hint{font-size:13px;color:var(--mute);text-align:center;line-height:40px}
+.bottombar{background:var(--screen);border-top:1px solid var(--fill2)}
+.field{border-radius:22px;background:var(--fill);font-size:17px;line-height:44px;padding:0 16px;color:var(--mute);white-space:nowrap;overflow:hidden}
+.field.on{color:var(--ink);background:var(--screen);border:1.5px solid var(--ink);line-height:41px}
+.fab{border-radius:50%;background:var(--ink);color:var(--screen);display:grid;place-items:center;font-size:30px;font-weight:300}
+.kb{background:var(--fill2);display:grid;grid-template-rows:repeat(4,1fr);padding:8px 3px 48px;gap:10px}
+.kb .r{display:grid;gap:6px;padding:0 3px}
+.kb .k{background:var(--fill);border-radius:5px}
+.kb .lab{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:12px;color:var(--ink);font-family:var(--mono)}
+.acc{background:var(--fill);border-top:1px solid var(--line);display:flex;align-items:center;gap:22px;padding:0 18px;font-size:18px}
+.acc .done{margin-left:auto;font-size:16px;font-weight:600}
+.sect{font-size:13px;font-weight:700;color:var(--mute);letter-spacing:1.5px;padding-left:4px}
+.hcard{background:var(--screen);border:1px solid var(--line);border-radius:16px;display:flex;align-items:center;gap:10px;padding:0 16px;font-size:17px}
+.hcard i{width:10px;height:10px;border-radius:50%;background:var(--fill2);flex:none}
+.empty{text-align:center;color:var(--mute);font-size:15px;line-height:24px}
+.hit{border:1.5px dashed var(--hit);border-radius:4px;pointer-events:none}
+.hit::after{content:attr(data-l);position:absolute;right:2px;bottom:1px;font:600 10px/1 var(--mono);color:var(--hit);background:var(--screen);padding:1px 2px}
+.nohit .hit{display:none}
+
+/* ---- 全螢幕測試 ---- */
+.fs{position:fixed;inset:0;background:var(--screen);z-index:50;overflow:auto}
+.fs .scaler{position:relative}
+.fs .holder{position:relative}
+.fsctl{position:fixed;z-index:60;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 8px);display:flex;gap:6px}
+.fsctl button{font:600 12px var(--font);border:0;border-radius:14px;padding:6px 10px;background:rgba(30,30,29,.72);color:var(--screen);cursor:pointer}
+.tap{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid var(--ink);background:rgba(255,255,255,.6);font:700 11px/22px var(--mono);text-align:center;color:var(--ink);pointer-events:none}
+@media (max-width:640px){header.top{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>茄記線框 v0（暫定）</h1>
+      <p class="lede">清單頁三個方向，差在「記」這個動作放在哪、怎麼按。灰階、iPhone 17 實際尺寸（402 × 874 pt）。虛線框是實際點擊範圍，右下角標尺寸。給人測的時候關掉虛線，按「全螢幕」在 iPhone 17 上開。</p>
+    </div>
+    <div class="cal"><i aria-hidden="true"></i><div>44pt 校正方塊<br>手機上量約 6.5 公釐</div></div>
+  </header>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="狀態" id="states">
+      <button type="button" data-s="normal" aria-pressed="true">正常</button>
+      <button type="button" data-s="kb" aria-pressed="false">鍵盤升起</button>
+      <button type="button" data-s="empty" aria-pressed="false">空清單</button>
+      <button type="button" data-s="worst" aria-pressed="false">最壞內容</button>
+    </div>
+    <label class="tog"><input type="checkbox" id="showhit" checked> 顯示點擊範圍</label>
+  </div>
+
+  <h2>清單頁｜核心畫面，三個方向</h2>
+  <div class="grid" id="dirs"></div>
+
+  <h2>首頁｜系統元件為主，走快速路徑，只畫來對照＋的位置</h2>
+  <div class="grid" id="home"></div>
+</div>
+
+<script>
+(function(){
+var W=402,H=874,TOP=62,BOT=34,KB=336,ACC=44,NAV=118;
+
+var ITEMS=[
+  {t:'IG 圖卡：一張講清楚番茄鐘',n:1},
+  {t:'YouTube 說書可以拍《原子習慣》續集，用去年的讀者留言當開場',n:2},
+  {t:'課程銷售頁開頭改用學員原話',n:1},
+  {t:'問阿凱上次說的那本書叫什麼',n:1},
+  {t:'週末去花市買薄荷',n:1},
+  {t:'訂下個月的牙醫',n:1,done:true},
+  {t:'Threads 試一週只在早上發',n:1},
+  {t:'電子報改成每月第一個週二寄',n:1},
+  {t:'給爸媽買的空氣清淨機先比三台',n:1},
+  {t:'書房的燈太黃，換成白一點的',n:1}
+];
+var WORST=ITEMS.slice(0,4).concat([
+  {t:'讀書會那天聊到的：為什麼大家記了很多筆記卻從來不回頭看，也許問題不是記，是記完沒有地方放',n:3}
+]).concat(ITEMS.slice(4)).concat(ITEMS.slice(0,6));
+
+var DIRS={
+  A:{name:'A 頂部（已選定）',diff:'「＋ 新增一行」固定在標題列正下方，清單捲到哪都在'},
+  B:{name:'B 底部輸入列',diff:'畫面最下方常駐一條輸入框，打完按換行就變成一行，出現在清單最上面'},
+  C:{name:'C 右下＋',diff:'右下角一顆跟首頁一樣的＋，點了在清單最上面開一行'}
+};
+var NOTES={
+  normal:{A:'',B:'',C:'＋會蓋住右下那一行的拖曳把手'},
+  kb:{A:'新的一行開在最上面；鍵盤上方是網頁那條「︿ ﹀ 完成」',B:'輸入框貼在鍵盤上方，正在打字',C:'＋被鍵盤蓋住：打完一個想接著記下一個，畫面上沒有入口'},
+  empty:{A:'新清單只有「＋ 新增一行」',B:'只有底部輸入框',C:'只有右下的＋'},
+  worst:{A:'捲到中間，「＋ 新增一行」還在標題列下方',B:'輸入框固定在底部，捲到哪都在',C:'＋固定在右下，捲到哪都在'}
+};
+
+function b(p,x,y,w,h,cls,txt){
+  var d=document.createElement('div');
+  d.className='b'+(cls?' '+cls:'');
+  d.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px';
+  if(txt!=null) d.textContent=txt;
+  p.appendChild(d); return d;
+}
+function hit(p,x,y,w,h,l){ var d=b(p,x,y,w,h,'hit'); d.setAttribute('data-l',l||(w+'×'+h)); return d; }
+function rowH(n){ return n===1?54:Math.round(24+27.2*n); }
+
+function row(p,y,it,focus){
+  var h=rowH(it.n);
+  var c=b(p,16,y,370,h,'card'+(it.done?' done':'')+(focus?' focus':''));
+  var t=document.createElement('div'); t.className='txt';
+  t.textContent=it.t;
+  if(focus){ var k=document.createElement('span'); k.className='caret'; t.appendChild(k); }
+  c.appendChild(t);
+  var g=document.createElement('div');
+  if(focus){ g.className='x'; g.textContent='✕'; hit(p,346,y,40,52); }
+  else { g.className='grip'; g.textContent='⋮⋮'; hit(p,350,y,36,52); }
+  c.appendChild(g);
+  return y+h+8;
+}
+
+function status(f){
+  b(f,0,0,W,TOP,'statusbar');
+  b(f,30,16,54,22,'clock','9:41');
+  b(f,138,11,126,37,'island');
+  b(f,W-62,21,28,13,'batt');
+}
+function homebar(f){ b(f,134,H-13,134,5,'homebar'); }
+function keyboard(f,acc){
+  var k=b(f,0,H-KB,W,KB,'kb');
+  [10,9,9,4].forEach(function(n,i){
+    var r=document.createElement('div'); r.className='r';
+    r.style.gridTemplateColumns= i===3?'1fr 1fr 4fr 1.4fr':'repeat('+n+',1fr)';
+    if(i===2){ r.style.padding='0 20px'; }
+    for(var j=0;j<n;j++){ var c=document.createElement('div'); c.className='k'; r.appendChild(c); }
+    k.appendChild(r);
+  });
+  var l=document.createElement('div'); l.className='lab'; l.textContent='鍵盤（示意高度 336pt，待真機）'; k.appendChild(l);
+  if(acc){
+    var a=b(f,0,H-KB-ACC,W,ACC,'acc');
+    a.innerHTML='<span>︿</span><span>﹀</span><span class="done">完成</span>';
+  }
+}
+
+function listPage(dir,st){
+  var f=document.createElement('div'); f.className='frame';
+  var title= st==='worst'?'下個月要拍的 YouTube 說書影片題目跟縮圖想法全部先丟這裡': st==='empty'?'旅行':'隨手點子';
+  var barTop = dir==='B' ? (st==='kb' ? H-KB-60 : H-BOT-60) : H;
+  // A：「＋ 新增一行」固定在標題列下方，不跟著清單捲（多米 2026-10-31 決定）
+  var listTop = dir==='A' ? NAV+54 : NAV;
+  var clip=b(f,0,listTop,W,barTop-listTop,'clip');
+  var y= st==='worst' ? -250 : 0;
+  if(dir==='A'){ b(f,0,NAV,W,54,'navbg'); b(f,16,NAV,370,54,'addrow','＋ 新增一行'); hit(f,16,NAV,370,54); }
+  if(st==='kb' && dir!=='B') y=row(clip,y,{t:'',n:1},true);
+  var items= st==='empty'?[]: st==='worst'?WORST:ITEMS;
+  for(var i=0;i<items.length && y<H;i++) y=row(clip,y,items[i],false);
+  if(items.length && y<H) b(clip,16,y+2,370,40,'hint','往右滑劃掉　·　往左滑刪除');
+
+  b(f,0,TOP,W,NAV-TOP,'navbg');
+  b(f,12,68,44,44,'circ','‹'); hit(f,12,68,44,44);
+  b(f,64,68,222,44,'titlein',title); hit(f,64,68,222,44);
+  var c=b(f,294,68,44,44,'circ'); var d=document.createElement('div'); d.className='dot'; c.appendChild(d); hit(f,294,68,44,44);
+  b(f,346,68,44,44,'circ','⋯'); hit(f,346,68,44,44);
+
+  if(dir==='B'){
+    b(f,0,barTop,W,H-barTop,'bottombar');
+    var fl=b(f,16,barTop+8,370,44,'field'+(st==='kb'?' on':''), st==='kb'?'週末去花市順便看看香草盆栽':'記下一個點子…');
+    if(st==='kb'){ var k=document.createElement('span'); k.className='caret'; fl.appendChild(k); }
+    hit(f,16,barTop+8,370,44);
+  }
+  if(dir==='C' && st!=='kb'){ b(f,324,768,58,58,'fab','＋'); hit(f,324,768,58,58); }
+  status(f);
+  if(st==='kb') keyboard(f, dir!=='B');
+  homebar(f);
+  return f;
+}
+
+function homePage(st){
+  var f=document.createElement('div'); f.className='frame';
+  var clip=b(f,0,106,W,H-106,'clip');
+  if(st==='empty'){
+    var e=b(clip,20,40,362,48,'empty'); e.innerHTML='還沒有筆記<br>點右下角的＋，寫下第一個想法';
+  } else {
+    var y=24;
+    b(clip,16,y,200,16,'sect','已釘選'); y+=26;
+    b(clip,16,y,370,56,'hcard').innerHTML='<i></i>隨手點子'; hit(clip,16,y,370,56); y+=56+24;
+    b(clip,16,y,200,16,'sect','其他'); y+=26;
+    ['旅行','課程點子','書單','買給爸媽的東西','家裡要修的','拍片題目','Threads 草稿','週末想去的地方','讀書會'].forEach(function(t){
+      b(clip,16,y,370,56,'hcard').innerHTML='<i></i>'+t; hit(clip,16,y,370,56); y+=64;
+    });
+  }
+  b(f,0,TOP,W,44,'navbg');
+  b(f,290,TOP,44,44,'circ','⌕'); hit(f,290,TOP,44,44);
+  b(f,342,TOP,44,44,'circ','⋯'); hit(f,342,TOP,44,44);
+  b(f,324,768,58,58,'fab','＋'); hit(f,324,768,58,58);
+  status(f); homebar(f);
+  return f;
+}
+
+/* ---- 縮放：欄寬不到 402 時等比縮小 ---- */
+function mount(slot,frame){
+  var sc=document.createElement('div'); sc.className='scaler'; sc.appendChild(frame);
+  slot.appendChild(sc);
+  function fit(){ var s=Math.min(1,slot.clientWidth/W); sc.style.transform='scale('+s+')'; slot.style.height=(H*s)+'px'; }
+  fit();
+  if(window.ResizeObserver) new ResizeObserver(fit).observe(slot); else window.addEventListener('resize',fit);
+}
+
+function figure(host,build,cap,note,label){
+  var fig=document.createElement('figure');
+  var slot=document.createElement('div'); slot.className='slot';
+  fig.appendChild(slot);
+  var fc=document.createElement('figcaption');
+  fc.innerHTML='<b></b><span></span>';
+  fc.querySelector('b').textContent=cap;
+  fc.querySelector('span').textContent=note||'';
+  fig.appendChild(fc);
+  var btn=document.createElement('button'); btn.type='button'; btn.className='fsbtn'; btn.textContent='全螢幕（實際尺寸）';
+  btn.setAttribute('aria-label','全螢幕開啟 '+label);
+  btn.addEventListener('click',function(){ openFS(build); });
+  fig.appendChild(btn);
+  host.appendChild(fig);
+  mount(slot,build());
+}
+
+var state='normal';
+function render(){
+  var dirs=document.getElementById('dirs'); dirs.innerHTML='';
+  ['A','B','C'].forEach(function(k){
+    var n=NOTES[state][k];
+    figure(dirs,function(){ return listPage(k,state); }, DIRS[k].name, DIRS[k].diff+(n?'。'+n:''), DIRS[k].name);
+  });
+}
+function renderHome(){
+  var h=document.getElementById('home'); h.innerHTML='';
+  figure(h,function(){ return homePage('normal'); },'首頁・有清單','分組改成「已釘選／其他」（流程 ❓C 的決定）','首頁有清單');
+  figure(h,function(){ return homePage('empty'); },'首頁・第一次（空）','空狀態文字照現在的寫法，之後在首次體驗那步改','首頁空狀態');
+}
+
+/* ---- 全螢幕：寬度撐滿螢幕，iPhone 17 上就是 1:1；點哪裡會留下編號圓點 ---- */
+function openFS(build){
+  var fs=document.createElement('div'); fs.className='fs';
+  var holder=document.createElement('div'); holder.className='holder';
+  var sc=document.createElement('div'); sc.className='scaler';
+  var frame=build(); sc.appendChild(frame); holder.appendChild(sc); fs.appendChild(holder);
+  var s=window.innerWidth/W;
+  sc.style.transform='scale('+s+')'; holder.style.height=(H*s)+'px';
+  var n=0;
+  holder.addEventListener('pointerdown',function(e){
+    var r=holder.getBoundingClientRect();
+    var t=document.createElement('div'); t.className='tap';
+    t.style.left=((e.clientX-r.left)/s)+'px'; t.style.top=((e.clientY-r.top)/s)+'px';
+    t.textContent=++n; frame.appendChild(t);
+  });
+  var ctl=document.createElement('div'); ctl.className='fsctl';
+  var clr=document.createElement('button'); clr.type='button'; clr.textContent='清除點擊';
+  clr.addEventListener('click',function(){ frame.querySelectorAll('.tap').forEach(function(t){t.remove();}); n=0; });
+  var x=document.createElement('button'); x.type='button'; x.textContent='結束';
+  x.addEventListener('click',function(){ fs.remove(); ctl.remove(); document.body.style.overflow=''; });
+  ctl.appendChild(clr); ctl.appendChild(x);
+  document.body.appendChild(fs); document.body.appendChild(ctl);
+  document.body.style.overflow='hidden';
+}
+
+document.getElementById('states').addEventListener('click',function(e){
+  var bt=e.target.closest('button'); if(!bt) return;
+  state=bt.getAttribute('data-s');
+  this.querySelectorAll('button').forEach(function(x){ x.setAttribute('aria-pressed', String(x===bt)); });
+  render();
+});
+document.getElementById('showhit').addEventListener('change',function(){ document.body.classList.toggle('nohit',!this.checked); });
+
+render(); renderHome();
+})();
+</script>
