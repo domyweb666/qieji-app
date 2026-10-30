@@ -1,4 +1,4 @@
-// 跟網頁版同一套線條圖示
+// 線條圖示：網頁預覽沒有 SF Symbols 時的替身，所以形狀照 iOS 的 chevron.left、ellipsis（橫的 ⋯）
 import Svg, { Circle, Path } from 'react-native-svg';
 
 type Name = 'back' | 'check' | 'dots' | 'plus' | 'notes' | 'search' | 'trash' | 'close' | 'menu' | 'undo' | 'redo';
@@ -7,12 +7,12 @@ export function Icon({ name, size = 26, color = '#1f1f1f' }: { name: Name; size?
   const line = (w: number) => ({ fill: 'none', stroke: color, strokeWidth: w, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const });
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      {name === 'back' && <Path {...line(2.2)} d="M20 12H5M11 5l-7 7 7 7" />}
+      {name === 'back' && <Path {...line(2.2)} d="M15 5l-7 7 7 7" />}
       {name === 'check' && <Path {...line(2.6)} d="M4.5 12.5l5 5L20 7" />}
       {name === 'dots' && <>
-        <Circle cx={12} cy={5} r={2.2} fill={color} />
-        <Circle cx={12} cy={12} r={2.2} fill={color} />
-        <Circle cx={12} cy={19} r={2.2} fill={color} />
+        <Circle cx={5} cy={12} r={2} fill={color} />
+        <Circle cx={12} cy={12} r={2} fill={color} />
+        <Circle cx={19} cy={12} r={2} fill={color} />
       </>}
       {name === 'plus' && <Path {...line(2.4)} d="M12 5v14M5 12h14" />}
       {name === 'notes' && <Path fill={color} d="M6 3h12a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 5v2h8V8H8zm0 4v2h8v-2H8zm0 4v2h5v-2H8zM7 1h2v4H7zm4 0h2v4h-2zm4 0h2v4h-2z" />}

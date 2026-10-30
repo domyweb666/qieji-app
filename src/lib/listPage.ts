@@ -1,9 +1,10 @@
 // 清單頁中間那一塊（新增一行＋每一行）用網頁畫：程式和樣式直接搬網頁版 easynote/index.html 的清單，
-// 打字、自動換行、滑動、拖曳、鍵盤、外觀都跟網頁版一樣。
+// 打字、自動換行、滑動、拖曳、鍵盤都跟網頁版一樣。外觀跟首頁同一套：一行一張圓角卡片，頁面底色跟著筆記顏色換。
 // 標題列、⋯ 選單、存檔留在 app 這邊，兩邊用訊息溝通：
 //   網頁 → app：texts（打字停手 0.3 秒後，只送改過字的那幾行）、items（加行、刪行、劃掉、排序這類改了結構的，立刻送整份）、
 //              removed（刪掉了哪一行，給 toast 復原用）、seen（看過滑動提示了）、haptic
 //   app → 網頁：set（整份清單換掉重畫）、theme（換顏色）、focusFirst（標題按下一步）、blur（收鍵盤）、flush（馬上送出還沒送的字）
+// 鍵盤上方只留 iOS 自己那條「︿ ﹀ ✓」（按 ✓ 收鍵盤），不再另外疊一條自己的工具列。
 import type { Item } from './model';
 
 export type PageInit = { items: Item[]; bg: string; hd: string; rule: string; hint: boolean };
@@ -13,23 +14,23 @@ const CSS = `
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:#2E2233;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;
   font-size:17px;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none}
-body{padding-bottom:200px;overscroll-behavior-y:contain}
+body{padding:0 16px 200px;overscroll-behavior-y:contain}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 textarea{font:inherit;color:inherit;outline:0;-webkit-user-select:text;user-select:text}
 svg{display:block}
 .hidden{display:none!important}
-.addrow{display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 14px;height:54px;font-size:19px;color:rgba(46,34,51,.45);
-  text-align:left;border-bottom:1px solid var(--rule)}
-.addrow span:first-child{font-size:22px}
-.ci{position:relative;border-bottom:1px solid var(--rule);overflow:hidden;touch-action:pan-y}
+.addrow{display:flex;align-items:center;gap:6px;width:100%;padding:0 0 0 12px;height:54px;font-size:17px;color:rgba(46,34,51,.5);
+  text-align:left}
+.addrow span:first-child{font-size:20px}
+/* 一行一張卡片，跟首頁列表的筆記卡片同一個樣子；卡片外面的底色是筆記顏色 */
+.ci{position:relative;margin-bottom:8px;background:#FFFCF6;border:1px solid var(--rule);border-radius:16px;overflow:hidden;touch-action:pan-y}
 .ci .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;
   font-size:15px;font-weight:600;color:#FFFCF6}
 .ci.sw-r .under{background:#9C8C7A}
 .ci.sw-l .under{background:#d0443a}
 .ci.sw-r .under .r,.ci.sw-l .under .l{visibility:hidden}
-.ci .cin{position:relative;display:flex;align-items:flex-start;gap:2px;padding:0 0 0 14px;background:var(--bg);will-change:transform}
-.ci.focus .cin{background:var(--focus)}
-.ci textarea{flex:1;min-width:0;border:0;background:transparent;resize:none;font-size:20px;line-height:1.5;
+.ci .cin{position:relative;display:flex;align-items:flex-start;gap:2px;padding:0 0 0 12px;background:#FFFCF6;will-change:transform}
+.ci textarea{flex:1;min-width:0;border:0;background:transparent;resize:none;font-size:17px;line-height:1.6;
   padding:12px 4px;height:54px;overflow:hidden;display:block}
 .ci.done textarea{text-decoration:line-through;text-decoration-thickness:2px;color:rgba(46,34,51,.38)}
 .ci .x{flex:none;width:40px;height:52px;display:none;place-items:center;color:rgba(46,34,51,.4);font-size:19px}
@@ -38,23 +39,11 @@ svg{display:block}
 .ci.focus .grip{display:none}
 .ci.dragging{z-index:5;box-shadow:0 6px 18px rgba(46,34,51,.2)}
 .hint{font-size:13px;color:rgba(46,34,51,.4);text-align:center;padding:14px}
-.kbar{position:fixed;left:0;right:0;bottom:0;z-index:12;display:flex;align-items:center;gap:6px;
-  padding:6px 10px;background:var(--hd);border-top:1px solid rgba(46,34,51,.1);will-change:transform}
-.kbar button{height:40px;min-width:46px;display:grid;place-items:center;color:rgba(46,34,51,.65);border-radius:10px}
-.kbar button:disabled{opacity:.3}
-.kbar svg{width:26px;height:26px}
-.kbar .sp{flex:1}
-.kbar .done{background:rgba(46,34,51,.75);color:#fff;font-size:16px;padding:0 16px}
 `;
 
 const JS = `
-var ICON = {
-  undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v1"/></svg>',
-  redo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v1"/></svg>'
-};
 var $ = function(s){ return document.querySelector(s); };
 var items = INIT.items, hintOn = INIT.hint;
-var hist = [], hpos = -1, histT = null;
 var dirty = {}, flushT = null;
 var uid = function(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); };
 var esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
@@ -66,11 +55,9 @@ function send(m){
   else if (window.parent !== window) window.parent.postMessage({qieji:s}, '*');
 }
 function theme(c){
+  // 頁面底色和卡片邊框跟著筆記顏色；卡片本身（包括正在打的那一行）一律是奶油白
   var st = document.documentElement.style;
-  st.setProperty('--bg', c.bg); st.setProperty('--hd', c.hd); st.setProperty('--rule', c.rule);
-  // 正在打的那一行：底色往白色靠一半（網頁版是 color-mix，舊一點的 iOS 不支援，所以自己算）
-  var h = c.bg.replace('#',''), mix = [0,2,4].map(function(i){ return Math.round(parseInt(h.substr(i,2),16)*.55 + 255*.45); });
-  st.setProperty('--focus', 'rgb(' + mix.join(',') + ')');
+  st.setProperty('--bg', c.bg); st.setProperty('--rule', c.rule);
 }
 
 /* ---------- list ---------- */
@@ -139,7 +126,6 @@ document.addEventListener('input', function(e){
   sizeTA(e.target);
   dirty[it.id] = 1;
   clearTimeout(flushT); flushT = setTimeout(flush, 300);
-  clearTimeout(histT); histT = setTimeout(snapshot, 450); $('#undoBtn').disabled = false;
 });
 // 換行就是在同一格換行（不攔）。空的一行按刪除 → 這行拿掉，回到上一行最後面
 document.addEventListener('keydown', function(e){
@@ -154,11 +140,10 @@ document.addEventListener('keydown', function(e){
   }
 });
 
-/* ---------- focus：亮起正在打的那一行、鍵盤上的工具列 ---------- */
+/* ---------- focus：正在打的那一行換成 ✕（刪除這行），收鍵盤時清掉空白行 ---------- */
 document.addEventListener('focusin', function(e){
   document.querySelectorAll('.ci.focus').forEach(function(r){ r.classList.remove('focus'); });
   var r = e.target.closest && e.target.closest('.ci'); if (r) r.classList.add('focus');
-  if (e.target.tagName === 'TEXTAREA') showKbar(true);
 });
 document.addEventListener('focusout', function(){
   flush();
@@ -166,7 +151,6 @@ document.addEventListener('focusout', function(){
     var a = document.activeElement;
     if (!a || a.tagName !== 'TEXTAREA'){
       document.querySelectorAll('.ci.focus').forEach(function(r){ r.classList.remove('focus'); });
-      showKbar(false);
       cleanupEmpty();
     }
   }, 120);
@@ -258,21 +242,6 @@ function endDrag(){
   render();
 }
 
-/* ---------- keyboard bar (follows the iOS keyboard) ---------- */
-function showKbar(on){ $('#kbar').classList.toggle('hidden', !on); if (on) placeKbar(); }
-function placeKbar(){
-  var vv = window.visualViewport; if (!vv) return;
-  var off = window.innerHeight - vv.height - vv.offsetTop;
-  $('#kbar').style.transform = off > 0 ? 'translateY(' + (-off) + 'px)' : '';
-}
-if (window.visualViewport){
-  window.visualViewport.addEventListener('resize', placeKbar);
-  window.visualViewport.addEventListener('scroll', placeKbar);
-}
-$('#undoBtn').innerHTML = ICON.undo; $('#redoBtn').innerHTML = ICON.redo;
-['undoBtn','redoBtn','kDone'].forEach(function(id){ $('#'+id).addEventListener('pointerdown', function(e){ e.preventDefault(); }); });
-$('#kDone').onclick = function(){ if (document.activeElement) document.activeElement.blur(); };
-
 /* ---------- 送給 app ---------- */
 // 打字停手後：只送改過字的那幾行
 function flush(){
@@ -284,26 +253,11 @@ function flush(){
 }
 // 改了結構：整份清單立刻送（裡面已經有最新的字，打字那邊的待送就不用了）
 function sendItems(){ clearTimeout(flushT); dirty = {}; send({t:'items', items:items}); }
-
-/* ---------- undo / redo ---------- */
-function snapshot(){
-  var s = JSON.stringify(items);
-  if (hist[hpos] === s) return;
-  hist = hist.slice(0, hpos+1); hist.push(s); if (hist.length > 200) hist.shift(); hpos = hist.length-1; updUndo();
-}
-function changed(now){
-  sendItems();
-  clearTimeout(histT);
-  if (now) snapshot(); else { histT = setTimeout(snapshot, 450); $('#undoBtn').disabled = false; }
-}
-function restore(s){ items = JSON.parse(s); render(); sendItems(); updUndo(); }
-$('#undoBtn').onclick = function(){ clearTimeout(histT); snapshot(); if (hpos > 0){ hpos--; restore(hist[hpos]); } };
-$('#redoBtn').onclick = function(){ if (hpos < hist.length-1){ hpos++; restore(hist[hpos]); } };
-function updUndo(){ $('#undoBtn').disabled = hpos <= 0; $('#redoBtn').disabled = hpos >= hist.length-1; }
+function changed(){ sendItems(); }
 
 /* ---------- 從 app 來的訊息 ---------- */
 window.__recv = function(m){
-  if (m.t === 'set'){ items = m.items; if (m.hint != null) hintOn = m.hint; render(); snapshot(); }
+  if (m.t === 'set'){ items = m.items; if (m.hint != null) hintOn = m.hint; render(); }
   else if (m.t === 'theme') theme(m);
   else if (m.t === 'focusFirst'){ if (items[0]) focusItem(items[0].id); }
   else if (m.t === 'blur'){ flush(); if (document.activeElement) document.activeElement.blur(); }
@@ -311,7 +265,7 @@ window.__recv = function(m){
 };
 
 theme(INIT);
-render(); snapshot();
+render();
 `;
 
 export function listPage(init: PageInit) {
@@ -321,7 +275,5 @@ export function listPage(init: PageInit) {
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">' +
     '<style>' + CSS + '</style></head><body>' +
     '<button class="addrow" id="add"></button><div id="cl"></div><div class="hint hidden" id="hint">往右滑劃掉　·　往左滑刪除</div>' +
-    '<div class="kbar hidden" id="kbar"><button id="undoBtn" aria-label="復原"></button><button id="redoBtn" aria-label="重做"></button>' +
-    '<div class="sp"></div><button class="done" id="kDone">完成</button></div>' +
     '<script>var INIT = ' + data + ';' + JS + '</script></body></html>';
 }

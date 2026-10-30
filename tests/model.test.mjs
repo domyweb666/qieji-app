@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseState, importBackup, exportJSON, KEY,
+  parseState, importBackup, exportJSON, KEY, plain,
 } from '../src/lib/model.ts';
 
 // 最早期的網頁版存檔：沒有 garden、沒有 b 欄位、還有已廢除的 pink 色
@@ -94,4 +94,11 @@ test('同一則筆記被重複存兩次：只留最新那份，其他筆記不�
   ] });
   const s = parseState(raw);
   assert.deepEqual(s.notes.map(n => n.id + n.title), ['y另一則', 'x新']);
+});
+
+test('複製全文：每行編號、中間空一行，劃掉的行照常顯示文字並標（劃線），空白行略過', () => {
+  const n = { type: 'check', items: [
+    { id: '1', t: '寫交接', done: false }, { id: '2', t: '  ', done: false }, { id: '3', t: '做茄子田', done: true },
+  ] };
+  assert.equal(plain(n), '1.寫交接\n\n2.（劃線）做茄子田');
 });

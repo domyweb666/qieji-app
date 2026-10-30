@@ -3,13 +3,12 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuItems, showActs, type Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
 import { WebWarmUp } from '../components/ListWeb';
 import { listStyles, NoteSections } from '../components/NoteList';
 import { Sym } from '../components/Sym';
-import { GlassBtn, native, WebTop } from '../components/WebBars';
+import { Fab, GlassBtn, native, WebTop } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
 import { CKEYS, col, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
@@ -19,7 +18,6 @@ let restored = false; // 每次打開 app 只回到上次的筆記一次
 
 export default function Home() {
   const s = useStore();
-  const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<ColorKey | 'all'>('all');
   const [q, setQ] = useState('');
   const searching = !!q.trim();
@@ -45,7 +43,8 @@ export default function Home() {
   const menu: Act[] = [
     { label: '依顏色篩選', icon: 'circle.grid.2x2', sub: [
       { label: '全部', on: filter === 'all', fn: () => setFilter('all') },
-      ...CKEYS.map(k => ({ label: col(k).name, on: filter === k, fn: () => setFilter(k) })),
+      // 系統選單放不了自己畫的色塊（圖片在手機上不顯示），用彩色圓點 emoji 當色塊，它是文字一定會出現
+      ...CKEYS.map(k => ({ label: `${col(k).dot} ${col(k).name}`, on: filter === k, fn: () => setFilter(k) })),
     ] },
     { label: '排序方式', icon: 'arrow.up.arrow.down', sub: (Object.keys(SORTS) as SortKey[]).map(k => ({
       label: SORTS[k], on: s.sort === k, fn: () => { s.sort = k; store.change(); },
@@ -93,10 +92,7 @@ export default function Home() {
             : <Empty lines={['還沒有筆記', '點右下角的＋，寫下第一個想法']} />}
       </ScrollView>
 
-      <Pressable onPress={add} accessibilityLabel="新增"
-        style={({ pressed }) => [st.fab, { bottom: insets.bottom + 14 }, pressed && { transform: [{ scale: 0.94 }] }]}>
-        <Sym name="plus" size={26} color="#fff" weight="semibold" />
-      </Pressable>
+      <Fab onPress={add} label="新增" />
     </View>
   );
 }
@@ -106,9 +102,6 @@ const st = StyleSheet.create({
     backgroundColor: C.card, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12 },
   chipDot: { width: 9, height: 9, borderRadius: 4.5 },
   chipText: { fontSize: F.subhead, color: C.label },
-  fab: { position: 'absolute', right: 20, width: 58, height: 58, borderRadius: 29, backgroundColor: C.tint,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#3B2050', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   webSearch: { height: 40, borderRadius: 12, backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 12, marginBottom: 12 },
   webSearchInput: { flex: 1, fontSize: F.body, color: C.label },

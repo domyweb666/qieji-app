@@ -1,17 +1,17 @@
-// 清單編輯。上面的標題列照網頁版的樣子（← 清單名稱 色塊 ⋮），用原生畫；
+// 清單編輯。上面的標題列跟首頁同一套（奶油白圓鈕：‹ 清單名稱 顏色點 ⋯），用原生畫；整頁底色是筆記顏色。
 // 中間的清單（新增一行、打字、滑動劃掉／刪除、拖曳排序、鍵盤）直接用網頁版的程式畫，手感跟網頁版一樣。
-// 存檔和 ⋮ 選單在這裡做，網頁那邊改了什麼會傳過來（見 components/ListWeb）。
+// 存檔和 ⋯ 選單在這裡做，網頁那邊改了什麼會傳過來（見 components/ListWeb）。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams, useNavigation, type NativeStackNavigationProp } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { AppState, Keyboard, Pressable, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { AppState, Keyboard, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Act } from '../../components/Acts';
-import { Icon } from '../../components/Icon';
 import { ListWeb, type ListMsg, type ListWebHandle } from '../../components/ListWeb';
 import { ui } from '../../components/Overlay';
 import { PopMenu } from '../../components/PopMenu';
+import { GlassBtn } from '../../components/WebBars';
 import { ago, col, convertNote, fullDate, isEmpty, plain, type Item, type Note } from '../../lib/model';
 import { store, useStore } from '../../lib/store';
 import { C } from '../../lib/theme';
@@ -39,8 +39,6 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   const web = useRef<ListWebHandle>(null);
   const [menu, setMenu] = useState(false);
   const c = col(n.color);
-  // 標題列用筆記顏色最深的那一階；黑豆色太深，字改白的
-  const ink = n.color === 'black' ? C.card : C.label;
   // 網頁那邊的清單換掉重畫（⋮ 選單改了清單、復原刪除之後）
   const pushItems = () => web.current?.send({ t: 'set', items: n.items, hint: !store.hintSeen });
 
@@ -146,25 +144,23 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} collapsable={false}>
-      {/* 標題列照網頁版：← 清單名稱 色塊 ⋮。字級固定，不跟著系統字體大小放大（網頁版也不會） */}
-      <View style={[st.bar, { paddingTop: insets.top + 6, backgroundColor: c.hd }]}>
-        <Pressable style={({ pressed }) => [st.ib, pressed && st.ibOn]} onPress={back} accessibilityLabel="返回">
-          <Icon name="back" size={26} color={ink} />
-        </Pressable>
+      {/* 標題列跟首頁同一套：‹ 清單名稱 顏色點 ⋯，底色跟整頁一樣是筆記顏色；顏色點跟首頁列表的點同一種。
+          字級固定，不跟著系統字體大小放大（網頁版也不會） */}
+      <View style={[st.bar, { paddingTop: insets.top + 6 }]}>
+        <GlassBtn icon="chevron.left" label="返回" onPress={back} />
         <TextInput ref={titleRef} defaultValue={n.title} placeholder="標題" allowFontScaling={false}
-          placeholderTextColor={n.color === 'black' ? 'rgba(255,252,246,.5)' : 'rgba(46,34,51,.45)'}
-          style={[st.title, { color: ink }]} returnKeyType="next" submitBehavior="submit"
+          placeholderTextColor={C.placeholder}
+          style={st.title} returnKeyType="next" submitBehavior="submit"
           onChangeText={v => { n.title = v; touch(true); }}
           onSubmitEditing={() => {
             // 有行就跳到第一行，沒有就收鍵盤（不自動多一行）
             Keyboard.dismiss();
             if (n.items[0]) web.current?.send({ t: 'focusFirst' });
           }} />
-        <Pressable onPress={pickColor} accessibilityLabel={`顏色：${c.hue}`} hitSlop={8}
-          style={({ pressed }) => [st.swatch, { backgroundColor: vivid(c.hd) }, pressed && { opacity: 0.7 }]} />
-        <Pressable style={({ pressed }) => [st.ib, pressed && st.ibOn]} onPress={() => { hideKb(); setMenu(true); }} accessibilityLabel="更多">
-          <Icon name="dots" size={26} color={ink} />
-        </Pressable>
+        <GlassBtn label={`顏色：${c.hue}`} onPress={pickColor}>
+          <View style={[st.dot, { backgroundColor: c.hd }]} />
+        </GlassBtn>
+        <GlassBtn icon="ellipsis" label="更多" onPress={() => { hideKb(); setMenu(true); }} />
       </View>
       <Meta n={n} />
 
@@ -187,25 +183,11 @@ function Meta({ n }: { n: Note }) {
   );
 }
 
-// 色塊比標題列的底色再飽和、暗一點才看得出來（網頁版是 CSS 的 saturate(1.5) brightness(.9)）
-function vivid(hex: string) {
-  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(1 + i, 3 + i), 16));
-  const s = 1.5;
-  const out = [
-    (0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b,
-    (0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b,
-    (0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b,
-  ].map(v => Math.round(Math.max(0, Math.min(255, v)) * 0.9));
-  return `rgb(${out.join(',')})`;
-}
-
 const st = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingBottom: 6 },
-  ib: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  ibOn: { backgroundColor: 'rgba(46,34,51,0.08)' },
-  title: { flex: 1, minWidth: 0, height: 44, fontSize: 23, fontWeight: '500', paddingVertical: 0, paddingHorizontal: 6 },
-  swatch: { width: 30, height: 30, borderRadius: 7, marginHorizontal: 6, borderWidth: 2, borderColor: 'rgba(255,252,246,0.85)',
-    shadowColor: '#3B2050', shadowOpacity: 0.15, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 } },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14 },
-  metaText: { fontSize: 15, color: 'rgba(46,34,51,0.55)' },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingBottom: 6 },
+  title: { flex: 1, minWidth: 0, height: 44, fontSize: 20, fontWeight: '700', color: C.label, paddingVertical: 0, paddingHorizontal: 4 },
+  // 跟首頁列表的顏色點同一種圓點，大一點好按
+  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(46,34,51,0.15)' },
+  meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, paddingBottom: 2, paddingHorizontal: 20 },
+  metaText: { fontSize: 13, color: C.secondary },
 });
