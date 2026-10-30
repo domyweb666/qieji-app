@@ -17,6 +17,14 @@ export type ListWebHandle = { send: (m: object) => void };
 type WebViewRef = { injectJavaScript: (js: string) => void };
 const WV = WebView as unknown as ComponentType<WebViewProps & { ref?: Ref<WebViewRef> }>;
 
+// 第一個 WebView 要先把網頁引擎叫起來，很慢；放一個看不見的空白 WebView 在首頁先暖好，
+// 按＋開新清單時就不用在推頁動畫中途等它（同一個 app 裡的 WebView 共用引擎）
+export function WebWarmUp() {
+  if (Platform.OS === 'web') return null;
+  return <WV source={{ html: '<html></html>' }} style={{ width: 1, height: 1 }} containerStyle={warm} pointerEvents="none" />;
+}
+const warm = { position: 'absolute', width: 1, height: 1, opacity: 0 } as const;
+
 export const ListWeb = forwardRef<ListWebHandle, { init: PageInit; onMessage: (m: ListMsg) => void }>(
   function ListWeb({ init, onMessage }, ref) {
     // 頁面只在打開時產生一次；之後的變動都用訊息送，不重新載入

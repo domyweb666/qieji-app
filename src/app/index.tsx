@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuItems, showActs, type Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
+import { WebWarmUp } from '../components/ListWeb';
 import { listStyles, NoteSections } from '../components/NoteList';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native, WebTop } from '../components/WebBars';
@@ -58,6 +59,7 @@ export default function Home() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.groupedBg }} collapsable={false}>
+      <WebWarmUp />
       {native && (
         <Stack.SearchBar placement="integratedButton" allowToolbarIntegration={false} hideWhenScrolling={false} placeholder="搜尋筆記"
           onChangeText={e => setQ(e.nativeEvent.text)} onCancelButtonPress={() => setQ('')} />

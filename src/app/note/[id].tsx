@@ -3,7 +3,7 @@
 // 存檔和 ⋮ 選單在這裡做，網頁那邊改了什麼會傳過來（見 components/ListWeb）。
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation, type NativeStackNavigationProp } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { AppState, Keyboard, Pressable, Share, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +32,7 @@ export default function NoteScreen() {
 function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
   useStore();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<Record<string, object | undefined>>>();
   const closed = useRef(false);
   const mounted = useRef(true);
   const titleRef = useRef<TextInputInstance>(null);
@@ -98,10 +99,16 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
     if (closed.current && !n.deleted && !store.s.notes.some(x => x.id === n.id)) store.s.notes.push(n);
     closed.current = false;
     let t: ReturnType<typeof setTimeout> | undefined;
-    // 新的清單先停在標題，不自動多一行；要寫點子就點「新增一行」
-    if (fresh) t = setTimeout(() => titleRef.current?.focus(), 60);
+    let off: (() => void) | undefined;
+    // 新的清單先停在標題，不自動多一行；要寫點子就點「新增一行」。
+    // 等推進來的動畫跑完才叫鍵盤，兩個動畫疊在一起會卡；網頁預覽沒有這個事件，靠計時器補
+    if (fresh) {
+      const focus = () => { clearTimeout(t); off?.(); if (mounted.current) titleRef.current?.focus(); };
+      off = navigation.addListener('transitionEnd', e => { if (!e.data.closing) focus(); });
+      t = setTimeout(focus, 700);
+    }
     store.setLast(n.id); // 關掉 app 時還開著這則，下次打開就直接回到這裡
-    return () => { clearTimeout(t); mounted.current = false; closeNote(); store.setLast(null); };
+    return () => { clearTimeout(t); off?.(); mounted.current = false; closeNote(); store.setLast(null); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- actions ---------- */
