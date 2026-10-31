@@ -11,7 +11,7 @@ import { ui } from '../components/Overlay';
 import { PopMenu } from '../components/PopMenu';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native } from '../components/WebBars';
-import { exportData, importData } from '../lib/backup';
+import { importData } from '../lib/backup';
 import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
@@ -65,9 +65,9 @@ export default function Directory() {
     router.back();
   }
 
-  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。同日稍後排序與顏色篩選拿掉，只剩備份
+  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。同日稍後排序與顏色篩選拿掉；
+  // 再晚一點匯出備份也拿掉（多米：一般人用不到），只剩匯入（網頁版搬家用）
   const acts: Act[] = [
-    { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
     { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
   ];
   // 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留
