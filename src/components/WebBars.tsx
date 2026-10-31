@@ -38,8 +38,10 @@ export function Fab({ onPress, label }: { onPress: () => void; label: string }) 
   const insets = useSafeAreaInsets();
   const c = useColors();
   return (
-    // 鍵盤升起、輸入框開著、排順序時淡出，回來時淡進（2026-11-01 第二輪 K3；之前是瞬間出現、消失）。減少動態本來就是淡入淡出
-    <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
+    // 鍵盤升起、輸入框開著時淡出，回來時淡進（2026-11-01 第二輪 K3；之前是瞬間出現、消失）。
+    // 時長跟鍵盤同一個時鐘（keyboardFollow）：＋ 的進出是鍵盤那個事件的一部分，不另外排一個 150 的時鐘（2-4 做法 6；
+    // 多米 2026-11-01 真機說 ✓ 之後 ＋ 回來的時間點不對）。減少動態本來就是淡入淡出
+    <Animated.View entering={FadeIn.duration(T.motion.keyboardFollow.duration)} exiting={FadeOut.duration(T.motion.keyboardFollow.duration)}
       style={[s.fabWrap, { bottom: insets.bottom + T.space.m }]}>
       <Pressable onPress={onPress} accessibilityLabel={label}
         style={({ pressed }) => [s.fab, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>

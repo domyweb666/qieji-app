@@ -1,4 +1,6 @@
-# Handoff: 2026-11-01 第四輪建置裝上、多米真機回報六條：三個 bug 修了、字級回 17、選單合一（A1 全部自繪）、輸入框暗幕拿掉（B 乙）全做完；全部純 JS 待重載真機（驗收清單第十一節 R1～R7、M1～M7）
+# Handoff: 2026-11-01 第四輪建置裝上、多米兩批真機回報（6＋6 條）全做完：三個 bug、字級 17、選單合一 A1、暗幕拿掉 乙、iOS 改原生自動長高、膠囊拿掉、＋ 跟鍵盤時鐘、新行不捲頂；全部純 JS 待重載真機（驗收清單第十一節 R1～R12、M1～M7）
+
+> **第二批（05:36 回報，commit 見 git log「第二批」）**：(1) 行底下多一行空白 (2) 輸入框文字不在正中 (4) 三行就捲——同一個根：iOS 的鏡像 Text 撐高不準，改成 TextInput 自己長（Field 與 Composer；網頁仍走鏡像）；輸入框上限改成鍵盤頂到清單頂（`composerLines` token 拿掉）。(3) 鍵盤膠囊拿掉（`focusNeighbor`／`KBAR_H` 一起）。(5) ＋ 進出改跟鍵盤同一個事件、同一個時鐘（`kbUp` 在 willShow／willHide 翻、Fab 淡 keyboardFollow）。(6) 新行不捲頂：`maintainVisibleContentPosition`＋行直接當 ScrollView 子元件、`addFromDraft` 不捲。**全部要真機**（R8～R12），尤其 iOS 自動長高與 maintainVisibleContentPosition 兩個網頁驗不到。
 
 > **2026-11-01 04:30 之後的進度（接在下面那份 03:35 的交接前面）**
 > - 多米建了 `fe928532`（commit `bff693c`）裝上。第一個問題：**一片白**——啟動畫面收不掉（`hide` 的 onLayout 掛在根 View，ready 之後不會再觸發；以前沒事是因為 splash 原生模組根本沒裝）。修了 `e37d722`。

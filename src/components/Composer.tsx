@@ -13,13 +13,16 @@ import { T, useColors } from '../lib/tokens';
 import { Sym } from './Sym';
 
 const LINE_H = T.font.bodyLine.lineHeight;
-const MAX_H = LINE_H * T.shape.composerLines;
+const WEB = Platform.OS === 'web';
+// 卡片上下內距＋輸入框上下留白：從 Paper 給的「框最高多少」扣掉，才是輸入框本身的上限
+const CHROME = T.space.s * 2 + (T.shape.hitMin - LINE_H);
 // 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
 const KB = T.motion.keyboardFollow;
 const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
 
-export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
+export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
   calm: boolean;
+  maxH: number; // 整張卡最高多少（Paper 算：鍵盤頂到清單頂那段），再多在框裡捲
   onChange: (t: string) => void;
   onSubmit: () => boolean; // 回傳有沒有真的送出一行（空的會直接收起，那就不用清空、重新對焦）
   onDone: () => void;
@@ -31,6 +34,7 @@ export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
   // 一個透明的鏡像 Text 撐高度、輸入框鋪滿在上面。之前自己聽 onContentSizeChange 再設 height，真機（Typeless 輸入法）打超過一行
   // 框沒長高、前面的字看不到（多米 2026-11-01）；網頁的 textarea 也不會自己長，鏡像兩邊都通
   const [txt, setTxt] = useState('');
+  const maxInput = Math.max(LINE_H, maxH - CHROME);
   // 網頁預覽的送出會先失焦（blurOnSubmit），那段期間的失焦不算「收起」；iOS 的 submitBehavior='submit' 不會失焦，這個旗標只是空轉
   const sending = useRef(false);
   // 畫完立刻對焦（跟行的 focusItem 一樣）。網頁預覽：Reanimated 的進場動畫會先把元素藏一兩格（visibility hidden），
@@ -59,12 +63,14 @@ export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
       entering={calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(KB.duration).easing(KB_EASE)}
       exiting={calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(KB.duration).easing(KB_EASE)}
       style={[s.card, { backgroundColor: c.surface }]}>
-      <View style={s.grow}>
-        <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
+      {/* 高度誰撐：iOS 交給輸入框自己長（多行 TextInput 不給高度就跟著內容長，跟紙上每一行同一套）；網頁的 textarea 不會自己長，
+          才用隱形鏡像文字撐高、輸入框鋪滿。之前 iOS 也用鏡像撐，文字不在框的正中、滿行時多一行空白（多米 2026-11-01 真機） */}
+      <View style={[s.grow, { maxHeight: maxInput }]}>
+        {WEB && <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>}
         <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint="next"
           {...(Platform.OS === 'web' ? { blurOnSubmit: true } : null)}
           placeholder="記一行" placeholderTextColor={c.textMuted}
-          style={[s.input, s.fill, { color: c.textPrimary }]}
+          style={[s.input, WEB ? s.fill : { maxHeight: maxInput }, { color: c.textPrimary }]}
           accessibilityLabel="輸入框"
           onChangeText={v => { setTxt(v); onChange(v); }}
           onSubmitEditing={submit}
@@ -82,8 +88,8 @@ const s = StyleSheet.create({
   // 跟鍵盤膠囊同一家：奶油白、圓角 16、軟陰影。✓ 貼在右端底部，字長高時它留在下面
   card: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: T.shape.radiusCard, paddingLeft: T.space.l, paddingRight: T.space.xs, paddingVertical: T.space.s, ...T.shape.shadowSoft },
   // 一行時連上下留白剛好 44 高，跟 ✓ 一樣高；留白用 margin 不用 padding，量到的內容高度才會剛好是行數 × 行高
-  // grow：鏡像 Text 撐出來的高度，最多 composerLines 行（再多輸入框自己在裡面捲）
-  grow: { flex: 1, minWidth: 0, maxHeight: MAX_H, marginVertical: (T.shape.hitMin - LINE_H) / 2 },
+  // grow：輸入框（iOS）或鏡像 Text（網頁）撐出來的高度，上限由 Paper 給（maxH），再多輸入框自己在裡面捲
+  grow: { flex: 1, minWidth: 0, marginVertical: (T.shape.hitMin - LINE_H) / 2 },
   input: { ...T.font.bodyLine, minHeight: LINE_H, paddingVertical: 0, paddingHorizontal: 0, textAlignVertical: 'top' },
   // 鏡像：跟 Paper 的 Field 同一招，右邊比輸入框多留 1 點，字快滿一行時才不會先換行多出一行空白。5 只用一次
   mirror: { color: 'transparent', paddingRight: 5 },

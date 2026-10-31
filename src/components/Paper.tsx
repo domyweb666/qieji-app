@@ -38,8 +38,6 @@ import { Fab, GlassBtn } from './WebBars';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
 const FACE_FLAT = require('../../assets/img/face-flat.webp');
-// 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
-const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
 // 把游標放到某一格：iOS 用 setSelection；網頁預覽的輸入框就是 DOM 的 textarea，沒有 setSelection，只有 setSelectionRange
@@ -143,7 +141,7 @@ export function Paper({ n }: { n: Note }) {
     Keyboard.dismiss();
     haptic('menu');
     const h = T.shape.menuRow * 4 + T.space.xs * 3 + T.space.s * 2; // 四個項目、三個縫、卡片上下內距（PopMenu 的藥丸版）
-    setRowMenu({ id, top: Math.max(insets.top, Math.min(bottom, winH - insets.bottom - KBAR_H - h)) });
+    setRowMenu({ id, top: Math.max(insets.top, Math.min(bottom, winH - insets.bottom - h)) });
   }
   function rowActs(id: string): Act[] {
     const it = n.items.find(i => i.id === id);
@@ -175,11 +173,11 @@ export function Paper({ n }: { n: Note }) {
   function addLine() { if (composing) return; haptic('add'); openComposer(); }
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
-  // 輸入框送出的字變成紙最上面的一行，清單捲上去讓人看到它落下（核心迴圈第 4 格：看到才敢忘）
-  function addFromDraft(t: string, scroll = true) {
+  // 輸入框送出的字變成紙最上面的一行。畫面留在原地不捲（多米 2026-11-01 定：捲到下面想到一個點子、按 ＋ 記完，視線不要被拉回頂端）；
+  // 在頂端附近時 ScrollView 的 maintainVisibleContentPosition 會把新行露出來，捲得深時原地不動（核心迴圈第 4 格「看到才敢忘」在頂端附近才成立）
+  function addFromDraft(t: string) {
     n.items.unshift({ id: uid(), t, done: false, b: false });
     touch();
-    if (scroll) scrollTo(0);
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
@@ -190,32 +188,14 @@ export function Paper({ n }: { n: Note }) {
   }
   // 收起輸入框：有字就先送出（字不能丟，2-8）。這裡不收鍵盤：失焦時焦點可能已經在別行的輸入框上，收了會把它的鍵盤也收掉；
   // 輸入框卸載時，它自己的鍵盤會跟著收。
-  // 乙（2026-11-01，暗幕拿掉後）：點紙上的行會走到這裡——草稿先送出、焦點進那一行。這時不能捲回頂端（人要改的是那一行），
-  // 下一格看焦點有沒有落在別行：沒有（✓、點空白處）才捲上去看新行落下；有就留在原地，那一行被新行往下推時 onLayoutRow 會自己跟
+  // 乙（2026-11-01，暗幕拿掉後）：點紙上的行也會走到這裡——草稿先送出、焦點進那一行，畫面留在原地
   function closeComposer() {
     const t = takeDraft();
-    if (t) {
-      addFromDraft(t, false);
-      requestAnimationFrame(() => { if (!focused.current && mounted.current) scrollTo(0); });
-    }
+    if (t) addFromDraft(t);
     setComposing(false);
   }
   // ✓：送出並收起，這條沒有別的輸入框在等焦點，鍵盤一起收
   function doneComposer() { closeComposer(); Keyboard.dismiss(); }
-  // 鍵盤膠囊左邊的 ∧ ∨：游標跳到上一行／下一行（多米 2026-10-31 要的；之前拿掉過，這次是明確要回來）
-  const editIdx = editing ? n.items.findIndex(i => i.id === editing) : -1;
-  // 不走 focusItem（那條要等畫面重畫才對焦，中間舊的輸入框先放掉，鍵盤會收了再開）：
-  // 這裡直接把焦點移到下一行的輸入框，鍵盤留在原地；游標落在那一行的開頭
-  function focusNeighbor(d: -1 | 1) {
-    const to = n.items[editIdx + d];
-    if (editIdx < 0 || !to) return;
-    const inp = inputs.current[to.id];
-    if (!inp) return focusItem(to.id, 0);
-    setEditing(to.id);
-    inp.focus();
-    inp.setSelection?.(0, 0);
-    requestAnimationFrame(() => inp.setSelection?.(0, 0)); // iOS 對焦後會把游標放到最後，下一格再放回開頭
-  }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
     if (keep.length !== n.items.length) { n.items = keep; store.change(); }
@@ -239,6 +219,8 @@ export function Paper({ n }: { n: Note }) {
   const boxRef = useRef<ViewInstance>(null);
   const view = useRef({ top: 0, h: 0, y: 0, kb: Infinity }); // 清單在螢幕上的頂、高，目前捲到哪，鍵盤頂
   const [kbPad, setKbPad] = useState(0);
+  // kbUp＝鍵盤正在升起或開著（willShow 起、willHide 止）：右下 ＋ 用它決定要不要畫，才會跟鍵盤同一刻進出；kbPad 要等鍵盤真的收完才歸零，給留白用
+  const [kbUp, setKbUp] = useState(false);
   // K7（2026-11-01 第四輪）：膠囊與輸入框的位置不再靠 keyboardWillShow 事件知道終點、自己跑一段 withTiming 猜中間，
   // 改由 react-native-keyboard-controller 在 UI 執行緒逐格給鍵盤高度（kbH，從螢幕底算起）：升降、手指把鍵盤往下拖
   // （ScrollView 的 keyboardDismissMode='interactive'）、拖一半放手彈回，膠囊都貼著鍵盤上緣走。
@@ -253,7 +235,6 @@ export function Paper({ n }: { n: Note }) {
     onEnd: e => { 'worklet'; kbH.value = e.height; },
   }, []);
   const kbLift = useDerivedValue(() => Math.max(0, kbH.value - below.value), WEB_DEPS ? [] : undefined);
-  const barStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -kbLift.value }] }));
   // 輸入框的位置：貼在鍵盤上面（跟膠囊同一個位置），鍵盤還沒升起時貼著安全區。鍵盤一定比安全區高，所以兩段接得起來、不會跳一下。
   // 2026-11-01 第二版曾改成「升到鍵盤上方那段的正中」，多米真看之後說體感很糟：框自己的滑入（220）疊在跟著鍵盤的位移（250、另一條曲線）上，
   // 一個東西兩段不連續的動（2-4 物理直覺），而且核心動作被做成畫面正中的對話框（2-5 模態是暫時離開主線，記才是主線）。第三版貼回鍵盤、只剩一個時鐘
@@ -263,7 +244,7 @@ export function Paper({ n }: { n: Note }) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
     // 沒被鍵盤和工具列擋住的高度，底下留一點空
-    const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - T.space.l;
+    const shown = Math.min(v.h, v.kb - v.top) - T.space.l;
     if (l.y < v.y) scrollTo(l.y);
     else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
   }
@@ -285,11 +266,12 @@ export function Paper({ n }: { n: Note }) {
       const v = view.current;
       v.kb = winH - e.height;
       setKbPad(Math.max(0, v.top + v.h - v.kb));
+      setKbUp(true);
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
     // 收起：膠囊（和輸入框）由 kbH 帶著跟鍵盤一起下去；底部留白與 ＋ 等鍵盤真的收完（didHide）才還原（第二輪 K2；之前是瞬間消失）。
     // 中途鍵盤又升起，willShow 會先把 kb 設回有限值，didHide 就不收留白（套件排 did 事件時會取消前一個，照理不會到這裡，留著當保險）
-    const hide = () => { view.current.kb = Infinity; };
+    const hide = () => { view.current.kb = Infinity; setKbUp(false); };
     const hidden = () => { if (view.current.kb === Infinity) setKbPad(0); };
     const subs = [
       KeyboardEvents.addListener('keyboardWillShow', show), KeyboardEvents.addListener('keyboardDidShow', show),
@@ -539,6 +521,7 @@ export function Paper({ n }: { n: Note }) {
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
+          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: T.shape.rowMin }}
           onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}
@@ -549,8 +532,9 @@ export function Paper({ n }: { n: Note }) {
               <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
           )}
+          {/* 行直接當 ScrollView 的子元件（不多包一層），maintainVisibleContentPosition 才認得它們：最上面長出新行時，
+              捲在頂端附近（一行高以內）就捲上去露出新行，捲得深就原地不動 */}
           <LayoutAnimationConfig skipEntering>
-          <View>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
@@ -566,7 +550,6 @@ export function Paper({ n }: { n: Note }) {
                 onMenu={y => openRowMenu(it.id, y)} onEdit={caret => focusItem(it.id, caret)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
-          </View>
           </LayoutAnimationConfig>
           {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點。行在滑的時候它跟著滑 */}
           {showHint && (
@@ -575,40 +558,14 @@ export function Paper({ n }: { n: Note }) {
             </Animated.View>
           )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
-          <View style={{ height: 200 + kbPad + KBAR_H + insets.bottom }} />
+          <View style={{ height: 200 + kbPad + insets.bottom }} />
         </ScrollView>
       </View>
 
-      {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；輸入框開著時也不畫 */}
-      {kbPad === 0 && !composing && <Fab onPress={addLine} label="新增一行" />}
-
-      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 升起輸入框（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見；
-          輸入框開著時不畫（那三顆是在行裡編輯用的） */}
-      {kbPad > 0 && !composing && (
-        <Animated.View style={[st.kbarWrap, barStyle]}>
-          <View style={[st.kbar, { backgroundColor: c.surface }]}>
-            {([[-1, 'chevron.up', '上一行'], [1, 'chevron.down', '下一行']] as const).map(([d, icon, label]) => {
-              const off = editIdx < 0 || !n.items[editIdx + d];
-              return (
-                <Pressable key={label} onPress={() => focusNeighbor(d)} disabled={off}
-                  accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: off }}
-                  style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
-                  <Sym name={icon} size={20} color={off ? c.textMuted : c.textPrimary} weight="semibold" />
-                </Pressable>
-              );
-            })}
-            <Pressable onPress={addLine} accessibilityRole="button" accessibilityLabel="新增一行"
-              style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
-              <Sym name="plus" size={20} color={c.textPrimary} weight="semibold" />
-            </Pressable>
-            <View style={{ flex: 1 }} />
-            <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]} onPress={dismissKb}
-              accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
-              <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
-            </Pressable>
-          </View>
-        </Animated.View>
-      )}
+      {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
+          2-4 做法 6；多米 2026-11-01 說 ✓ 之後 ＋ 回來的時間點不對：之前等鍵盤完全收完才淡進，比鍵盤晚一拍）。
+          鍵盤膠囊（∧ ∨ ＋ ✓）2026-11-01 多米定拿掉：輸入框旁邊就有 ✓，行裡打字要收鍵盤點空白處或空行按 Return */}
+      {!kbUp && !composing && <Fab onPress={addLine} label="新增一行" />}
 
       {/* 輸入框（多米 2026-11-01，第四版＝乙）：框貼在鍵盤上面、跟著鍵盤一起升降，框與鍵盤同一個時鐘（keyboardFollow）。
           第三版整個畫面鋪了暗幕、點外面不能點到別行，多米真機說「編輯感覺很不好」（2-5：記是主線，不該被包成模態），同日定乙拿掉暗幕：
@@ -616,7 +573,9 @@ export function Paper({ n }: { n: Note }) {
           框那層讓觸控穿透到紙 */}
       {composing && (
         <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
-          <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
+          {/* maxH：框最高長到清單頂（標題列與時間列下面），再多才在框裡捲（多米 2026-11-01：打十幾行也要能沉浸，不要三行就捲） */}
+          <Composer calm={calm} maxH={winH - Math.max(kbPad, insets.bottom) - view.current.top - T.space.s * 2}
+            onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
         </Animated.View>
       )}
 
@@ -881,13 +840,16 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onLines
   const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
     <>
-      <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants"
+      {/* 高度誰撐：iOS 交給輸入框自己長（多行 TextInput 不給高度就跟著內容長），鏡像文字只負責 onTextLayout（K1 游標落點），鋪在底下不佔位；
+          網頁的 textarea 不會自己長，才反過來由鏡像撐高、輸入框鋪滿。之前 iOS 也用鏡像撐，鏡像右邊多留的 1 點讓剛好滿行的字在鏡像裡多換一行，
+          行底下就多出一整行空白（多米 2026-11-01 真機） */}
+      <Text style={[st.ta, lh, st.mirror, !WEB_DEPS && st.taFill]} accessible={false} importantForAccessibility="no-hide-descendants"
         onTextLayout={e => onLines(e.nativeEvent.lines)}>{txt + '​'}</Text>
       <TextInput ref={setRef} defaultValue={text} multiline scrollEnabled={false}
         submitBehavior="submit" enterKeyHint="next"
         // 網頁預覽的 TextInput 不認 submitBehavior，多行只有 blurOnSubmit 才會送出；送出後上層會把焦點放到新的一行。iOS 不給這個
         {...(Platform.OS === 'web' ? { blurOnSubmit: true } : null)}
-        style={[st.ta, lh, st.taFill, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}
+        style={[st.ta, lh, WEB_DEPS && st.taFill, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}
         accessibilityHint={done ? '已劃掉' : undefined}
         accessibilityActions={actions} onAccessibilityAction={onAction}
         onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={e => onKey(e, selNow())}
@@ -913,8 +875,8 @@ const st = StyleSheet.create({
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },
   field: { flex: 1, minWidth: 0 },
   ta: { ...T.font.bodyLine, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: T.space.xs },
-  // 撐高度用的隱形文字：右邊只比輸入框多留 1 點。留太多字快滿一行時隱形文字會先換行，底下就多出一整行空白；
-  // 完全不留又可能反過來把最後一行切掉。5 只用一次
+  // 隱形鏡像文字：iOS 只拿來量每一行的位置（K1 游標落點），不撐高度；網頁才用它撐高度（textarea 不會自己長）。
+  // 右邊只比輸入框多留 1 點：留太多字快滿一行時鏡像會先換行、網頁的行底下就多出一整行空白；完全不留又可能反過來把最後一行切掉。5 只用一次
   mirror: { color: 'transparent', paddingRight: 5 },
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
@@ -928,7 +890,6 @@ const st = StyleSheet.create({
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
+  // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
-  kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
-  kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
 });
