@@ -69,3 +69,6 @@
 - ✅ 兩個文件尾巴補完：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗/首次體驗-暫定.md` 待答清單的 ❓D 改成「由 Return 回答、多米真機過」；同兩份檔裡的「點兩下」對齊成「點一下」（`02-流程-暫定.md` T7 與詞彙表 #11 的「點兩下改字（提示句）」還寫著點兩下，不在 handoff 列的範圍，沒動，下次碰那兩份再改）
 - 📄 新增 `.vibe/待審-手感極致微調清單.md`：多米問「手感微調到完美要改什麼」。22 項（H1–H5 放手那一刻、D1–D4 拖放、K1–K7 鍵盤與打字、S1–S3 開啟與換紙、P1–P4 小回饋、E1–E2 延遲與量法），分五輪：前三輪純 JS 不用重建，第四輪兩個原生件各自一輪要重建（`react-native-keyboard-controller`、`expo-splash-screen`），第五輪量了才做。**一行程式沒改**，等多米勾。用到的 API 都在本機 node_modules 與 SDK 58 文件對過（清單第九節）
 - ❓ 待多米：H5 滑動時鍵盤收不收（推薦乙：不收）；第一輪之前要不要先照 E2 量一次延遲基準
+- ✅ **2026-11-01 手感第一輪已做**（多米選「做第一輪」）：H1 越線的字漸亮＋越線放大、H2 起步不跳 14 點、H3 滑回／彈回／滑出改接手指速度的彈簧、H4 放手那一刻就劃、D1 放下滑進落點＋`dragDrop` 震動、D2 拿起來浮起（放大 1.02＋陰影）、D3 讓位改彈簧。H5（滑動收不收鍵盤）等多米選。tokens 的 `motion` 四個時長改成 `spring`、新增 `dragLand`／`dragLift`／`swipeLabel`，`HAPTIC` 加 `dragDrop`；設計版 `Tokens.ts`、`00-原始清單` 第五／六節、`參數表-暫定` 已同步。check:tokens、typecheck、lint、25 個測試全過；**網頁預覽走過**滑動（60 時字淡、110 全亮、放手即換成「恢復」、彈簧回位）與拖曳（讓位、落地、順序換對）。**全部待多米真機**（碰 worklet）：真機看什麼在待審清單第一、二節每項的欄位
+- 📎 多米 2026-11-01 另提：右下 ＋ 改成「從底下升起的輸入框」。方案與三個 ❓ 寫在 `.vibe/待審-手感極致微調清單.md` 第十節，建議排在第二輪之前做；它跟提案第三輪拿掉的「常駐輸入列」不同（按 ＋ 才出現、會長高）
+- 🗑️ 雜訊：網頁預覽測手勢，要先在 console 把 `Element.prototype.setPointerCapture`／`releasePointerCapture` 換成空函式、`hasPointerCapture` 回 true，再用有間隔的 `PointerEvent`（`pointerType: 'touch'`、`buttons: 1`）慢慢滑或拖，不然 RNGH 的 pointerdown 會丟 NotFoundError、LogBox 蓋住畫面。`navigator.vibrate` 被瀏覽器擋是正常的（網頁版的震動）

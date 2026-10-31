@@ -151,11 +151,17 @@ export const shape = {
 };
 
 /* ---------- 動態：事件命名，毫秒。reduced＝減少動態時的替代（淡入淡出或不移動），不是關掉 ---------- */
+// spring＝Reanimated 的彈簧設定：duration 是「感知時長」（實際跑完約 1.5 倍）、dampingRatio 1＝剛好不過頭、<1 會晃一下、
+// overshootClamping＝不准衝過終點。放手類的動畫由畫面程式再加上手指放開的速度（velocity）當起始速度（2-4 做法 3）。
+// 2026-11-01 手感第一輪：滑回、彈回、滑出、讓位由固定時長改成彈簧，初值待多米真機調
 export const motion = {
-  strikeReturn:  { duration: 150, reducedFade: 150 }, // 減少動態：卡片不滑回，整行 150ms 淡回
-  deleteSlide:   { duration: 180, reducedFade: 150 }, // 減少動態：卡片不滑出，整行 150ms 淡出
-  snapBack:      { duration: 180 },                   // 減少動態：直接回位
-  dragShift:     { duration: 150 },                   // 減少動態：其他行直接讓位
+  strikeReturn:  { spring: { duration: 250, dampingRatio: 1 }, reducedFade: 150 }, // 劃掉後滑回原位。減少動態：不滑回，整行 150ms 淡回
+  deleteSlide:   { spring: { duration: 220, dampingRatio: 1, overshootClamping: true }, reducedFade: 150 }, // 刪除時滑出畫面。減少動態：不滑出，整行 150ms 淡出
+  snapBack:      { spring: { duration: 250, dampingRatio: 1 } }, // 沒滑夠放手彈回。減少動態：直接回位
+  dragShift:     { spring: { duration: 200, dampingRatio: 1 } }, // 排順序時其他行讓位。減少動態：直接讓位
+  dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
+  dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
+  swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
   keyboardFollow: { duration: 250, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 跟系統鍵盤（有給時長就用鍵盤的）
   fade:          150, // toast、確認框、減少動態時所有滑入／放大的替代
   sheetSlide:    { in: 220, out: 180 },
@@ -167,11 +173,13 @@ export const motion = {
 };
 
 /* ---------- 觸覺：一種事件一種觸覺 ---------- */
-// selection＝最輕的「嗒」（選到、經過）；impact Light＝輕碰撞（生出一個東西、放下）。多米 2026-10-31 第一輪加 add／color／dragPass
+// selection＝最輕的「嗒」（選到、經過）；impact Light＝輕碰撞（生出一個東西、放下）。多米 2026-10-31 第一輪加 add／color／dragPass，
+// 2026-11-01 手感第一輪加 dragDrop
 const light = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 const HAPTIC = {
   strike: Haptics.selectionAsync, dragStart: Haptics.selectionAsync, menu: Haptics.selectionAsync,
   add: light,                       // 右下 ＋、膠囊 ＋ 新增一行
+  dragDrop: light,                  // 排順序放手那一刻（放下一個東西）
   color: Haptics.selectionAsync,    // ⋯ 選單換紙的顏色
   dragPass: Haptics.selectionAsync, // 排順序時拖過另一行
   swipeArm: Haptics.selectionAsync, // 滑動時手指越過劃掉／刪除門檻那一刻（放手不再震）；第三輪加

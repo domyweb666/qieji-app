@@ -6,7 +6,8 @@
 // 點擊走手勢系統，手指一移動手勢就作廢，理論上捲動不會再誤觸。真機還會誤觸就改回 numberOfTaps: 2）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
 // 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
-// 從 app/note/[id].tsx 搬過來：滑動與拖曳的手勢（worklet）一行沒動。
+// 從 app/note/[id].tsx 搬過來的滑動與拖曳手勢（worklet），2026-11-01 手感第一輪改了放手那段：滑回、彈回、滑出、讓位、落地都是接手指速度的彈簧，
+// 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
@@ -17,7 +18,7 @@ import {
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
 import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, Extrapolation, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ago, binItem, CKEYS, col, convertNote, fullDate, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
@@ -43,6 +44,7 @@ function placeCaret(inp: TextInputInstance, at: number) {
 // 手勢在 UI 執行緒上發現「越線了」「跨過一行了」，排回 JS 震一下。一定要是模組層級的函式（規矩檔：worklet 裡不准直接叫 tokens 的函式）
 const hapticArm = () => haptic('swipeArm');
 const hapticPass = () => haptic('dragPass');
+const hapticLand = () => haptic('dragDrop'); // 排順序放手那一刻
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
@@ -302,31 +304,39 @@ export function Paper({ n }: { n: Note }) {
   const dragTo = useSharedValue(-1);
   const dragDy = useSharedValue(0);
   const dragH = useSharedValue(0);
-  // 每一行的中點（拿起來那一刻量的）。放 shared value 是因為「拖到第幾個位置」在手勢的 worklet 裡算（UI 執行緒），
-  // 不再每一格畫面跨到 JS 算一次（第三輪，2026-10-31）：JS 忙的時候被拖的那行不會慢半拍
+  // 每一行的中點、頂邊、高度（拿起來那一刻量的）。放 shared value 是因為「拖到第幾個位置」和「放下落在哪」都在手勢的 worklet 裡算（UI 執行緒），
+  // 不再每一格畫面跨到 JS 算一次（第三輪，2026-10-31）：JS 忙的時候被拖的那行不會慢半拍。頂邊與高度是 2026-11-01 第一輪為落地動畫加的
   const dragMids = useSharedValue<number[]>([]);
+  const dragTops = useSharedValue<number[]>([]);
+  const dragHs = useSharedValue<number[]>([]);
+  const dragLift = useSharedValue(0); // 0＝沒拿起，1＝浮起（被拖的行放大一點、有陰影）
   const drag = useRef<{ idx: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算在 LineRow 的 grip worklet 裡
+  // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算與放下的落地動畫在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
       Keyboard.dismiss();
       const idx = n.items.findIndex(i => i.id === id);
       if (idx < 0) return;
       drag.current = { idx };
-      dragMids.value = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
+      const ls = n.items.map(i => layouts.current[i.id]);
+      dragMids.value = ls.map(l => (l ? l.y + l.h / 2 : 0));
+      dragTops.value = ls.map(l => l?.y ?? 0);
+      dragHs.value = ls.map(l => l?.h ?? ROW_MIN);
       dragH.value = (layouts.current[id]?.h ?? ROW_MIN);
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
+      dragLift.value = calm ? 1 : withSpring(1, T.motion.dragLift.spring);
       setDragging(true);
       haptic('dragStart');
     },
+    // 落地動畫跑完（或減少動態時直接到位）才會到這裡：改資料、下一格把位移歸零（那時新順序已經畫好，行就在原地）
     end() {
       const d = drag.current;
       if (!d) return;
       drag.current = null;
       const to = dragTo.value;
       if (d.idx !== to) { const [m] = n.items.splice(d.idx, 1); n.items.splice(to, 0, m); touch(); }
-      requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; });
+      requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; });
       setDragging(false);
     },
   };
@@ -458,7 +468,7 @@ export function Paper({ n }: { n: Note }) {
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
-                dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids}
+                dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
                   layouts.current[it.id] = { y, h };
@@ -562,7 +572,7 @@ type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
   grip: boolean; editing: boolean; rev: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
-  dragMids: SharedValue<number[]>;
+  dragMids: SharedValue<number[]>; dragTops: SharedValue<number[]>; dragHs: SharedValue<number[]>; dragLift: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
@@ -581,46 +591,53 @@ function LineRow(p: LineProps) {
   const op = useSharedValue(1);
   const w = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
-  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragMids } = p;
+  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragMids, dragTops, dragHs, dragLift } = p;
   const { start: dragStart, end: dragEnd } = p.drag;
   const { swipeStrikeBg, swipeDeleteBg } = p.colors;
   const id = p.it.id;
   const M = T.motion, G = T.gesture;
   // 手指現在在哪一區：1＝已越過劃掉門檻、-1＝已越過刪除門檻、0＝都沒有。換區那一刻震一下（iOS 郵件、備忘錄的做法），放手不震
   const armed = useSharedValue(0);
+  // 滑動露出的「劃掉／刪除」那個字：越線那一刻放大一下再彈回，跟震動是同一個事件（2-4 做法 6）。
+  // 這是震動的「看得見的版本」：手機放桌上、觸覺關掉的人也知道滑夠了（2-4 失效邊界 2）。減少動態：不放大
+  const labelScale = useSharedValue(1);
 
   // 往右滑過門檻＝劃掉，往左滑過門檻＝刪除，沒滑夠就彈回。
+  // 放手之後的滑回、彈回、滑出都是接手指放開速度的彈簧（2-4 做法 3），不是固定時長；劃掉在放手那一刻就改資料，不等滑回跑完。
   // 減少動態：不播滑回、滑出，改成整行淡回／淡出（回饋要在，只是不移動）
   const swipe = usePanGesture({
     activeOffsetX: [-G.swipeActivate, G.swipeActivate],
     failOffsetY: [-G.swipeFailY, G.swipeFailY],
-    onActivate: () => { 'worklet'; armed.value = 0; scheduleOnRN(dismissKb); },
+    onActivate: () => { 'worklet'; armed.value = 0; labelScale.value = 1; scheduleOnRN(dismissKb); },
     onUpdate: e => {
       'worklet';
-      const dx = e.translationX, W = w.value;
-      tx.value = dx;
+      const dx = e.translationX, W = w.value, A = G.swipeActivate;
+      // 手勢要橫移 A 才成立，成立那一刻 translationX 已經是 A：扣掉它，行才會從手指底下 0 開始跟，不會先跳一格。門檻仍照手指走的距離（dx）判
+      tx.value = dx > 0 ? Math.max(0, dx - A) : Math.min(0, dx + A);
       const zone = dx > Math.min(G.strikeMax, W * G.strikeRatio) ? 1 : dx < -Math.min(G.deleteMax, W * G.deleteRatio) ? -1 : 0;
       if (zone === armed.value) return;
       armed.value = zone;
-      if (zone !== 0) scheduleOnRN(hapticArm);
+      if (zone === 0) return;
+      scheduleOnRN(hapticArm);
+      if (!calm) { labelScale.value = M.swipeLabel.armScale; labelScale.value = withSpring(1, M.swipeLabel.spring); }
     },
     onDeactivate: e => {
       'worklet';
       armed.value = 0;
-      const dx = e.translationX, W = w.value;
+      const dx = e.translationX, W = w.value, v = e.velocityX;
       if (!e.canceled && dx > Math.min(G.strikeMax, W * G.strikeRatio)) {
+        scheduleOnRN(onStrike, true); // 放手那一刻就劃；底下的滑回只是回位
         if (calm) {
           tx.value = 0;
           op.value = M.reducedDimFrom;
           op.value = withTiming(1, { duration: M.strikeReturn.reducedFade });
-          scheduleOnRN(onStrike, true);
-        } else tx.value = withTiming(0, { duration: M.strikeReturn.duration }, () => scheduleOnRN(onStrike, true));
+        } else tx.value = withSpring(0, { velocity: v, ...M.strikeReturn.spring });
       } else if (!e.canceled && dx < -Math.min(G.deleteMax, W * G.deleteRatio)) {
         if (calm) {
           tx.value = 0;
           op.value = withTiming(0, { duration: M.deleteSlide.reducedFade }, () => scheduleOnRN(onRemove));
-        } else tx.value = withTiming(-W, { duration: M.deleteSlide.duration }, () => scheduleOnRN(onRemove));
-      } else tx.value = calm ? 0 : withTiming(0, { duration: M.snapBack.duration });
+        } else tx.value = withSpring(-W, { velocity: v, ...M.deleteSlide.spring }, () => scheduleOnRN(onRemove));
+      } else tx.value = calm ? 0 : withSpring(0, { velocity: v, ...M.snapBack.spring });
     },
   });
   // 長按：在 JS 端跑（只是開選單）。手指移超過門檻就不算長按、讓給滑動
@@ -640,7 +657,7 @@ function LineRow(p: LineProps) {
   });
   // 長按、點一下、滑動只有一個會成立：手指移超過門檻長按和點一下就放棄，滑動才接手；按住超過長按時間就不算點
   const rowGesture = useExclusiveGestures(hold, tap, swipe);
-  // 把手：拿起、放下回 JS（量位置、改資料）；手指移動中「拖到第幾個位置」在這裡（UI 執行緒）算，不等 JS。
+  // 把手：拿起、放下回 JS（量位置、改資料）；手指移動中「拖到第幾個位置」與放下的落地動畫在這裡（UI 執行緒）算，不等 JS。
   // 拿起來的那幾毫秒 dragIdx 還是 -1（JS 還沒量完），先不算；跨過一行排回 JS 震一下
   const grip = usePanGesture({
     minDistance: G.dragActivate,
@@ -657,21 +674,61 @@ function LineRow(p: LineProps) {
       dragTo.value = to;
       scheduleOnRN(hapticPass);
     },
-    onFinalize: () => { 'worklet'; scheduleOnRN(dragEnd); },
+    // 放下（onDeactivate 才帶放手速度）：其他行早就讓好位了，被拖的行滑進空出來的那一格
+    // （往下拖＝to 那行原本的底邊往上一個自己的高；往上拖＝to 那行原本的頂邊），滑到了才回 JS 改資料；放手那一刻震一下。減少動態：直接到位
+    onDeactivate: e => {
+      'worklet';
+      const from = dragIdx.value;
+      if (from < 0) { scheduleOnRN(dragEnd); return; }
+      const to = dragTo.value, tops = dragTops.value, hs = dragHs.value, h = dragH.value;
+      const target = to === from ? 0 : to > from ? tops[to] + hs[to] - h - tops[from] : tops[to] - tops[from];
+      scheduleOnRN(hapticLand);
+      dragLift.value = calm ? 0 : withSpring(0, M.dragLift.spring);
+      if (calm) { dragDy.value = target; scheduleOnRN(dragEnd); return; }
+      dragDy.value = withSpring(target, { velocity: e.velocityY, ...M.dragLand.spring }, () => scheduleOnRN(dragEnd));
+    },
+    // 保險：手勢沒成立就放開（或拿起那幾毫秒內放開、JS 還沒量完）時收尾；end() 沒東西可收會自己略過
+    onFinalize: () => { 'worklet'; if (dragIdx.value < 0) scheduleOnRN(dragEnd); },
   });
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }], opacity: op.value }));
   const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? swipeStrikeBg : tx.value < 0 ? swipeDeleteBg : 'transparent' }));
-  const leftLabel = useAnimatedStyle(() => ({ opacity: tx.value > 0 ? 1 : 0 }));
-  const rightLabel = useAnimatedStyle(() => ({ opacity: tx.value < 0 ? 1 : 0 }));
+  // 露出的字：越線前跟著行的位移從淡到亮，到門檻剛好全亮；越線後鎖在全亮；放手回位時再淡回去。
+  // 行的位移比手指少 A（起步那段扣掉了），所以「到門檻」對行來說是門檻 − A
+  const leftLabel = useAnimatedStyle(() => {
+    const x = tx.value;
+    if (x <= 0) return { opacity: 0, transform: [{ scale: 1 }] };
+    const reach = Math.max(1, Math.min(G.strikeMax, w.value * G.strikeRatio) - G.swipeActivate);
+    const opacity = armed.value === 1 ? 1 : interpolate(x, [0, reach], [M.swipeLabel.fromOpacity, 1], Extrapolation.CLAMP);
+    return { opacity, transform: [{ scale: labelScale.value }] };
+  });
+  const rightLabel = useAnimatedStyle(() => {
+    const x = tx.value;
+    if (x >= 0) return { opacity: 0, transform: [{ scale: 1 }] };
+    const reach = Math.max(1, Math.min(G.deleteMax, w.value * G.deleteRatio) - G.swipeActivate);
+    const opacity = armed.value === -1 ? 1 : interpolate(-x, [0, reach], [M.swipeLabel.fromOpacity, 1], Extrapolation.CLAMP);
+    return { opacity, transform: [{ scale: labelScale.value }] };
+  });
+  // 排順序：被拖的行跟手指走並浮起（放大一點＋陰影；陰影要露出來得暫時解開給滑動用的 overflow: hidden），其他行用彈簧讓位
   const shift = useAnimatedStyle(() => {
     const from = dragIdx.value, to = dragTo.value;
-    if (from < 0) return { zIndex: 0, transform: [{ translateY: 0 }] };
-    if (index === from) return { zIndex: 5, transform: [{ translateY: dragDy.value }] };
+    const held = from >= 0 && index === from;
+    const lift = held ? dragLift.value : 0; // 0～1：浮起多少
     let y = 0;
-    if (from < to && index > from && index <= to) y = -dragH.value;
-    if (from > to && index < from && index >= to) y = dragH.value;
-    return { zIndex: 0, transform: [{ translateY: calm ? y : withTiming(y, { duration: M.dragShift.duration }) }] };
+    if (held) y = dragDy.value;
+    else if (from >= 0) {
+      if (from < to && index > from && index <= to) y = -dragH.value;
+      if (from > to && index < from && index >= to) y = dragH.value;
+    }
+    return {
+      zIndex: held ? 5 : 0,
+      overflow: held ? ('visible' as const) : ('hidden' as const),
+      shadowOpacity: T.shape.shadowSoft.shadowOpacity * lift,
+      transform: [
+        { translateY: held || calm || from < 0 ? y : withSpring(y, M.dragShift.spring) },
+        { scale: 1 + (calm ? 0 : (M.dragLift.scale - 1) * lift) },
+      ],
+    };
   }, WEB_DEPS ? [index, calm] : undefined);
 
   // VoiceOver：滑動和拖曳用不了，從輸入框的動作選單（上下滑）劃掉、刪除、移動
@@ -771,7 +828,9 @@ const st = StyleSheet.create({
   titleInput: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
   chev: { width: T.shape.chev, height: T.shape.chev, borderRadius: T.shape.pill(T.shape.chev), alignItems: 'center', justifyContent: 'center', ...T.shape.shadowSoft },
   // 一行就是紙上的一行：沒有卡片，底下一條淡格線，左右貼齊整頁
-  ci: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden' },
+  // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
+  ci: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden',
+    shadowColor: T.shape.shadowSoft.shadowColor, shadowRadius: T.shape.shadowSoft.shadowRadius, shadowOffset: T.shape.shadowSoft.shadowOffset },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.l },
   underText: { ...T.font.subheadBold },
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },

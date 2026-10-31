@@ -120,13 +120,18 @@ export const T = {
     shadowStrong: { color: P.shadowInk, opacity: 0.3,  radius: 10, offset: { width: 0, height: 4 } }, // 右下 ＋
   },
 
-  // 動態：事件命名，數字照抄 04-手感 參數表與程式現值。全部是時長型（毫秒）。
+  // 動態：事件命名，數字照抄 04-手感 參數表與程式現值。
   // reduced＝「減少動態」時的替代版（多米定：照書改成替換，不是關掉）。回饋要在，只是不移動。
+  // 2026-11-01 手感第一輪：放手類（滑回、彈回、滑出、讓位、落地）由時長型改成彈簧（spring：Reanimated 的感知時長毫秒＋dampingRatio，
+  // 1＝剛好不過頭；放手的再加手指速度當起始速度，2-4 做法 3），初值待多米真機調。程式版在 src/lib/tokens.ts
   motion: {
-    strikeReturn:  { duration: 150, reduced: { move: 0, fade: 150 } }, // 卡片不滑回；刪除線 150ms 淡入
-    deleteSlide:   { duration: 180, reduced: { move: 0, fade: 150 } }, // 卡片不滑出；整行 150ms 淡出
-    snapBack:      { duration: 180, reduced: { move: 0 } },            // 沒結果的動作，直接回位
-    dragShift:     { duration: 150, reduced: { move: 0 } },            // 其他行直接讓位
+    strikeReturn:  { spring: { duration: 250, dampingRatio: 1 }, reduced: { move: 0, fade: 150 } }, // 劃掉後滑回；刪除線放手那一刻就畫。減少動態：不滑回、整行 150ms 淡回
+    deleteSlide:   { spring: { duration: 220, dampingRatio: 1, overshootClamping: true }, reduced: { move: 0, fade: 150 } }, // 滑出畫面。減少動態：整行 150ms 淡出
+    snapBack:      { spring: { duration: 250, dampingRatio: 1 }, reduced: { move: 0 } }, // 沒滑夠彈回。減少動態：直接回位
+    dragShift:     { spring: { duration: 200, dampingRatio: 1 }, reduced: { move: 0 } }, // 其他行讓位。減少動態：直接讓位
+    dragLand:      { spring: { duration: 250, dampingRatio: 1 }, reduced: { move: 0 } }, // 放下時滑進落點。減少動態：直接到位
+    dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 }, reduced: { scale: 1 } }, // 拿起浮起：放大＋陰影 shadowSoft。減少動態：只有陰影
+    swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 }, reduced: { scale: 1 } }, // 露出的字：越線前 0.35→1，越線放大再彈回。減少動態：只有透明度
     keyboardFollow: { duration: 'system' as const, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 跟系統鍵盤，減少動態不另外處理
     toastFade:     { in: 150, out: 150 },                              // 本來就是淡入淡出，減少動態不改
     sheetSlide:    { in: 220, out: 180, reduced: { fade: 150 } },      // 滑入滑出改淡入淡出
@@ -142,7 +147,12 @@ export const T = {
     strike:    'selection' as const, // 劃掉／恢復（expo-haptics selectionAsync）
     dragStart: 'selection' as const, // 開始拖曳
     menu:      'selection' as const, // 長按一行跳出選單（重新設計分支）
-    // 刪除、復原、釘選、toast、存檔失敗：無
+    add:       'impactLight' as const, // 右下 ＋、膠囊 ＋ 新增一行（2026-10-31）
+    color:     'selection' as const,   // ⋯ 選單換紙的顏色（2026-10-31）
+    dragPass:  'selection' as const,   // 排順序時拖過另一行（2026-10-31）
+    swipeArm:  'selection' as const,   // 滑動越過劃掉／刪除門檻那一刻（2026-10-31 第三輪）
+    dragDrop:  'impactLight' as const, // 排順序放手那一刻（2026-11-01 手感第一輪）
+    // 刪除、復原、釘選、toast、存檔失敗、Return 開新行、進編輯、切行、收鍵盤：無
   },
 
   // 非動畫的門檻與時間（放這裡是讓它有家，不是動畫）
