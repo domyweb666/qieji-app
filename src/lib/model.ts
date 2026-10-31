@@ -63,6 +63,9 @@ export function fixNote(n: any): Note {
   n.title = n.title || '';
   n.body = n.body || '';
   n.b = n.b === undefined ? true : !!n.b;
+  // 30 天自動清（2026-11-01 接上）：不在最近刪除裡就不該留著刪除時間——網頁版還原只改 deleted、不清 deletedAt，殘留的舊時間會讓它下次被刪時立刻過期。
+  // 在最近刪除裡但時間不可信的也拿掉，交給 stampOldTrash 從現在起算
+  if (!n.deleted || !validTime(n.deletedAt)) delete n.deletedAt;
   return n as Note;
 }
 
@@ -162,13 +165,16 @@ export function backupName(d = new Date()) {
   return `茄記備份-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}.json`;
 }
 // merge a backup file into state; notes merge by `updated`, garden keeps the bigger count per day
-export function importBackup(s: State, text: string) {
+export function importBackup(s: State, text: string, now = Date.now()) {
   const data = JSON.parse(text);
   if (!data || !Array.isArray(data.notes)) throw new Error('not a backup');
   const have = new Map(s.notes.map(n => [n.id, n]));
   let added = 0, updated = 0;
   for (const n0 of data.notes) {
     const n = fixNote(n0), h = have.get(n.id);
+    // 30 天自動清：匯進來的、在最近刪除裡的張與行一律從匯入當下重算 30 天（拿不準就不刪）。備份可能來自網頁版（還原不清 deletedAt，
+    // 會帶著過期的舊時間）、也可能是很久以前的備份（照舊時間會一匯入就清掉）。Object.assign 合併時帶過去的也是重算過的值
+    restampTrash(n, now);
     if (!h) { s.notes.push(n); have.set(n.id, n); added++; }
     else if (n.updated > h.updated) { Object.assign(h, n); updated++; }
   }
@@ -274,16 +280,20 @@ export function groupNotes(notes: Note[], o: { trash: boolean }): Section[] {
 
 /* ---------------- 最近刪除 30 天自動清掉 ---------------- */
 // 會真的刪掉使用者資料，所以規則是「拿不準就不刪」：只有在最近刪除裡、刪除時間可信、而且已經滿 30 天才清。
-// 規則細節都在 tests/trash.test.mjs。注意：目前還沒有任何地方呼叫 purgeExpiredTrash，要等工程師看過才接上。
+// 規則細節都在 tests/trash.test.mjs。2026-11-01 接上 app（多米定）：store.purgeTrash 在打開 app 與回到前景時跑；張看 deletedAt、刪掉的行看 bin 裡的 at
 export const TRASH_DAYS = 30;
 const TRASH_MS = TRASH_DAYS * 86400000;
 const validTime = (t: unknown): t is number => typeof t === 'number' && Number.isFinite(t) && t > 0;
 
+// 四條規則合在一處：時間可信、現在可信、時間不比現在晚（手機時間被往前調過）、已滿 30 天
+export function isExpiredAt(at: unknown, now: number): boolean {
+  if (!validTime(now) || !validTime(at)) return false;
+  if (at > now) return false;
+  return now - at >= TRASH_MS;
+}
 export function isExpiredTrash(n: Note, now: number) {
   if (!n.deleted) return false;
-  if (!validTime(now) || !validTime(n.deletedAt)) return false;
-  if (n.deletedAt > now) return false; // 手機時間被往前調過
-  return now - n.deletedAt >= TRASH_MS;
+  return isExpiredAt(n.deletedAt, now);
 }
 
 export function markDeleted(n: Note, now: number) {
@@ -310,4 +320,24 @@ export function purgeExpiredTrash(notes: Note[], now: number) {
   const kept: Note[] = [], removed: Note[] = [];
   for (const n of notes) (isExpiredTrash(n, now) ? removed : kept).push(n);
   return { kept, removed };
+}
+// 刪掉的行（每張紙的 bin，at＝刪掉的時間）同一套規則。沒有可信時間的補成現在；滿 30 天的清掉。回傳補了幾行／清了幾行
+export function stampOldBin(notes: Note[], now: number) {
+  let stamped = 0;
+  for (const n of notes) for (const it of n.bin) if (!validTime(it.at)) { it.at = now; stamped++; }
+  return stamped;
+}
+export function purgeExpiredBin(notes: Note[], now: number) {
+  let removed = 0;
+  for (const n of notes) {
+    const keep = n.bin.filter(it => !isExpiredAt(it.at, now));
+    removed += n.bin.length - keep.length;
+    if (keep.length !== n.bin.length) n.bin = keep;
+  }
+  return removed;
+}
+// 匯入備份時用：在最近刪除裡的張與行一律從現在起算 30 天；不在最近刪除裡的張不留刪除時間
+export function restampTrash(n: Note, now: number) {
+  if (n.deleted) n.deletedAt = now; else delete n.deletedAt;
+  for (const it of n.bin) it.at = now;
 }

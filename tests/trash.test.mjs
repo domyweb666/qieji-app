@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TRASH_DAYS, isExpiredTrash, markDeleted, markRestored, stampOldTrash, purgeExpiredTrash, parseState, importBackup,
+  TRASH_DAYS, isExpiredTrash, isExpiredAt, markDeleted, markRestored, stampOldTrash, purgeExpiredTrash, stampOldBin, purgeExpiredBin, parseState, importBackup,
 } from '../src/lib/model.ts';
 
 const DAY = 86400000;
@@ -98,11 +98,47 @@ test('沒有東西過期時，回傳的就是原本那幾則', () => {
   assert.deepEqual(r.kept.map(n => n.id), ['a', 'b']);
 });
 
-test('存檔讀回來、匯入備份時，刪除時間會留著', () => {
-  const raw = JSON.stringify({ notes: [{ id: 'z', type: 'check', title: '丟掉', items: [], color: 'blue',
-    deleted: true, deletedAt: NOW - 3 * DAY, created: 1, updated: 2 }] });
-  assert.equal(parseState(raw).notes[0].deletedAt, NOW - 3 * DAY);
-  const s = parseState(null);
-  importBackup(s, raw);
+test('自己的存檔讀回來，刪除時間會留著；不在最近刪除裡的殘留時間會被拿掉', () => {
+  const raw = JSON.stringify({ notes: [
+    { id: 'z', type: 'check', title: '丟掉', items: [], color: 'blue', deleted: true, deletedAt: NOW - 3 * DAY, created: 1, updated: 2 },
+    // 網頁版還原過的：deleted 是 false 但 deletedAt 還留著（網頁版只改 deleted）→ 讀回來要拿掉，不然下次刪它會立刻過期
+    { id: 'w', type: 'check', title: '還原過', items: [], color: 'blue', deleted: false, deletedAt: NOW - 400 * DAY, created: 1, updated: 2 },
+  ] });
+  const s = parseState(raw);
   assert.equal(s.notes[0].deletedAt, NOW - 3 * DAY);
+  assert.equal(s.notes[1].deletedAt, undefined);
+});
+
+test('匯入備份：在最近刪除裡的張與行一律從匯入當下重算 30 天（風險 1、2：網頁版的舊時間、很久以前的備份）', () => {
+  const raw = JSON.stringify({ notes: [
+    { id: 'z', type: 'check', title: '丟掉', items: [], color: 'blue', deleted: true, deletedAt: NOW - 400 * DAY, created: 1, updated: 2,
+      bin: [{ id: 'z1', t: '刪掉的行', at: NOW - 400 * DAY }] },
+    { id: 'w', type: 'check', title: '還原過', items: [], color: 'blue', deleted: false, deletedAt: NOW - 400 * DAY, created: 1, updated: 2 },
+  ] });
+  const s = parseState(null);
+  importBackup(s, raw, NOW);
+  assert.equal(s.notes[0].deletedAt, NOW);
+  assert.equal(s.notes[0].bin[0].at, NOW);
+  assert.equal(s.notes[1].deletedAt, undefined);
+  // 一匯入當下一則都不會過期
+  assert.equal(purgeExpiredTrash(s.notes, NOW).removed.length, 0);
+  assert.equal(purgeExpiredBin(s.notes, NOW), 0);
+  // 同一則比較新的那份蓋過舊的（Object.assign），帶過去的也是重算過的時間
+  const s2 = parseState(JSON.stringify({ notes: [{ id: 'z', type: 'check', title: '舊', items: [], color: 'blue', deleted: true, deletedAt: NOW - 50 * DAY, created: 1, updated: 1 }] }));
+  importBackup(s2, raw, NOW);
+  assert.equal(s2.notes[0].deletedAt, NOW);
+});
+
+test('刪掉的行（bin 裡的 at）同一套規則：沒時間的補成現在、滿 30 天的清掉、其他照留', () => {
+  const notes = [
+    note({ id: 'a', bin: [{ id: 'a1', t: '舊', at: NOW - 31 * DAY }, { id: 'a2', t: '新', at: NOW - DAY }, { id: 'a3', t: '沒時間' }, { id: 'a4', t: '未來', at: NOW + DAY }] }),
+    note({ id: 'b', bin: [] }),
+  ];
+  assert.equal(stampOldBin(notes, NOW), 1);
+  assert.equal(notes[0].bin[2].at, NOW);
+  assert.equal(purgeExpiredBin(notes, NOW), 1);
+  assert.deepEqual(notes[0].bin.map(i => i.id), ['a2', 'a3', 'a4']);
+  assert.equal(isExpiredAt(NOW - 30 * DAY, NOW), true);
+  assert.equal(isExpiredAt(NOW - 30 * DAY + 1, NOW), false);
+  assert.equal(isExpiredAt('oops', NOW), false);
 });

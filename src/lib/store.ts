@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, type State } from './model';
+import { emptyState, HINT_KEY, KEY, parseState, purgeExpiredBin, purgeExpiredTrash, stampOldBin, stampOldTrash, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
@@ -68,6 +68,21 @@ export const store = {
     box.loaded = true;
     box.version++;
     emit();
+    store.purgeTrash();
+  },
+  // 最近刪除 30 天自動清（2026-11-01 接上，多米定；規則在 model.ts 與 tests/trash.test.mjs，鐵則是拿不準就不刪）：
+  // 打開 app 讀完資料、回到前景時各跑一次。先把沒有可信時間的張與行補成現在（從今天起算 30 天），再清掉滿 30 天的；清了才重畫，只補時間就只存檔。
+  // 清掉不留紀錄、不提示（跟 iOS 備忘錄一樣；最近刪除頁那句「放滿 30 天會自動清掉」就是告知）。回傳清掉幾張＋幾行
+  purgeTrash(now = Date.now()) {
+    if (!box.loaded) return 0;
+    const notes = box.state.notes;
+    const stamped = stampOldTrash(notes, now) + stampOldBin(notes, now);
+    const { kept, removed } = purgeExpiredTrash(notes, now);
+    const lines = purgeExpiredBin(notes, now);
+    if (removed.length) box.state.notes = kept;
+    if (removed.length || lines) store.change();
+    else if (stamped) store.save();
+    return removed.length + lines;
   },
   // 改完資料後呼叫：重畫畫面，稍後存檔
   change() {
@@ -89,10 +104,10 @@ export const store = {
   onSaveError(fn: () => void) { box.onSaveError = fn; },
 };
 
-// app 進背景時立刻存，不等計時器（重跑檔案時不重複註冊）
+// app 進背景時立刻存，不等計時器；回到前景時跑一次 30 天自動清（重跑檔案時不重複註冊）
 if (!box.listening) {
   box.listening = true;
-  AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); });
+  AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); else store.purgeTrash(); });
 }
 
 const subscribe = (f: () => void) => { box.subs.add(f); return () => { box.subs.delete(f); }; };

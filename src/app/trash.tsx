@@ -6,7 +6,7 @@ import { Empty } from '../components/Empty';
 import { listStyles, NoteSections } from '../components/NoteList';
 import { ui } from '../components/Overlay';
 import { GlassBtn, WebTop } from '../components/WebBars';
-import { label, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
+import { label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
 import { store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
@@ -23,7 +23,7 @@ export default function Trash() {
 
   function onPress(n: Note) {
     ui.sheet([
-      { label: '還原', fn: () => { n.deleted = false; store.change(); ui.toast('已還原'); } },
+      { label: '還原', fn: () => { markRestored(n); store.change(); ui.toast('已還原'); } },
       { label: '永久刪除', danger: true, fn: () => { s.notes = s.notes.filter(x => x !== n); store.change(); } },
     ], label(n));
   }
@@ -54,7 +54,8 @@ export default function Trash() {
         <WebTop title={title} left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />}
           right={total > 0 ? <GlassBtn icon="ellipsis" label="選單" onPress={() => showActs(acts)} /> : undefined} />
 
-        {total > 0 && <Text style={[st.note, { color: c.textSecondary }]}>點一下可以還原或永久刪除。</Text>}
+        {/* 30 天自動清接上後的版本（06 首次體驗 3-3）：講規則、不在每則上顯示剩幾天（那是壓力來源） */}
+        {total > 0 && <Text style={[st.note, { color: c.textSecondary }]}>{`放滿 ${TRASH_DAYS} 天會自動清掉。點一下可以還原或永久刪除。`}</Text>}
         {notes.length > 0 && <NoteSections notes={notes} trash onPress={onPress} />}
         {lines.length > 0 && (
           <View>
@@ -64,7 +65,7 @@ export default function Trash() {
             </View>
           </View>
         )}
-        {total === 0 && <Empty face={FACE_SLEEP} lines={['最近刪除是空的', '刪掉的清單和行會先放在這裡']} />}
+        {total === 0 && <Empty face={FACE_SLEEP} lines={['最近刪除是空的', `刪掉的清單和行會先放在這裡 ${TRASH_DAYS} 天，之後自動清掉`]} />}
       </ScrollView>
     </View>
   );
