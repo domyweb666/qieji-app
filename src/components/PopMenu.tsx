@@ -40,18 +40,25 @@ export function PopMenu({ acts, top, header, onClose }: { acts: Act[]; top: numb
       </Animated.View>
       <Animated.View entering={cardIn} exiting={cardOut} style={[st.card, { backgroundColor: c.surface, top }]}>
         {header}
+        {/* 分組照 iOS 設定 app 的「分組清單」：一組一塊圓角底、組裡的項目用從文字起算的髮絲線隔開、組與組之間留一大段（多米 2026-11-01 看了
+            每項各自一顆藥丸的版本說太雜，要參考設定 app 的間距） */}
         {sections.map((g, gi) => (
-          <View key={gi} style={[st.group, (gi > 0 || !!header) && st.groupGap]}>
+          <View key={gi} style={(gi > 0 || !!header) && st.groupGap}>
             {g.head ? <Text style={[st.head, { color: c.textSecondary }]}>{g.head}</Text> : null}
-            {g.rows.map(a => (
-              <Pressable key={a.label} onPress={() => pick(a)} accessibilityRole="menuitem"
-                accessibilityState={a.on == null ? undefined : { checked: a.on }}
-                style={({ pressed }) => [st.row, { backgroundColor: pressed ? c.pressedFill : c.page }]}>
-                <View style={st.icon}>{a.icon ? <Sym name={a.icon} size={19} color={a.destructive ? c.danger : c.textPrimary} /> : null}</View>
-                <Text style={[st.label, { color: a.destructive ? c.danger : c.textPrimary }]}>{a.label}</Text>
-                {a.on ? <Sym name="checkmark" size={16} color={c.accent} weight="semibold" /> : null}
-              </Pressable>
-            ))}
+            <View style={[st.group, { backgroundColor: c.page }]}>
+              {g.rows.map((a, i) => (
+                <View key={a.label}>
+                  {i > 0 && <View style={[st.sep, { backgroundColor: c.separator }]} />}
+                  <Pressable onPress={() => pick(a)} accessibilityRole="menuitem"
+                    accessibilityState={a.on == null ? undefined : { checked: a.on }}
+                    style={({ pressed }) => [st.row, pressed && { backgroundColor: c.pressedFill }]}>
+                    <View style={st.icon}>{a.icon ? <Sym name={a.icon} size={19} color={a.destructive ? c.danger : c.textPrimary} /> : null}</View>
+                    <Text style={[st.label, { color: a.destructive ? c.danger : c.textPrimary }]}>{a.label}</Text>
+                    {a.on ? <Sym name="checkmark" size={16} color={c.accent} weight="semibold" /> : null}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
           </View>
         ))}
       </Animated.View>
@@ -61,12 +68,15 @@ export function PopMenu({ acts, top, header, onClose }: { acts: Act[]; top: numb
 
 const st = StyleSheet.create({
   // 280 只用一次：卡的寬度，要放得下一排九個色塊（9 × 26 ＋ 兩邊內距）
-  card: { position: 'absolute', right: T.space.m, width: 280, borderRadius: T.shape.radiusCard, padding: T.space.s,
+  card: { position: 'absolute', right: T.space.m, width: 280, borderRadius: T.shape.radiusCard, padding: T.space.m,
     transformOrigin: 'top right', ...T.shape.shadowSoft, elevation: 12 },
-  group: { gap: T.space.xs },
-  groupGap: { marginTop: T.space.m },
-  head: { ...T.font.footnote, marginLeft: T.space.m, marginBottom: T.space.xs },
-  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l, borderRadius: T.shape.radiusCard },
+  // 一組一塊圓角底；組與組之間留 24（設定 app 的分組間距那一級）
+  group: { borderRadius: T.shape.radiusCard, overflow: 'hidden' },
+  groupGap: { marginTop: T.space.xl },
+  head: { ...T.font.footnote, marginLeft: T.space.l, marginBottom: T.space.s },
+  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l },
+  // 髮絲線從文字起算（左內距＋圖示欄＋間距），跟設定 app 一樣不切到圖示
+  sep: { height: StyleSheet.hairlineWidth, marginLeft: T.space.l + T.space.xl + T.space.m },
   icon: { width: T.space.xl, alignItems: 'center' },
   label: { flex: 1, ...T.font.body },
 });

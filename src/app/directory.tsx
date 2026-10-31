@@ -9,11 +9,10 @@ import type { Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
 import { ui } from '../components/Overlay';
 import { PopMenu } from '../components/PopMenu';
-import { Swatches } from '../components/Swatches';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
-import { col, label, moveItem, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
+import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
@@ -25,11 +24,9 @@ export default function Directory() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const [filter, setFilter] = useState<ColorKey | 'all'>('all');
   const [menu, setMenu] = useState(false);
   const [q, setQ] = useState('');
   const searching = !!q.trim();
-  const chipColor = useNoteColors(filter === 'all' ? 'purple' : filter);
 
   // K6（2026-11-01 第三輪）：面板收完那一刻（原生堆疊對這個畫面發 transitionEnd、closing＝true，在卸載之前）通知 store，
   // 紙上「新的一張」的輸入框就能馬上升起，不用等 700ms 的保險。事件名與 closing 旗標對過 expo-router 的 NativeStackView；網頁沒這個事件
@@ -39,7 +36,9 @@ export default function Directory() {
     return nav.addListener('transitionEnd', e => { if (e.data?.closing) store.panelClosed(); });
   }, [navigation]);
 
-  const notes = visibleNotes(s, { trash: false, filter, q, sort: s.sort });
+  // 多米 2026-11-01：目錄的排序選項與顏色篩選拿掉（太雜）。排序固定用 s.sort 現值（預設最近改過的在前），顏色篩選不再有；
+  // 清單多了要不要分組／資料夾，照 2-5 寫成方案等他選（審查紀錄 2026-11-01 最後一段）
+  const notes = visibleNotes(s, { trash: false, filter: 'all', q, sort: s.sort });
   const pinned = notes.filter(n => n.pinned), other = notes.filter(n => !n.pinned);
   const trashed = s.notes.filter(n => n.deleted).length;
   // 兩欄：整頁左右各留 16，中間留 12
@@ -58,25 +57,18 @@ export default function Directory() {
     store.open(n.id);
     router.back();
   }
-  // 新的一張：篩選中就用那個顏色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
+  // 新的一張：黃色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
   function add() {
-    const n = newNote(filter !== 'all' ? filter : 'yellow', 'check');
+    const n = newNote('yellow', 'check');
     if (from && moving) { pick(n); return; }
     store.open(n.id, true);
     router.back();
   }
 
-  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。顏色篩選＝卡最上面那排真色塊（跟紙換色同一排，點選中的那顆＝取消篩選），
-  // 排序攤開成一組打勾項，不再像原生表單那樣選一層再升一層；讀屏的色名統一用一般色名（紫色…），不用蔬菜名（詞彙表 #10）
+  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。同日稍後排序與顏色篩選拿掉，只剩備份
   const acts: Act[] = [
-    { label: '全部顏色', icon: 'circle.grid.2x2', on: filter === 'all', fn: () => setFilter('all') },
-    { label: '排序', inline: true, head: true, sub: (Object.keys(SORTS) as SortKey[]).map(k => ({
-      label: SORTS[k], on: s.sort === k, fn: () => { s.sort = k; store.change(); },
-    })) },
-    { label: '備份', inline: true, sub: [
-      { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
-      { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
-    ] },
+    { label: '匯出備份', icon: 'square.and.arrow.up', fn: exportData },
+    { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
   ];
   // 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留
   const padTop = native ? T.space.l : insets.top + T.space.s;
@@ -96,16 +88,6 @@ export default function Directory() {
 
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
         contentContainerStyle={[st.body, { paddingBottom: insets.bottom + T.space.xxl }]}>
-        {filter !== 'all' && (
-          // chip 本身不到 44 高，用 hitSlop 把點擊範圍撐出去
-          <Pressable style={[st.chip, { backgroundColor: c.page }]} hitSlop={T.space.s} onPress={() => setFilter('all')}
-            accessibilityLabel="取消顏色篩選">
-            <View style={[st.chipDot, { backgroundColor: chipColor.hd, borderColor: c.dotOutline }]} />
-            <Text style={[st.chipText, { color: c.textPrimary }]}>只顯示{col(filter).hue}</Text>
-            <Sym name="xmark.circle.fill" size={16} color={c.textMuted} />
-          </Pressable>
-        )}
-
         {moving && (
           <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
         )}
@@ -123,9 +105,8 @@ export default function Directory() {
         {pinned.length > 0 && other.length > 0 && <Text style={[st.head, { color: c.textSecondary }]}>其他</Text>}
         <View style={st.grid}>{tiles(other)}</View>
 
-        {/* 三種空分開：找不到→帶他剛打的字；篩選→說是哪個顏色；第一次不會是空的（紙永遠至少一張） */}
+        {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
         {notes.length === 0 && searching && <Empty face={FACE_PUZZLED} lines={[`找不到含「${q.trim()}」的清單`]} />}
-        {notes.length === 0 && !searching && filter !== 'all' && <Empty face={FACE_PUZZLED} lines={[`沒有${col(filter).hue}的清單`]} />}
 
         {trashed > 0 && (
           <Pressable onPress={() => router.replace('/trash')} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
@@ -140,9 +121,7 @@ export default function Directory() {
       </ScrollView>
 
       {menu && (
-        <PopMenu acts={acts} top={padTop + T.shape.hitMin + T.space.s} onClose={() => setMenu(false)}
-          header={<Swatches label="依顏色篩選" current={filter === 'all' ? null : filter}
-            onPick={k => { setFilter(k === filter ? 'all' : k); setMenu(false); }} />} />
+        <PopMenu acts={acts} top={padTop + T.shape.hitMin + T.space.s} onClose={() => setMenu(false)} />
       )}
     </View>
   );
@@ -163,7 +142,6 @@ function Tile({ n, w, cur, onPress }: { n: Note; w: number; cur: boolean; onPres
   );
 }
 
-const CHIP_DOT = 9;
 const st = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
   search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.radiusCard, flexDirection: 'row', alignItems: 'center', gap: T.space.s,
@@ -171,10 +149,6 @@ const st = StyleSheet.create({
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
-  chip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: T.space.s, marginBottom: T.space.m,
-    borderRadius: T.shape.radiusCard, paddingVertical: T.space.s, paddingHorizontal: T.space.m },
-  chipDot: { width: CHIP_DOT, height: CHIP_DOT, borderRadius: T.shape.pill(CHIP_DOT), borderWidth: T.shape.borderCard },
-  chipText: { ...T.font.subhead },
   head: { ...T.font.sectionHead, marginTop: T.space.l, marginBottom: T.space.s, marginLeft: T.space.xs },
   moveHead: { ...T.font.subhead, marginBottom: T.space.m, marginLeft: T.space.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
