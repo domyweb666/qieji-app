@@ -101,6 +101,7 @@ export function useColors(): Colors {
 /* ---------- 文字：對應系統文字樣式，字級是系統預設值，靠 allowFontScaling 跟動態字級 ---------- */
 export const font = {
   listTitle:    { fontSize: 20, fontWeight: '700' as const }, // Title 3；清單標題，最多放大 1.5 倍（多米定）
+  paperTitle:   { fontSize: 28, fontWeight: '700' as const }, // Title 1；紙最上面的清單名（重新設計分支）
   body:         { fontSize: 17, fontWeight: '400' as const }, // Body；每一行、首頁清單名稱、選單項目
   bodyLine:     { fontSize: 17, lineHeight: 27 },             // 每一行的字（行高 1.6）
   emphasis:     { fontSize: 17, fontWeight: '600' as const }, // Headline；確認框的字
@@ -134,6 +135,14 @@ export const shape = {
   menuRow: 50,
   fab: 58,
   swatchPad: 5,
+  // 重新設計分支（紙是家）新增
+  composer: 50,  // 底部輸入列的藥丸高度
+  face: 30,      // 輸入列左邊的茄子臉
+  chev: 22,      // 清單名旁邊的 ⌄ 小圓
+  tile: 84,      // 目錄的色磚高度
+  tileTag: 40,   // 色磚右下角露出的色圓
+  swatchDot: 26, // ⋯ 選單裡一排九個色塊
+  emptyFace: 72, // 空紙上的茄子
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋
 };

@@ -104,3 +104,30 @@ test('複製全文：每行編號、中間空一行，劃掉的行照常顯示�
   ] };
   assert.equal(plain(n), '1.寫交接\n\n2.（劃線）做茄子田');
 });
+
+/* ---------------- 紙上的順序（重新設計分支） ---------------- */
+import { setDone, tidyDone } from '../src/lib/model.ts';
+
+const row = (id, done = false) => ({ id, t: id, done, b: false });
+
+test('tidyDone：劃掉的行排到後面，沒動到就回 false', () => {
+  const items = [row('a'), row('b', true), row('c'), row('d', true)];
+  assert.equal(tidyDone(items), true);
+  assert.deepEqual(items.map(i => i.id), ['a', 'c', 'b', 'd']);
+  assert.equal(tidyDone(items), false); // 已經排好
+  assert.deepEqual(items.map(i => i.id), ['a', 'c', 'b', 'd']);
+});
+
+test('setDone：劃掉搬到劃掉區最前面，恢復搬回最上面', () => {
+  const items = [row('a'), row('b'), row('c'), row('x', true), row('y', true)];
+  setDone(items, 'b', true);
+  assert.deepEqual(items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a', 'c', 'b-', 'x-', 'y-']);
+  setDone(items, 'y', false);
+  assert.deepEqual(items.map(i => `${i.id}${i.done ? '-' : ''}`), ['y', 'a', 'c', 'b-', 'x-']);
+  setDone(items, 'nope', true); // 找不到：什麼都不動
+  assert.equal(items.length, 5);
+  // 一張沒有劃掉的紙：劃掉第一行就排到最後
+  const one = [row('p'), row('q')];
+  setDone(one, 'p', true);
+  assert.deepEqual(one.map(i => i.id), ['q', 'p']);
+});

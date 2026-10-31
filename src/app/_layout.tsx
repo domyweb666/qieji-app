@@ -37,20 +37,14 @@ export default function RootLayout() {
           freezeOnBlur: true,
           contentStyle: { backgroundColor: c.page },
         }}>
-          {/* 首頁：標題列不透明、不放標題（像提醒事項），底下是左右滑的三頁 */}
-          <Stack.Screen name="index" options={{ headerTransparent: false, headerStyle: { backgroundColor: c.page } }} />
-          <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
-          {/* iOS 26 預設整個畫面往右滑都會返回，會搶走「往右滑劃掉」；改成只有從螢幕左緣滑才返回 */}
-          {/* 打開 app 直接回到上次的筆記時不播推入動畫，看起來就是停在那裡 */}
-          {/* 清單頁不用系統標題列，自己畫一條窄的：返回鍵和清單名稱在同一行 */}
-          <Stack.Screen name="note/[id]" options={({ route }) => ({
-            headerShown: false, contentStyle: { backgroundColor: c.surface }, fullScreenGestureEnabled: false,
-            animation: (route.params as { restore?: string } | undefined)?.restore ? 'none' : 'default',
-          })} />
-          <Stack.Screen name="color/[id]" options={{
-            presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: T.shape.radiusPanel,
+          {/* 根畫面就是一張紙（重新設計分支「紙是家」）：不用系統標題列，自己畫一條：清單名和 ⋯ 在同一行 */}
+          <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
+          {/* 目錄：從紙最上面的清單名拉起來的面板，佔九成高。0.9 只用一次 */}
+          <Stack.Screen name="directory" options={{
+            presentation: 'formSheet', sheetAllowedDetents: [0.9], sheetGrabberVisible: true, sheetCornerRadius: T.shape.radiusPanel,
             headerShown: false, contentStyle: { backgroundColor: c.surface },
           }} />
+          <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
         </Stack>
       ) : <View style={{ flex: 1, backgroundColor: c.page }} />}
       <OverlayHost />

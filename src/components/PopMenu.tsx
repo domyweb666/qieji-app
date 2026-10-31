@@ -1,12 +1,14 @@
 // 右上角 ⋯ 打開的選單：從按鈕下方彈出一張白色卡片，後面整個畫面變暗，選單上的字才看得清楚。
 // 左邊圖示、右邊文字；inline 的子選單攤開成一個區塊，區塊之間用粗一點的分隔。
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useReducedMotion, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { T, useColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Sym } from './Sym';
 
-export function PopMenu({ acts, top, onClose }: { acts: Act[]; top: number; onClose: () => void }) {
+// header：放在最上面的一塊（紙的 ⋯ 選單把九個色塊放這裡），跟底下的項目用粗分隔隔開
+export function PopMenu({ acts, top, header, onClose }: { acts: Act[]; top: number; header?: ReactNode; onClose: () => void }) {
   const c = useColors();
   // 減少動態：放大縮小改成淡入淡出
   const calm = useReducedMotion();
@@ -33,8 +35,9 @@ export function PopMenu({ acts, top, onClose }: { acts: Act[]; top: number; onCl
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="關閉選單" />
       </Animated.View>
       <Animated.View entering={cardIn} exiting={cardOut} style={[st.card, { backgroundColor: c.surface, top }]}>
+        {header}
         {sections.map((g, gi) => (
-          <View key={gi} style={gi > 0 && [st.gap, { borderTopColor: c.page }]}>
+          <View key={gi} style={(gi > 0 || !!header) && [st.gap, { borderTopColor: c.page }]}>
             {g.map((a, i) => (
               <Pressable key={a.label} onPress={() => pick(a)} accessibilityRole="menuitem"
                 style={({ pressed }) => [st.row, i > 0 && [st.sep, { borderTopColor: c.separator }], pressed && { backgroundColor: c.pressedFill }]}>

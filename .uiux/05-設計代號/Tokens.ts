@@ -79,6 +79,7 @@ export const T = {
   // 不寫死字級。字體：系統預設字（多米 2026-10-31 定，不用圓體）
   font: {
     listTitle:    { size: 20, weight: '700' as const, system: 'Title 3',     maxScale: 1.5 }, // 清單標題（上限 1.5 倍是多米定的）
+    paperTitle:   { size: 28, weight: '700' as const, system: 'Title 1',     maxScale: 1.5 }, // 紙最上面的清單名（重新設計分支）
     body:         { size: 17, weight: '400' as const, system: 'Body',        lineHeight: 27 }, // 每一行、首頁清單名稱、選單項目
     emphasis:     { size: 17, weight: '600' as const, system: 'Headline' },                   // 確認框的字
     subhead:      { size: 15, weight: '400' as const, system: 'Subheadline' },                // chip、空狀態、toast
@@ -106,6 +107,14 @@ export const T = {
     cardMin: 56,      // 首頁卡片
     menuRow: 50,
     fab: 58,
+    // 重新設計分支（紙是家）新增
+    composer: 50,  // 底部輸入列的藥丸高度
+    face: 30,      // 輸入列左邊的茄子臉
+    chev: 22,      // 清單名旁邊的 ⌄ 小圓
+    tile: 84,      // 目錄的色磚高度
+    tileTag: 40,   // 色磚右下角露出的色圓
+    swatchDot: 26, // ⋯ 選單裡一排九個色塊
+    emptyFace: 72, // 空紙上的茄子
     // 兩種陰影（多米定；⋯ 選單原本的 #000 0.2 r20 y8 併進 soft）
     shadowSoft:   { color: P.shadowInk, opacity: 0.12, radius: 10, offset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
     shadowStrong: { color: P.shadowInk, opacity: 0.3,  radius: 10, offset: { width: 0, height: 4 } }, // 右下 ＋

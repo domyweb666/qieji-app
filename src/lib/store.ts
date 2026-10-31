@@ -7,7 +7,7 @@ import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, t
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
 };
 const g = globalThis as { __qiejiStore?: Box };
@@ -40,6 +40,16 @@ export const store = {
     box.last = id;
     (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
   },
+
+  // 目錄點了哪張、或剛開了新的一張：換到那張紙（根畫面照 last 畫）。fresh＝新的一張，紙打開後直接停在輸入列
+  open(id: string, fresh = false) {
+    box.fresh = fresh ? id : null;
+    store.setLast(id);
+    box.version++;
+    emit();
+  },
+  get fresh() { return box.fresh ?? null; },
+  clearFresh() { box.fresh = null; },
 
   async load() {
     if (box.loaded) return;

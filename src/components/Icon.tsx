@@ -1,7 +1,7 @@
 // 線條圖示：網頁預覽沒有 SF Symbols 時的替身，所以形狀照 iOS 的 chevron.left、ellipsis（橫的 ⋯）
 import Svg, { Circle, Path } from 'react-native-svg';
 
-type Name = 'back' | 'check' | 'dots' | 'plus' | 'notes' | 'search' | 'trash' | 'close' | 'menu' | 'undo' | 'redo';
+type Name = 'back' | 'check' | 'dots' | 'plus' | 'notes' | 'search' | 'trash' | 'close' | 'menu' | 'undo' | 'redo' | 'down' | 'right' | 'up';
 
 // 顏色一律由呼叫的人從代號給，這裡沒有預設色
 export function Icon({ name, size = 26, color }: { name: Name; size?: number; color: string }) {
@@ -26,6 +26,9 @@ export function Icon({ name, size = 26, color }: { name: Name; size?: number; co
       {name === 'menu' && <Path {...line(2.3)} d="M4 6h16M4 12h16M4 18h16" />}
       {name === 'undo' && <Path {...line(2.6)} d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 6 6v1" />}
       {name === 'redo' && <Path {...line(2.6)} d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v1" />}
+      {name === 'down' && <Path {...line(2.4)} d="M5 9l7 7 7-7" />}
+      {name === 'right' && <Path {...line(2.4)} d="M9 5l7 7-7 7" />}
+      {name === 'up' && <Path {...line(2.4)} d="M12 19V5M5 12l7-7 7 7" />}
     </Svg>
   );
 }

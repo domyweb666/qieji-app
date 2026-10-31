@@ -190,6 +190,24 @@ export function convertNote(n: Note) {
   }
 }
 
+/* ---------------- 紙上的順序：劃掉的行一律排在沒劃掉的後面 ---------------- */
+// 存檔裡劃掉的行可能夾在中間（舊版留在原位），打開紙時先排到後面。回傳有沒有動到順序（有才需要存）
+export function tidyDone(items: Item[]): boolean {
+  const next = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
+  if (next.every((it, k) => it === items[k])) return false;
+  items.splice(0, items.length, ...next);
+  return true;
+}
+// 劃掉：搬到「劃掉的」區塊最前面；恢復：搬回紙的最上面（跟剛記的一樣，最新的在上面）
+export function setDone(items: Item[], id: string, done: boolean) {
+  const idx = items.findIndex(i => i.id === id);
+  if (idx < 0) return;
+  const [it] = items.splice(idx, 1);
+  it.done = done;
+  const at = done ? items.findIndex(i => i.done) : 0;
+  items.splice(at < 0 ? items.length : at, 0, it);
+}
+
 /* ---------------- list grouping (iOS 備忘錄式分組) ---------------- */
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const WEEK = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];

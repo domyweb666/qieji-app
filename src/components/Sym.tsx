@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 const FALLBACK: Partial<Record<string, Parameters<typeof Icon>[0]['name']>> = {
   'chevron.left': 'back', checkmark: 'check', ellipsis: 'dots', plus: 'plus', magnifyingglass: 'search',
   trash: 'trash', xmark: 'close', 'arrow.uturn.backward': 'undo', 'arrow.uturn.forward': 'redo',
-  'line.3.horizontal': 'menu',
+  'line.3.horizontal': 'menu', 'chevron.down': 'down', 'chevron.right': 'right', 'arrow.up': 'up',
 };
 
 export function Sym({ name, size = 20, color, weight }: { name: SFSymbol; size?: number; color: ColorValue; weight?: 'regular' | 'medium' | 'semibold' }) {
