@@ -176,10 +176,10 @@ export function Paper({ n }: { n: Note }) {
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行，清單捲上去讓人看到它落下（核心迴圈第 4 格：看到才敢忘）
-  function addFromDraft(t: string) {
+  function addFromDraft(t: string, scroll = true) {
     n.items.unshift({ id: uid(), t, done: false, b: false });
     touch();
-    scrollTo(0);
+    if (scroll) scrollTo(0);
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
@@ -189,10 +189,15 @@ export function Paper({ n }: { n: Note }) {
     return true;
   }
   // 收起輸入框：有字就先送出（字不能丟，2-8）。這裡不收鍵盤：失焦時焦點可能已經在別行的輸入框上，收了會把它的鍵盤也收掉；
-  // 輸入框卸載時，它自己的鍵盤會跟著收
+  // 輸入框卸載時，它自己的鍵盤會跟著收。
+  // 乙（2026-11-01，暗幕拿掉後）：點紙上的行會走到這裡——草稿先送出、焦點進那一行。這時不能捲回頂端（人要改的是那一行），
+  // 下一格看焦點有沒有落在別行：沒有（✓、點空白處）才捲上去看新行落下；有就留在原地，那一行被新行往下推時 onLayoutRow 會自己跟
   function closeComposer() {
     const t = takeDraft();
-    if (t) addFromDraft(t);
+    if (t) {
+      addFromDraft(t, false);
+      requestAnimationFrame(() => { if (!focused.current && mounted.current) scrollTo(0); });
+    }
     setComposing(false);
   }
   // ✓：送出並收起，這條沒有別的輸入框在等焦點，鍵盤一起收
@@ -605,19 +610,14 @@ export function Paper({ n }: { n: Note }) {
         </Animated.View>
       )}
 
-      {/* 輸入框（多米 2026-11-01，第三版）：整個畫面鋪暗幕讓人聚焦（多米要的），框貼在鍵盤上面、跟著鍵盤一起升降。
-          暗幕、框、鍵盤三個都用鍵盤那一個時鐘（keyboardFollow），同一個事件、同一刻到位（2-4 做法 6）；暗幕的顏色跟動作表單同一個 scrim。
-          點暗幕＝✓（有字送出、收起、鍵盤一起收）。框那層讓觸控穿透到暗幕 */}
+      {/* 輸入框（多米 2026-11-01，第四版＝乙）：框貼在鍵盤上面、跟著鍵盤一起升降，框與鍵盤同一個時鐘（keyboardFollow）。
+          第三版整個畫面鋪了暗幕、點外面不能點到別行，多米真機說「編輯感覺很不好」（2-5：記是主線，不該被包成模態），同日定乙拿掉暗幕：
+          輸入框開著時紙照常能看、能點——點一行＝草稿先送出、焦點直接進那一行（走 Composer 的 onBlur）；點空白處＝鍵盤收、草稿送出、框收起。
+          框那層讓觸控穿透到紙 */}
       {composing && (
-        <>
-          <Animated.View entering={FadeIn.duration(T.motion.keyboardFollow.duration)} exiting={FadeOut.duration(T.motion.keyboardFollow.duration)}
-            style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={doneComposer} />
-          </Animated.View>
-          <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
-            <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
-          </Animated.View>
-        </>
+        <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
+          <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
+        </Animated.View>
       )}
 
       {menu && (
