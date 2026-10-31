@@ -2,7 +2,8 @@
 // 像筆記本：沒有卡片，只有一條淡格線。標題列下面是時間列；右下角 ＋ 在最上面開一行、鍵盤升起，鍵盤膠囊上也有一顆 ＋。
 // （多米 2026-10-31：頂部「＋ 新增一行」試過一輪拿掉，時間列留著）
 // 打字中按 Return＝在這行下面長出新的一行（游標後面的字一起搬過去）；空行按 Return＝收鍵盤（多米 2026-10-31 第一輪，跟網頁版一樣）。
-// 一行要「快速點兩下」才會進編輯（上下捲動時碰到字不會跳出鍵盤）；往右滑＝劃掉（留在原位，只加刪除線）；
+// 一行點一下就進編輯（多米 2026-10-31 第二輪試驗：之前是點兩下，因為輸入框自己收觸控時捲動會誤觸；現在輸入框上有蓋板、
+// 點擊走手勢系統，手指一移動手勢就作廢，理論上捲動不會再誤觸。真機還會誤觸就改回 numberOfTaps: 2）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
 // 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
 // 從 app/note/[id].tsx 搬過來：滑動與拖曳的手勢（worklet）一行沒動。
@@ -56,7 +57,7 @@ export function Paper({ n }: { n: Note }) {
   const [renaming, setRenaming] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
   const [sorting, setSorting] = useState(false); // 排順序模式：把手出現、底下換成「排好了」
-  // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行碰到字不會跳出鍵盤（要快速點兩下）
+  // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行要經過點一下的手勢才會進來（捲動時手指有移動，手勢不成立）
   const [editing, setEditingState] = useState<string | null>(null);
   const editingRef = useRef<string | null>(null);
   const setEditing = (id: string | null) => { editingRef.current = id; setEditingState(id); };
@@ -449,7 +450,7 @@ export function Paper({ n }: { n: Note }) {
           {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點 */}
           {showHint && !sorting && (
             <View style={st.hint}>
-              {['點兩下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
+              {['點一下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
             </View>
           )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
@@ -591,15 +592,15 @@ function LineRow(p: LineProps) {
     maxDistance: G.longPressMove,
     onActivate: () => { rowRef.current?.measureInWindow((x, y, w, h) => onMenu(y + h)); },
   });
-  // 快速點兩下＝進這一行編輯（一下不會，捲動時碰到字才不會跳出鍵盤）
-  const dbl = useTapGesture({
+  // 點一下＝進這一行編輯。手指移超過門檻就不算點（捲動時碰到字不會跳出鍵盤）；第二輪試驗，誤觸就改回 2
+  const tap = useTapGesture({
     runOnJS: true,
-    numberOfTaps: 2,
+    numberOfTaps: 1,
     maxDistance: G.longPressMove,
     onActivate: () => onEdit(),
   });
-  // 長按、點兩下、滑動只有一個會成立：手指移超過門檻長按和點兩下就放棄，滑動才接手
-  const rowGesture = useExclusiveGestures(hold, dbl, swipe);
+  // 長按、點一下、滑動只有一個會成立：手指移超過門檻長按和點一下就放棄，滑動才接手；按住超過長按時間就不算點
+  const rowGesture = useExclusiveGestures(hold, tap, swipe);
   const grip = usePanGesture({
     runOnJS: true,
     minDistance: G.dragActivate,
@@ -647,7 +648,7 @@ function LineRow(p: LineProps) {
       </Animated.View>
       <GestureDetector gesture={rowGesture}>
         <Animated.View style={[st.cin, !p.grip && st.cinNoGrip, { backgroundColor: p.bg }, slide]}>
-          {/* 沒在編輯的行：輸入框上面蓋一層看不見的板子，點一下碰不到它（點兩下、長按、滑動由外層手勢接）。
+          {/* 沒在編輯的行：輸入框上面蓋一層看不見的板子，手指碰不到它（點一下、長按、滑動由外層手勢接）。
               不用 pointerEvents='none'：RN 在 iOS 把它做成關掉整塊的 userInteractionEnabled，
               正在打字的那行一被關，輸入框就被迫放掉焦點、鍵盤收起（∧ ∨ 切行時鍵盤收了再開就是這個） */}
           {/* 正在編輯的那一行：整行提亮一點（網頁版有，多米 2026-10-31 第一輪補回來）。墊在字底下，不擋觸控 */}
