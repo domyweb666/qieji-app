@@ -399,8 +399,9 @@ export function Paper({ n }: { n: Note }) {
       drag.current = null;
       const to = dragTo.value;
       if (d.idx !== to) { const [m] = n.items.splice(d.idx, 1); n.items.splice(to, 0, m); touch(); }
-      requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; });
-      setDragging(false);
+      // dragging 要等新順序畫完、位移歸零的那一格才關：跟改資料同一次重畫就關掉，行的 layout 過場（ROW_MOVE）會在「順序剛換」那一刻
+      // 醒過來，把已經落地的行再從舊位置滑到新位置一次（多米 2026-11-01 真機：「換好位置了又重新換一次」）
+      requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; setDragging(false); });
     },
   };
 

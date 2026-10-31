@@ -160,7 +160,8 @@ const st = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
   search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.radiusCard, flexDirection: 'row', alignItems: 'center', gap: T.space.s,
     paddingHorizontal: T.space.m },
-  searchInput: { flex: 1, minWidth: 0, ...T.font.body, paddingVertical: 0 },
+  // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
+  searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
   chip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: T.space.s, marginBottom: T.space.m,
     borderRadius: T.shape.radiusCard, paddingVertical: T.space.s, paddingHorizontal: T.space.m },
