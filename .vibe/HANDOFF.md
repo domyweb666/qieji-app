@@ -50,12 +50,13 @@
 2. ~~文件同步~~ ✅ 已做
 3. ~~A4 字放大到 20~~ ✅ 已做、commit、**真機過**（密度可、最大字級不爆）
 4. ~~A5 Backspace 併行~~ ✅ 已做、commit、**真機過**（併行且游標在接點、注音只刪注音、鍵盤不閃）。多米定「劃掉的不併」
-5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨，去申請」**，執行清單在 `.vibe/EAS建置-申請與設定步驟.md`：甲段（Apple Developer Program 個人報名、Expo 帳號）多米自己做；**現在狀態＝等 Apple 審核，審核期間不動程式**；多米說「Apple 過了」之後照乙段做，第一次建置不加小工具。另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
+5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨」**，而且他本來就是付費會員，門直接開。執行清單在 `.vibe/EAS建置-申請與設定步驟.md`。**當天做完：** EAS 登入、expo-dev-client、專案連到 @fcharlie/qieji、iPhone 登錄、憑證、**第一次 iOS 開發版建置成功**（build d2f570cd，commit fbec07a）。中間踩了兩個坑（prepare 腳本、lock 缺 @emnapi → 釘 Node 24），全在步驟檔丁段。順手補了 expo-symbols 必要的 expo-font。**現在狀態＝待多米把開發版裝到 iPhone、驗收第一輪（圖示、啟動畫面、四輪手感、字放大、Backspace 併行在自己的 app 上再過一遍）**；過了才加 expo-widgets。另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
 6. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
 - 這個資料夾最多五個開發伺服器，別的聊天佔滿時 `preview_start` 會失敗；直接把瀏覽器開到 `http://localhost:8081` 看同一份原始碼就好（網頁預覽的 console 會殘留改檔中途的 HMR 錯誤 `dbl is not defined`、`dragMove is not defined`，重新載入後不存在，不是 bug）
+- EAS 建置頁沒登入只看得到 Failed；要 log 請多米貼截圖最快。`eas build:view` 不吃 `--non-interactive`；盯進度用 `eas build:list --platform ios --limit 1 --non-interactive`（背景腳本在 scratchpad 的 wait-build.ps1，路徑用 `$env:QJ` 傳，PowerShell 5.1 讀無 BOM 的 .ps1 會把中文路徑讀壞）。裝了 expo-dev-client 後 `npx expo start` 預設找開發版，要回 Expo Go 加 `--go`
 - 瀏覽器自動化工具按 Return 在網頁預覽只會失焦、不切行（上一個 commit 也一樣，不是 bug，真機 Return 已過）；要測切行用 JS 對 textarea `dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))`。JS 建出來的新行若接著用自動化按鍵，常跳出長按選單吃掉焦點，先用點擊進那一行再按鍵
 - 自動化工具的瞬間拖曳測不出 worklet 拖曳（拿起要排回 JS，放開已經發生）；要測用有間隔的 PointerEvent 慢慢拖
 - `expo-splash-screen` 沒裝也不用裝：expo-router 的 `SplashScreen` 走 `requireOptionalNativeModule('ExpoSplashScreen')`

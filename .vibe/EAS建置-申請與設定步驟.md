@@ -1,7 +1,8 @@
 # EAS 建置：申請與設定步驟（多米 2026-10-31 決定「跨，去申請」）
 
 > 評估與理由在 `待審-EAS建置與小工具.md`。這份是執行清單：哪些只有多米能做、哪些審核過後由 Claude 做。
-> 狀態：**等 Apple Developer Program 審核**。審核期間不動程式（決定見評估第六節）。
+> 狀態（2026-10-31 14:32）：多米本來就是付費會員，門直接開了。**乙段 1～5 做完，第一次 iOS 開發版建置成功**（build d2f570cd，commit fbec07a，5 分鐘）。接著：裝到 iPhone、驗收第一輪（乙段 7）。
+> 第一次建置失敗了兩次才過，原因與修法在丁段，下次別再踩。
 
 ---
 
@@ -53,6 +54,14 @@ Apple 報名頁（2026-10-31 抓的）要求：
 6. 建好開連結或掃 QR 裝到 iPhone。之後 `npx expo start`，手機上的開發版連電腦，改 JS 一樣熱更新。
 7. **驗收第一輪**（自己的 app 上）：圖示、啟動畫面顏色（❓12 在這裡終於看得到）、Return 切行、點一下編輯、越線震、拖曳、字放大、Backspace 併行。手勢與鍵盤在原生環境要再過一遍，Expo Go 過了不算。
 8. 穩了才進小工具：`npx expo install expo-widgets`，`app.json` 加 plugin，再建置一次。第一版只讀不寫（評估第四節）。
+
+## 丁、2026-10-31 第一次建置踩到的兩個坑（已修，記下來）
+
+1. **`package.json` 的 `prepare` 腳本讓雲端 `npm install` 死掉**。它跑 `git config core.hooksPath tools/githooks`，EAS 拿到的是打包檔、沒有 `.git`，直接 `fatal: not in a git directory` exit 128。修：後面加 `|| exit 0`（commit c0325e8）。本機用 `git archive` 解到空資料夾跑 `npm run prepare` 可以重現。
+2. **雲端 `npm ci` 說 lock 缺 `@emnapi/core`、`@emnapi/runtime`**。那是 `@unrs/resolver-binding-wasm32-wasi`（cpu 限 wasm32 的選用套件）底下 `@napi-rs/wasm-runtime` 的相依；這台 Windows 的 npm 11 不解平台不符的選用套件，怎麼重算 lock（原地、刪掉重算、`--cpu=wasm32`）都不會寫進去，而 EAS Mac 預設那版 npm 會檢查。修：`eas.json` development profile 釘 `"node": "24.13.0"`，跟本機同版、內建 npm 11 同規則（commit fbec07a）。**以後升 Node 本機和 eas.json 要一起改。** 備案（沒用到）：把那兩個套件明寫進 `optionalDependencies`。
+3. 第一次 `eas build` 失敗的另一個原因是 Apple 合約更新沒同意，Apple 不讓登記 bundle id；多米上 developer.apple.com/account 同意後就過。合約每年都會更新一兩次，看到「agreement updates」就是這個。
+
+另外 EAS 第一次建置會問「只用標準加密？」答是，會寫進 `app.json` 的 `ITSAppUsesNonExemptEncryption: false`（已 commit）。
 
 ## 丙、之後會遇到的事
 
