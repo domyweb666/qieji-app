@@ -1,54 +1,63 @@
-# Handoff: 重新設計分支「紙是家」三輪真機全過，下一步由多米決定要不要併回 master
+# Handoff: 效能與手感四輪改完（Return 開新行、點一下編輯、越線震＋拖曳 worklet、低風險三件），全部待真機
 
-> 產出時間：2026-10-31 深夜
+> 產出時間：2026-10-31 11:34
 > 前一會話的最後狀態，給下一個會話接續用
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／React Native，iOS 原生 app，多米用 Expo Go 在 iPhone 上測，沒有 Mac）
-> **2026-10-31 多米決定併回 master，已快轉合併**；`redesign/claude-blank-slate` 分支留著當記號，跟 master 同一個點。
+> 上一份交接（「紙是家」重新設計、插畫接上）在 `.vibe/handoff/archive/2026-10-31-1134.md`，那邊的定案仍然有效，這份只接著寫。
 
 ## ✅ 這次完成了什麼
 
-多米問「如果 UI、UX 全部打掉，你重新設計的話呢」，Claude 提了「紙是家」，多米選方向甲、三輪真機都過：
+多米問「還有什麼性能問題可以優化」「手感能不能提升」「為什麼網頁版的編輯手感比 iOS 版好」，Claude 拿 `E:\茄記\easynote\index.html`（網頁版）逐條對照 `Paper.tsx`，寫成待審清單，多米四輪都選「做」。master 上四個 commit，**一個都還沒真機測過**：
 
-- **根畫面是一張紙**（上次開的那張；沒有就最近改過的；一張都沒有就自動開新的）。點最上面的清單名（或紙頂端往下拉）→ 目錄面板從下面升起：搜尋、色磚、「＋ 新的一張」、最近刪除；篩選／排序／備份在面板 ⋯
-- **行像筆記本**：沒有卡片，只有淡格線。右下角 ＋ 在最上面開一行。一行要**快速點兩下**才進編輯（捲動時碰到字不會跳鍵盤）
-- 往右滑＝劃掉（**留原位**只加刪除線）；往左滑＝刪除，**進這張紙的最近刪除**（`Note.bin` 新欄位）；長按＝劃掉／搬到…／複製／刪除；把手只在 ⋯ →「排順序」時出現
-- ⋯ 選單最上面一排九個色塊直接換色；「改名字」在 ⋯ 裡；標題選填，沒名字的紙在目錄用第一行當名字
-- 最近刪除頁多一段「刪掉的行」（帶原紙名字），可還原、永久刪除
-- 設計提案與可點 HTML 原型：`.uiux/重新設計/提案.md`、`原型.html`（原型還是第一版有輸入列的樣子，程式已改成右下 ＋）
+1. `dfe73b8` **Return 在這行下面開新的一行**（行的輸入框 `submitBehavior="submit"`＋`enterKeyHint="next"`，游標後面的字切到新行；空行按 Return 收鍵盤）＋ **編輯中的行底色變亮**（新 token `rowEditingFill`）＋ 三個新震動（新增一行 `add`＝impact Light、換色 `color`、拖過另一行 `dragPass`）
+2. `b58b714` **點一下就進編輯**（`numberOfTaps` 2 → 1，提示字改「點一下改字」），**推翻上一份交接的「點兩下才編輯」定案，是多米同意的試驗**
+3. `47f1dfe` **滑動越線那一刻震**（swipe worklet 的 `armed`；放手不再震）＋ **拖曳排序的位置計算搬進 worklet**（`dragMids` shared value，拿起、放下才回 JS）
+4. `01710a6` **啟動畫面撐到紙畫出來才收**（expo-router 自帶的 `SplashScreen`，沒裝新套件）＋ 三張茄子 PNG → WebP（384 KB → 50 KB）＋ iOS 不載入 react-native-svg（`Sym.tsx` 非 iOS 才 require Icon）
+
+設計文件同步：`00-原始清單.md` 觸覺表、`參數表-暫定.md`、`對比檢查表.md`（rowEditingFill 一段）、`01-核心動作卡` 的圖檔名。
 
 ## 🚧 還沒做完 / 待決定
 
-- ✅ `.uiux/` 的 02 流程、03 線框、06 首次體驗、詞彙表已改成 v1「紙是家」（2026-10-31）；新的 ❓：流程 ❓D 鍵盤開著加下一行、首次體驗 ❓11 提示一句四件要不要拆、❓12 啟動畫面要不要跟紙同色
-- 30 天自動清仍未接（`bin` 裡的行有 `at`，接的時候一起清；`.vibe/待審-最近刪除30天自動清.md` 的前提不變）
-- 閘門 1、2 仍未過（這條分支完全跳過五道閘門，是多米同意的實驗）
-- 詞彙表要補新名字：紙（根畫面）、目錄、新的一張、搬到、排順序、劃掉的行
+- **四個 commit 全部待真機**，每一輪各自要看的東西和退回方法都在 `.vibe/待審-效能與手感優化清單.md` 第五節。最要緊的三件：點一下會不會在捲動時誤觸（誤觸就 `numberOfTaps` 改回 2）；worklet 會不會崩潰（上次踩過的坑，網頁過了不算）；iOS 上 Return 是否真的不換行、鍵盤不收
+- 待審清單還沒做的：A4 字放大到 20（多米看過第一輪再決定）、A5 行首 Backspace 併到上一行（要 `onSelectionChange`，注音組字可能干擾）、第四節 iOS 原生小工具（要先跨「EAS 建置＋TestFlight」這道門，Expo Go 做不到）
+- `.uiux/02-流程` 的 ❓D「鍵盤開著怎麼加下一行」等於被 Return 回答了，設計檔還沒改，等真機過再一起改；❓12 啟動畫面顏色沒動
+- 上一份交接列的仍未動：30 天自動清未接、閘門 1、2 未過、詞彙表要補新名字
+- `.vibe/HANDOFF.md` 之外沒有別處記這四輪；`.uiux/重新設計/提案.md` 第八節停在第五輪，沒補這四輪
 
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
 
-- 多米真機回饋三條，已定案：**點兩下才編輯**（一下會誤觸）；**不要底部輸入列，要右下角 ＋**（輸入列超過一行看不到前面）；**劃掉留原位不下沉**（劃掉的還會再看）
-- 劃掉、刪除、搬到、改名字的入口都在；劃掉的真的不要就自己刪
-- 手勢三合一用 `useExclusiveGestures(hold, dbl, swipe)`；只有正在編輯那一行的輸入框 `pointerEvents='auto'`
-- `store.open(id, fresh)`：目錄換紙、開新的一張都走這裡；根畫面照 `store.last` 畫
-- 裸數字檢查、tokens 唯一來源、worklet 規矩都沒變；這次新增的 tokens：paperTitle、chev、tile、tileTag、swatchDot、emptyFace、gesture.pullOpen／longPressMs／longPressMove、haptic.menu
+- **網頁版手感好的原因不是手勢或速度**（滑動、拖曳、門檻、動畫毫秒兩邊幾乎一字不差），是「點一下就打、Return 開下一行」讓動作少、視線不用跑。效能在目前資料量下沒有一處慢到看得出來
+- Return 開的新行插在**正下方**，右下 ＋ 和膠囊 ＋ 仍插**最上面**，兩條路都留。Return 開新行**不震**（打字中會吵）
+- 不受控輸入框（`defaultValue`）被程式改字時，用 `revs` 計數當 `Field` 的 key 重掛，不用 setNativeProps
+- 觸覺詞彙：`selectionAsync`＝選到／經過／越線的「嗒」，`impactAsync(Light)`＝生出一個東西。破壞性動作（刪除這張、永久刪除、清空）**不震**；點兩下進編輯、∧ ∨ 切行、收鍵盤**不震**
+- worklet 裡只碰純數字與 shared value；要叫 JS 一律 `scheduleOnRN(模組層級函式)`（`dismissKb`、`hapticArm`、`hapticPass`），prop 來的 closure 也可以（`onStrike`、`dragStart`）
+- 網頁預覽的 `onSelectionChange` 只在選取一段時觸發，`Field` 送出時優先讀 DOM 的 `selectionStart`；`blurOnSubmit` 只在網頁給（react-native-web 多行不認 `submitBehavior`）
+- 不做的（理由在待審清單第三節）：局部存檔、拆掉隱形文字撐高度、虛擬化、換 MMKV
 
 ## 📂 下個會話最重要的檔案
 
 - `.vibe/HANDOFF.md` ← 就是這份
-- `.uiux/重新設計/提案.md` ← 設計決定、推翻了什麼、三輪進度全在第八節
-- `src/components/Paper.tsx`（紙）、`src/app/index.tsx`（根）、`src/app/directory.tsx`（目錄）、`src/app/trash.tsx`
-- `src/lib/model.ts`：`binItem`／`unbinItem`／`moveItem`；`src/lib/store.ts`：`open`／`fresh`
-- `.vibe/規矩檔.md`、`.uiux/閘門紀錄.md`
+- `.vibe/待審-效能與手感優化清單.md` ← 四輪做了什麼、各自待真機看什麼、怎麼退回、還沒做的、原生小工具可行性，全在這
+- `src/components/Paper.tsx`：`onSubmit`（Return 切行）、`Field`（caretNow、submitBehavior）、`LineRow` 的 `tap`／`swipe`（armed）／`grip`（worklet）、`dragApi`
+- `src/lib/tokens.ts`：`HAPTIC` 表、`rowEditingFill`
+- `src/app/_layout.tsx`：SplashScreen；`src/components/Sym.tsx`：Icon 延遲載入
+- `.vibe/規矩檔.md`（兩個坑：pointerEvents、worklet 叫 JS）、`.uiux/05-設計代號/00-原始清單.md` 第六節觸覺表
+- `E:\茄記\easynote\index.html` ← 網頁版，手感對照的基準
 
 ## ⏭️ 下一步從哪繼續
 
-1. ~~多米回三題 ❓~~ 已回（提案第八節第五輪）：膠囊加 ＋、提示字永遠留、啟動畫面不改。多米真機定案：時間列留、頂部新增一行不要、右下 ＋ 留、提示字縮小永遠留、空紙放扁平線條茄子（`face-flat.png`）。設計檔已同步（01 #8 改成「做」、02、03、06、詞彙表）
-- ✅ 插畫與圖示全接上（多米真機過）：空紙平靜、目錄找不到疑惑、最近刪除空睡著（`assets/img/face-flat*.png`）；`assets/icon.png` 與 Android 三張、favicon 都換成茄子，**要正式建置才看得到**。劃掉的行用 `textStrike`（刻意低於 4.5，對比檢查表有記）。提示字四個短詞永遠留
-2. 接回原本的路：`domi-uiux-usertest`（閘門 2 補測線框方向 W1～W5、樹狀測試 T1～T7、詞彙表 19 個名字、隱藏手勢點兩下／長按／右滑找不找得到）→ launch
-3. 之後要改畫面：先 `npm run check:tokens`；碰手勢一定真機
+1. 等多米回報四輪真機結果，**一輪一輪判**，不要混著看：
+   - 第一輪（`dfe73b8`）：Return 切行、行中切行時原行重掛鍵盤有沒有閃、三個震動力道
+   - 第二輪（`b58b714`）：捲動誤觸、慣性捲動中手指停住畫面會不會進編輯、長按右滑有沒有被搶 → 誤觸就改回 2 並改提示字
+   - 第三輪（`47f1dfe`）：先確認不崩潰，再看越線震時機、來回越線煩不煩、拖曳跟不跟手
+   - 第四輪（`01710a6`）：啟動還閃不閃空白、兩張臉看起來一樣嗎
+2. 真機過的那幾輪：把 `.uiux/02-流程` ❓D 標成「Return」、`.uiux/重新設計/提案.md` 第八節補第六輪、待審清單對應項目加「真機過」
+3. 多米若要繼續：A4 字放大（改 `tokens.ts` 的 `bodyLine`，要多米看密度）→ A5 Backspace 併行（真機）→ 原生小工具（先決定要不要 EAS 建置）
+4. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
-- 底部輸入列已試過、多米不要，別再提
-- 劃掉下沉到「劃掉的」區塊已試過、多米不要
-- 長按跟 iOS 文字選取沒打架、點兩下沒打架，多米真機過
-- 目錄面板進最近刪除用 `router.replace`，真機正常
+- 這個資料夾最多五個開發伺服器，別的聊天佔滿時 `preview_start` 會失敗；直接把瀏覽器開到 `http://localhost:8081` 看同一份原始碼就好（網頁預覽的 console 會殘留改檔中途的 HMR 錯誤 `dbl is not defined`、`dragMove is not defined`，重新載入後不存在，不是 bug）
+- 自動化工具的瞬間拖曳測不出 worklet 拖曳（拿起要排回 JS，放開已經發生）；要測用有間隔的 PointerEvent 慢慢拖
+- `expo-splash-screen` 沒裝也不用裝：expo-router 的 `SplashScreen` 走 `requireOptionalNativeModule('ExpoSplashScreen')`
+- 每一行的 `index`／`count` 進 memo 比對，按 ＋ 會讓全部的行重畫（待審 P2）——決定先量再做，沒動
