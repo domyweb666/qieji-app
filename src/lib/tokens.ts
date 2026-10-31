@@ -140,6 +140,7 @@ export const shape = {
   tile: 84,      // 目錄的色磚高度
   tileTag: 40,   // 色磚右下角露出的色圓
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
+  emptyFace: 96, // 空紙上的茄子（扁平線條版）
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋
 };
