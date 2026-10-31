@@ -27,14 +27,14 @@ export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
   // 網頁預覽的送出會先失焦（blurOnSubmit），那段期間的失焦不算「收起」；iOS 的 submitBehavior='submit' 不會失焦，這個旗標只是空轉
   const sending = useRef(false);
   // 畫完立刻對焦（跟行的 focusItem 一樣）。網頁預覽：Reanimated 的進場動畫會先把元素藏一兩格（visibility hidden），
-  // 藏著的輸入框對不了焦，所以沒對到就下一格再試（網頁開發版重畫慢的時候要等上幾十格，上限一秒）；iOS 的 autoFocus 會先對到，多試無害
+  // 藏著的輸入框對不了焦，所以沒對到就下一格再試（網頁開發版一格可能拖到幾十毫秒，上限 180 格約三秒）；iOS 的 autoFocus 會先對到，多試無害
   useLayoutEffect(() => {
     let tries = 0, raf = 0;
     const tryFocus = () => {
       const inp = input.current;
       if (!inp || inp.isFocused?.()) return;
       inp.focus();
-      if (!inp.isFocused?.() && tries++ < 60) raf = requestAnimationFrame(tryFocus);
+      if (!inp.isFocused?.() && tries++ < 180) raf = requestAnimationFrame(tryFocus);
     };
     tryFocus();
     return () => cancelAnimationFrame(raf);

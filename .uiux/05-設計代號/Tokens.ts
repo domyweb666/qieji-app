@@ -133,6 +133,7 @@ export const T = {
     dragLand:      { spring: { duration: 250, dampingRatio: 1 }, reduced: { move: 0 } }, // 放下時滑進落點。減少動態：直接到位
     dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 }, reduced: { scale: 1 } }, // 拿起浮起：放大＋陰影 shadowSoft。減少動態：只有陰影
     swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 }, reduced: { scale: 1 } }, // 露出的字：越線前 0.35→1，越線放大再彈回。減少動態：只有透明度
+    rowShift:      { duration: 180, reduced: { move: 0 } }, // 行長出來、拿掉時其他行滑到新位置（2026-11-01 第二輪）；行本身、右下 ＋、換紙用 fade 淡入淡出。減少動態：直接到位
     keyboardFollow: { duration: 'system' as const, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 跟系統鍵盤，減少動態不另外處理
     toastFade:     { in: 150, out: 150 },                              // 本來就是淡入淡出，減少動態不改
     sheetSlide:    { in: 220, out: 180, reduced: { fade: 150 } },      // 滑入滑出改淡入淡出

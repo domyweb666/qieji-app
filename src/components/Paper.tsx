@@ -18,7 +18,10 @@ import {
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
 import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
-import Animated, { Easing, Extrapolation, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, {
+  Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
+  useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ago, binItem, CKEYS, col, convertNote, fullDate, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
@@ -48,6 +51,11 @@ const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop'); // 排順序放手那一刻
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
+// 行的過場（2026-11-01 第二輪 K4）：長出來淡入、拿掉淡出，其他行滑到新位置。排順序模式與減少動態時不滑（直接到位），淡入淡出照舊；
+// 整張紙第一次畫出來時不播（LayoutAnimationConfig skipEntering）。換紙時整張紙淡入（S2），第一次打開 app 那張不淡，交給啟動畫面
+const ROW_IN = FadeIn.duration(T.motion.fade);
+const ROW_OUT = FadeOut.duration(T.motion.fade);
+const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -259,7 +267,13 @@ export function Paper({ n }: { n: Note }) {
       setKbPad(lift);
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
-    const hide = () => { view.current.kb = Infinity; kbLift.value = 0; setKbPad(0); };
+    // 收起時膠囊（和輸入框）跟著鍵盤一起下去，動畫跑完才收掉底部留白、把 ＋ 放回來（第二輪 K2；之前是瞬間消失）。
+    // 中途鍵盤又升起，show 會蓋掉這個動畫，回呼的 finished 是 false，留白就不會被收掉
+    const hide = (e: { duration?: number }) => {
+      view.current.kb = Infinity;
+      kbLift.value = withTiming(0, { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) },
+        finished => { if (finished) scheduleOnRN(setKbPad, 0); });
+    };
     const subs = [
       Keyboard.addListener('keyboardWillShow', show), Keyboard.addListener('keyboardDidShow', show),
       Keyboard.addListener('keyboardWillHide', hide), Keyboard.addListener('keyboardDidHide', hide),
@@ -451,7 +465,7 @@ export function Paper({ n }: { n: Note }) {
   const showHint = n.items.some(i => i.t.trim());
 
   return (
-    <View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false}>
+    <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
       {/* 最上面一行：清單名（點一下開目錄；⋯ 裡的「改名字」才會變成可以打字）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
@@ -496,6 +510,7 @@ export function Paper({ n }: { n: Note }) {
               <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
           )}
+          <LayoutAnimationConfig skipEntering>
           <View>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
@@ -513,11 +528,12 @@ export function Paper({ n }: { n: Note }) {
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </View>
-          {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點 */}
+          </LayoutAnimationConfig>
+          {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點。行在滑的時候它跟著滑 */}
           {showHint && !sorting && (
-            <View style={st.hint}>
+            <Animated.View style={st.hint} layout={calm ? undefined : ROW_MOVE}>
               {['點一下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
-            </View>
+            </Animated.View>
           )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + KBAR_H + insets.bottom }} />
@@ -581,7 +597,7 @@ export function Paper({ n }: { n: Note }) {
           header={<Swatches current={n.color} onPick={pickColor} />} />
       )}
       {rowMenu && <PopMenu acts={rowActs(rowMenu.id)} top={rowMenu.top} onClose={() => setRowMenu(null)} />}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -789,6 +805,7 @@ function LineRow(p: LineProps) {
   return (
     <Animated.View ref={rowRef} collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
+      entering={ROW_IN} exiting={ROW_OUT} layout={p.grip || calm ? undefined : ROW_MOVE}
       style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, shift]}>
       <Animated.View style={[StyleSheet.absoluteFill, st.under, under]}>
         <Animated.Text style={[st.underText, { color: p.colors.textOnSwipe }, leftLabel]}>{p.done ? '恢復' : '劃掉'}</Animated.Text>

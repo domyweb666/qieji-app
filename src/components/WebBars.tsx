@@ -2,6 +2,7 @@
 // GlassBtn（奶油白圓鈕）和 Fab（右下角茄紫＋）清單頁也用，讓兩頁的按鈕長得一樣。
 import type { ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { T, useColors } from '../lib/tokens';
@@ -37,10 +38,14 @@ export function Fab({ onPress, label }: { onPress: () => void; label: string }) 
   const insets = useSafeAreaInsets();
   const c = useColors();
   return (
-    <Pressable onPress={onPress} accessibilityLabel={label}
-      style={({ pressed }) => [s.fab, { backgroundColor: c.accent, bottom: insets.bottom + T.space.m }, pressed && { opacity: T.motion.pressDim }]}>
-      <Sym name="plus" size={26} color={c.fabIcon} weight="semibold" />
-    </Pressable>
+    // 鍵盤升起、輸入框開著、排順序時淡出，回來時淡進（2026-11-01 第二輪 K3；之前是瞬間出現、消失）。減少動態本來就是淡入淡出
+    <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
+      style={[s.fabWrap, { bottom: insets.bottom + T.space.m }]}>
+      <Pressable onPress={onPress} accessibilityLabel={label}
+        style={({ pressed }) => [s.fab, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>
+        <Sym name="plus" size={26} color={c.fabIcon} weight="semibold" />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -49,6 +54,7 @@ const s = StyleSheet.create({
   large: { ...T.font.largeTitle, marginTop: T.space.xs },
   btn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), alignItems: 'center', justifyContent: 'center',
     ...T.shape.shadowSoft },
-  fab: { position: 'absolute', right: T.space.l, width: T.shape.fab, height: T.shape.fab, borderRadius: T.shape.pill(T.shape.fab),
+  fabWrap: { position: 'absolute', right: T.space.l },
+  fab: { width: T.shape.fab, height: T.shape.fab, borderRadius: T.shape.pill(T.shape.fab),
     alignItems: 'center', justifyContent: 'center', ...T.shape.shadowStrong },
 });
