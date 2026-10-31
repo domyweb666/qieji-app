@@ -50,7 +50,7 @@
 2. ~~文件同步~~ ✅ 已做
 3. ~~A4 字放大到 20~~ ✅ 已做、commit、**真機過**（密度可、最大字級不爆）
 4. ~~A5 Backspace 併行~~ ✅ 已做、commit、**真機過**（併行且游標在接點、注音只刪注音、鍵盤不閃）。多米定「劃掉的不併」
-5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨」**，而且他本來就是付費會員，門直接開。執行清單在 `.vibe/EAS建置-申請與設定步驟.md`。**當天做完：** EAS 登入、expo-dev-client、專案連到 @fcharlie/qieji、iPhone 登錄、憑證、**第一次 iOS 開發版建置成功**（build d2f570cd，commit fbec07a）。中間踩了兩個坑（prepare 腳本、lock 缺 @emnapi → 釘 Node 24），全在步驟檔丁段。順手補了 expo-symbols 必要的 expo-font。**現在狀態＝待多米把開發版裝到 iPhone、驗收第一輪（圖示、啟動畫面、四輪手感、字放大、Backspace 併行在自己的 app 上再過一遍）**；過了才加 expo-widgets。另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
+5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨」**，而且他本來就是付費會員，門直接開。執行清單在 `.vibe/EAS建置-申請與設定步驟.md`。**當天做完：** EAS 登入、expo-dev-client、專案連到 @fcharlie/qieji、iPhone 登錄、憑證、**第一個能跑的 iOS 開發版建置＝ a37a893a（commit 2cecc4f）**。中間踩了三個坑（prepare 腳本、lock 缺 @emnapi → 釘 Node 24、expo-font 比 expo 核心新 → 一開就閃退 → `expo install --fix` 對齊），全在步驟檔丁段；**新規則：建置前先 `npx expo-doctor`，不符就 `--fix`**。**現在狀態＝待多米刪掉閃退的舊版、裝 a37a893a、驗收第一輪（圖示、啟動畫面、四輪手感、字放大、Backspace 併行在自己的 app 上再過一遍）**；過了才加 expo-widgets。另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
 6. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
