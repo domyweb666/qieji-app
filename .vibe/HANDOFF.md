@@ -1,9 +1,10 @@
-# Handoff: 效能與手感四輪改完（Return 開新行、點一下編輯、越線震＋拖曳 worklet、低風險三件），**四輪真機全過（2026-10-31）**；接著 A4 字放大到 20、A5 行首 Backspace 併行也做完並**真機過**
+# Handoff: 2026-10-31 三條線全收尾——效能手感（四輪＋字放大＋Backspace 併行）真機過、跨了 EAS 建置門（茄記成為自己的 app）、桌面／鎖定畫面小工具第一版真機過
 
-> 產出時間：2026-10-31 11:34
+> 產出時間：2026-10-31 15:55（上一版 11:34 在 `.vibe/handoff/archive/2026-10-31-1134.md`；這份是當天一路追加改成的，底下各節的「這次」指的都是 10/31 這一整天）
 > 前一會話的最後狀態，給下一個會話接續用
-> 專案：`E:\茄記\qieji-app`（Expo SDK 58／React Native，iOS 原生 app，多米用 Expo Go 在 iPhone 上測，沒有 Mac）
-> 上一份交接（「紙是家」重新設計、插畫接上）在 `.vibe/handoff/archive/2026-10-31-1134.md`，那邊的定案仍然有效，這份只接著寫。
+> 專案：`E:\茄記\qieji-app`（Expo SDK 58／React Native，iOS 原生 app，多米沒有 Mac）
+> **測試方式已換**：多米現在用自己的開發版 app（EAS 建置、內部發佈、裝在 iPhone）測，`npx expo start --tunnel` 連（手機走 4G）；要回 Expo Go 加 `--go`。改了 `app.json`、加原生套件、升 SDK 才要重建（先 `npx expo-doctor`），只改 JS 不用。EAS 的來龍去脈與三個坑在 `.vibe/EAS建置-申請與設定步驟.md`。
+> 上一份交接（「紙是家」重新設計、插畫接上）在 `.vibe/handoff/archive/2026-10-31-1134.md`，那邊的定案仍然有效。
 
 ## ✅ 這次完成了什麼
 
