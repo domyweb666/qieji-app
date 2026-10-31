@@ -51,6 +51,20 @@ export function Fab({ onPress, label }: { onPress: () => void; label: string }) 
   );
 }
 
+// 標題列右上的茄紫 ✓：在行裡打字時收鍵盤（多米 2026-11-01，參考 iOS 提醒事項：沒在打字只有 ⋯，打字時 ⋯ 右邊多一顆藍色 ✓）。
+// 跟右下 ＋ 同一個顏色、同一個時鐘：鍵盤升起那一刻 ＋ 淡出、✓ 淡進，收起時反過來，accent 一個畫面還是只出現一次
+export function DoneBtn({ onPress, label }: { onPress: () => void; label: string }) {
+  const c = useColors();
+  return (
+    <Animated.View entering={FadeIn.duration(T.motion.keyboardFollow.duration)} exiting={FadeOut.duration(T.motion.keyboardFollow.duration)}>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+        style={({ pressed }) => [s.btn, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>
+        <Sym name="checkmark" size={20} color={c.fabIcon} weight="semibold" />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const s = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', minHeight: T.shape.hitMin },
   large: { ...T.font.largeTitle, marginTop: T.space.xs },

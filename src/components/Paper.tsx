@@ -34,7 +34,7 @@ import { Composer } from './Composer';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
-import { Fab, GlassBtn } from './WebBars';
+import { DoneBtn, Fab, GlassBtn } from './WebBars';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
 const FACE_FLAT = require('../../assets/img/face-flat.webp');
@@ -508,6 +508,8 @@ export function Paper({ n }: { n: Note }) {
           </Pressable>
         )}
         <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
+        {/* 鍵盤開著才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。輸入框開著時不畫，它旁邊自己有 ✓ */}
+        {kbUp && !composing && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
