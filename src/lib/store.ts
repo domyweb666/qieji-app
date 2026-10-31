@@ -10,6 +10,7 @@ import { pushWidget } from './widget';
 type Box = {
   state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
+  panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
@@ -53,6 +54,9 @@ export const store = {
   },
   get fresh() { return box.fresh ?? null; },
   clearFresh() { box.fresh = null; },
+  // 目錄面板收完那一刻（原生堆疊的 transitionEnd closing）由目錄呼叫，紙收到就馬上升起輸入框，不用等 700ms 的保險（K6，2026-11-01）
+  panelClosed() { box.panelSubs?.forEach(f => f()); },
+  onPanelClosed(f: () => void) { (box.panelSubs ??= new Set()).add(f); return () => { box.panelSubs?.delete(f); }; },
 
   async load() {
     if (box.loaded) return;

@@ -1,8 +1,8 @@
 // 目錄：從紙最上面的清單名拉起來的面板（重新設計分支「紙是家」，首頁降級成這張面板）。
 // 搜尋、色磚（只有顏色和名字，沒有時間、沒有預覽、沒有數字）、「＋ 新的一張」、最近刪除；篩選、排序、備份在右上 ⋯。
 // 點一塊就換紙、面板收起來。帶 move 參數進來（紙上長按 →「搬到…」）就變成「把這行搬到哪張」：點一塊就搬過去。
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showActs, type Act } from '../components/Acts';
@@ -27,6 +27,14 @@ export default function Directory() {
   const [q, setQ] = useState('');
   const searching = !!q.trim();
   const chipColor = useNoteColors(filter === 'all' ? 'purple' : filter);
+
+  // K6（2026-11-01 第三輪）：面板收完那一刻（原生堆疊對這個畫面發 transitionEnd、closing＝true，在卸載之前）通知 store，
+  // 紙上「新的一張」的輸入框就能馬上升起，不用等 700ms 的保險。事件名與 closing 旗標對過 expo-router 的 NativeStackView；網頁沒這個事件
+  const navigation = useNavigation();
+  useEffect(() => {
+    const nav = navigation as unknown as { addListener: (ev: 'transitionEnd', cb: (e: { data?: { closing?: boolean } }) => void) => () => void };
+    return nav.addListener('transitionEnd', e => { if (e.data?.closing) store.panelClosed(); });
+  }, [navigation]);
 
   const notes = visibleNotes(s, { trash: false, filter, q, sort: s.sort });
   const pinned = notes.filter(n => n.pinned), other = notes.filter(n => !n.pinned);

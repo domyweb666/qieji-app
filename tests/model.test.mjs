@@ -163,3 +163,28 @@ test('moveItem：搬到別張的最上面；同一張不動', () => {
   moveItem(a, b, 'a1');
   assert.deepEqual(b.items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a1-', 'a2', 'b1']);
 });
+
+// 第三輪（2026-11-01）：在一行裡打字的兩個純函式
+import { splitPasted, caretAt } from '../src/lib/model.ts';
+
+test('K5 貼多行：換行切、去行首符號、丟空行，跟網頁版一樣', () => {
+  assert.deepEqual(splitPasted('- 買菜\r\n• 寫交接\n\n1. 回信\n2) 洗衣\n三、不是符號'), ['買菜', '寫交接', '回信', '洗衣', '三、不是符號']);
+  assert.deepEqual(splitPasted('一行沒換行'), ['一行沒換行']);
+  assert.deepEqual(splitPasted('\n\n'), []);
+  assert.deepEqual(splitPasted('  前後空白  \n☑ 勾過的'), ['前後空白', '勾過的']);
+});
+
+test('K1 游標落點：用 y 找行、行內用比例，夾在 0～max；沒有 lines 回 undefined', () => {
+  const lines = [
+    { x: 4, y: 0, width: 200, height: 30, text: '一二三四五六七八九十' }, // 10 字、每字 20 寬
+    { x: 4, y: 30, width: 100, height: 30, text: '甲乙丙丁戊' },
+  ];
+  assert.equal(caretAt([], 50, 10, 99), undefined);
+  assert.equal(caretAt(lines, 4, 10, 15), 0);        // 第一行最左
+  assert.equal(caretAt(lines, 104, 10, 15), 5);      // 第一行正中＝第 5 個字後面
+  assert.equal(caretAt(lines, 999, 10, 15), 10);     // 第一行右邊的空白＝行尾
+  assert.equal(caretAt(lines, 44, 45, 15), 12);      // 第二行第 2 個字後面＝10 ＋ 2
+  assert.equal(caretAt(lines, 60, 999, 15), 13);     // 點在最後一行下面＝算最後一行
+  assert.equal(caretAt(lines, 999, 999, 12), 12);    // 夾在 max（隱形字多一個零寬空白）
+  assert.equal(caretAt(lines, -50, 10, 15), 0);      // 點在左邊外面
+});

@@ -223,6 +223,27 @@ export function moveItem(from: Note, to: Note, id: string): Item | undefined {
   return it;
 }
 
+/* ---------------- 在一行裡打字的兩個純函式（2026-11-01 第三輪） ---------------- */
+// K5：貼上帶換行的字拆成多行，跟網頁版 splitLines 一樣——以換行切、去掉行首的「- • 1. 」這類清單符號、丟掉空行
+export function splitPasted(txt: string): string[] {
+  return txt.split(/\r?\n/).map(s => s.replace(/^\s*([-*•□☐✓☑]|\d+[.)、])\s*/, '').trim()).filter(Boolean);
+}
+// K1：點一下，游標落在點的位置。lines＝撐高度的隱形 Text 用 onTextLayout 回報的每一行（x、y、width、height、text），
+// x、y＝點的座標（跟 lines 同一個座標系）。先用 y 找第幾行，行內用比例算第幾個字（中文等寬所以準，中英混排差一兩個字），
+// 前面幾行的字數加總當起點，最後夾在 0～max。沒有 lines（網頁預覽沒有 onTextLayout）回 undefined，讓呼叫端照舊落在行尾
+export type TextLine = { x: number; y: number; width: number; height: number; text: string };
+export function caretAt(lines: TextLine[], x: number, y: number, max: number): number | undefined {
+  if (!lines.length) return undefined;
+  let k = lines.findIndex(l => y < l.y + l.height);
+  if (k < 0) k = lines.length - 1;
+  let at = 0;
+  for (let i = 0; i < k; i++) at += lines[i].text.length;
+  const l = lines[k];
+  const ratio = l.width > 0 ? (x - l.x) / l.width : 1;
+  at += Math.round(Math.max(0, Math.min(1, ratio)) * l.text.length);
+  return Math.max(0, Math.min(max, at));
+}
+
 /* ---------------- list grouping (iOS 備忘錄式分組) ---------------- */
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const WEEK = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];

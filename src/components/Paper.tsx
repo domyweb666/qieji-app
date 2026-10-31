@@ -24,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, CKEYS, col, convertNote, fullDate, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
+import { ago, binItem, caretAt, CKEYS, col, convertNote, fullDate, isEmpty, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -283,10 +283,27 @@ export function Paper({ n }: { n: Note }) {
   }, [kbLift]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- 在一行裡打字 ---------- */
-  // 換行、貼上多行都留在同一格，不會自己拆成好幾行
+  // K5（2026-11-01 第三輪）：貼上帶換行的字自動拆成多行。只在「新字的換行數比舊字多」時拆（舊資料本來就帶換行的格，打一個字不會整格炸開）；
+  // 拆法跟網頁版 splitLines 一樣（model.ts splitPasted）：第一段留在原行、其餘依序插在正下方、游標停在最後一段尾端。
+  // Return 現在是送出，一格裡的換行只剩貼上與口述「換行」兩個來源（口述換行也會拆，算對）
+  const newlines = (s: string) => (s.match(/\n/g) ?? []).length;
   function onChange(id: string, v: string) {
-    const it = n.items.find(i => i.id === id);
-    if (!it) return;
+    const idx = n.items.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    const it = n.items[idx];
+    if (newlines(v) > newlines(it.t)) {
+      const parts = splitPasted(v);
+      if (parts.length > 1) {
+        it.t = parts[0];
+        revs.current[id] = (revs.current[id] ?? 0) + 1; // 原行被程式改字，輸入框要重掛
+        const rest: Item[] = parts.slice(1).map(t => ({ id: uid(), t, done: false, b: false }));
+        n.items.splice(idx + 1, 0, ...rest);
+        touch();
+        const last = rest[rest.length - 1];
+        focusItem(last.id, last.t.length);
+        return;
+      }
+    }
     it.t = v;
     touch(true);
   }
@@ -395,14 +412,18 @@ export function Paper({ n }: { n: Note }) {
     // 萬一 effect 被重跑（開發模式），把剛被當成空白移掉的筆記放回去，不能讓它消失
     if (closed.current && !n.deleted && !store.s.notes.some(x => x.id === n.id)) store.s.notes.push(n);
     closed.current = false;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    // 剛從目錄開的新的一張：目錄收起來之後直接升起輸入框、鍵盤升起（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）
+    let t: ReturnType<typeof setTimeout> | undefined, off: (() => void) | undefined;
+    // 剛從目錄開的新的一張：目錄收起來之後直接升起輸入框、鍵盤升起（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）。
+    // K6（2026-11-01 第三輪）：面板收完那一刻目錄會通知 store（原生堆疊的 transitionEnd closing），收到就馬上開，不用等到 700；
+    // 700 留著當保險（網頁預覽沒有那個事件；原生事件沒來也不會卡死）。只開一次
     if (store.fresh === n.id) {
       store.clearFresh();
-      t = setTimeout(() => { if (mounted.current) openComposer(); }, T.timing.freshFocusFallback);
+      const openOnce = () => { off?.(); off = undefined; clearTimeout(t); if (mounted.current) openComposer(); };
+      off = store.onPanelClosed(openOnce);
+      t = setTimeout(openOnce, T.timing.freshFocusFallback);
     }
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
-    return () => { clearTimeout(t); mounted.current = false; closeNote(); };
+    return () => { clearTimeout(t); off?.(); mounted.current = false; closeNote(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 切到別的 app、鎖屏（被打斷）：輸入框裡打到一半的字先送出、框收起、立刻寫入，字不會丟（多米 2026-11-01 定）
   useEffect(() => {
@@ -524,7 +545,7 @@ export function Paper({ n }: { n: Note }) {
                 onChange={v => onChange(it.id, v)} onKey={(e, sel) => onKey(it.id, e, sel)} onSubmit={caret => onSubmit(it.id, caret)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
                 onStrike={fromSwipe => strike(it.id, fromSwipe)} onRemove={() => remove(it.id)}
-                onMenu={y => openRowMenu(it.id, y)} onEdit={() => focusItem(it.id)}
+                onMenu={y => openRowMenu(it.id, y)} onEdit={caret => focusItem(it.id, caret)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </View>
@@ -626,7 +647,8 @@ type LineProps = {
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
-  onStrike: (fromSwipe?: boolean) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
+  onStrike: (fromSwipe?: boolean) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void;
+  onEdit: (caret?: number) => void; // caret＝游標要落在第幾個字（點一下的位置換算來的）；沒給就落在行尾
   drag: { start: (id: string) => void; end: () => void };
 };
 
@@ -699,12 +721,17 @@ function LineRow(p: LineProps) {
     maxDistance: G.longPressMove,
     onActivate: () => { rowRef.current?.measureInWindow((x, y, w, h) => onMenu(y + h)); },
   });
-  // 點一下＝進這一行編輯。手指移超過門檻就不算點（捲動時碰到字不會跳出鍵盤）；第二輪試驗，誤觸就改回 2
+  // 點一下＝進這一行編輯。手指移超過門檻就不算點（捲動時碰到字不會跳出鍵盤）；第二輪試驗，誤觸就改回 2。
+  // K1（2026-11-01 第三輪）：游標落在點的位置。撐高度的隱形 Text 用 onTextLayout 回報每一行的位置與文字（存在 lines），
+  // 點的 x、y 是相對於掛手勢的那層（st.cin），x 扣掉它的左內距就跟 Text 同一個座標系；換算在 model.ts caretAt。
+  // 網頁預覽沒有 onTextLayout，lines 是空的，照舊落在行尾；中英混排差一兩個字時再點一下，那時行已在編輯、原生輸入框自己接
+  const lines = useRef<TextLine[]>([]);
+  const textLen = p.it.t.length;
   const tap = useTapGesture({
     runOnJS: true,
     numberOfTaps: 1,
     maxDistance: G.longPressMove,
-    onActivate: () => onEdit(),
+    onActivate: e => onEdit(caretAt(lines.current, e.x - T.space.l, e.y, textLen)),
   });
   // 長按、點一下、滑動只有一個會成立：手指移超過門檻長按和點一下就放棄，滑動才接手；按住超過長按時間就不算點
   const rowGesture = useExclusiveGestures(hold, tap, swipe);
@@ -818,6 +845,7 @@ function LineRow(p: LineProps) {
           <View style={st.field}>
             {/* key 跟著 rev：程式改了這行的字（Return 切行）就重掛輸入框，defaultValue 才會是新的字 */}
             <Field key={p.rev} text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
+              onLines={ls => { lines.current = ls; }}
               onChange={p.onChange} onKey={p.onKey} onSubmit={p.onSubmit} onFocus={p.onFocus} onBlur={p.onBlur} />
             {!p.editing && <View style={StyleSheet.absoluteFill} collapsable={false} accessible={false} importantForAccessibility="no" />}
           </View>
@@ -838,9 +866,10 @@ function LineRow(p: LineProps) {
 // 字級跟著系統放大。行高不用自己乘倍數：iOS 上 React Native 會自動把行高一起放大，自己再乘一次行距會變兩倍大。
 // 最小高度不會自動放大，才要自己乘
 // Return 不換行而是送出（submitBehavior='submit'：鍵盤不收），由上層在下面開新的一行；游標在哪用 onSelectionChange 記著，切行、行首 Backspace 併行時要用
-function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChange, onKey, onSubmit, onFocus, onBlur }: {
+function Field({ text, done, fs, colors: c, refInput, actions, onAction, onLines, onChange, onKey, onSubmit, onFocus, onBlur }: {
   text: string; done: boolean; fs: number; colors: Colors; refInput: (r: TextInputInstance | null) => void;
   actions: { name: string; label: string }[]; onAction: (e: AccessibilityActionEvent) => void;
+  onLines: (lines: TextLine[]) => void; // 隱形 Text 每次排版完回報每一行（K1 游標落點用）
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
 }) {
@@ -857,7 +886,8 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChang
   const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
     <>
-      <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
+      <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants"
+        onTextLayout={e => onLines(e.nativeEvent.lines)}>{txt + '​'}</Text>
       <TextInput ref={setRef} defaultValue={text} multiline scrollEnabled={false}
         submitBehavior="submit" enterKeyHint="next"
         // 網頁預覽的 TextInput 不認 submitBehavior，多行只有 blurOnSubmit 才會送出；送出後上層會把焦點放到新的一行。iOS 不給這個
