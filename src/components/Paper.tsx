@@ -368,7 +368,7 @@ export function Paper({ n }: { n: Note }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- actions ---------- */
-  const name = n.title.trim() || '沒有名字的一張';
+  const name = n.title.trim() || '未命名'; // 多米 2026-11-01 定（原本「沒有名字的一張」）
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); router.push('/directory'); }
