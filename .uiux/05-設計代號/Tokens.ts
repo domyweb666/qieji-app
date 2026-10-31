@@ -81,7 +81,8 @@ export const T = {
   font: {
     listTitle:    { size: 20, weight: '700' as const, system: 'Title 3',     maxScale: 1.5 }, // 清單標題（上限 1.5 倍是多米定的）
     paperTitle:   { size: 28, weight: '700' as const, system: 'Title 1',     maxScale: 1.5 }, // 紙最上面的清單名（重新設計分支）
-    body:         { size: 17, weight: '400' as const, system: 'Body',        lineHeight: 27 }, // 每一行、首頁清單名稱、選單項目
+    body:         { size: 17, weight: '400' as const, system: 'Body' },                       // 首頁清單名稱、選單項目
+    bodyLine:     { size: 20, weight: '400' as const, system: 'Title 3',     lineHeight: 30 }, // 紙上每一行的字（2026-10-31 A4：17/27 → 20/30，行高 1.5 跟網頁版一樣，多米看過密度定）
     emphasis:     { size: 17, weight: '600' as const, system: 'Headline' },                   // 確認框的字
     subhead:      { size: 15, weight: '400' as const, system: 'Subheadline' },                // chip、空狀態、toast
     subheadBold:  { size: 15, weight: '600' as const, system: 'Subheadline' },                // 滑動露出的字、面板標題、toast 按鈕

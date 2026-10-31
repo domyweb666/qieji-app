@@ -108,7 +108,7 @@ export const font = {
   listTitle:    { fontSize: 20, fontWeight: '700' as const }, // Title 3；清單標題，最多放大 1.5 倍（多米定）
   paperTitle:   { fontSize: 28, fontWeight: '700' as const }, // Title 1；紙最上面的清單名（重新設計分支）
   body:         { fontSize: 17, fontWeight: '400' as const }, // Body；每一行、首頁清單名稱、選單項目
-  bodyLine:     { fontSize: 17, lineHeight: 27 },             // 每一行的字（行高 1.6）
+  bodyLine:     { fontSize: 20, lineHeight: 30 },             // 每一行的字（行高 1.5；2026-10-31 A4 試驗：17/27 → 20/30，跟網頁版一樣，多米看密度再定）
   emphasis:     { fontSize: 17, fontWeight: '600' as const }, // Headline；確認框的字
   subhead:      { fontSize: 15, fontWeight: '400' as const }, // chip、空狀態、toast
   subheadBold:  { fontSize: 15, fontWeight: '600' as const }, // 滑動露出的字、面板標題、toast 按鈕

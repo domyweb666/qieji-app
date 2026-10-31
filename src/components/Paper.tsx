@@ -40,7 +40,7 @@ const hapticArm = () => haptic('swipeArm');
 const hapticPass = () => haptic('dragPass');
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
-// 一行字的高度與上下留白（17pt 字、1.6 倍行距、上下各 12）
+// 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
 const ROW_MIN = T.shape.rowMin;
