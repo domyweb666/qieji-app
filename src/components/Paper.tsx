@@ -156,10 +156,17 @@ export function Paper({ n }: { n: Note }) {
   }
   // 鍵盤膠囊左邊的 ∧ ∨：游標跳到上一行／下一行（多米 2026-10-31 要的；之前拿掉過，這次是明確要回來）
   const editIdx = editing ? n.items.findIndex(i => i.id === editing) : -1;
+  // 不走 focusItem（那條要等畫面重畫才對焦，中間舊的輸入框先放掉，鍵盤會收了再開）：
+  // 這裡直接把焦點移到下一行的輸入框，鍵盤留在原地；游標落在那一行的開頭
   function focusNeighbor(d: -1 | 1) {
     const to = n.items[editIdx + d];
     if (editIdx < 0 || !to) return;
-    focusItem(to.id);
+    const inp = inputs.current[to.id];
+    if (!inp) return focusItem(to.id, 0);
+    setEditing(to.id);
+    inp.focus();
+    inp.setSelection?.(0, 0);
+    requestAnimationFrame(() => inp.setSelection?.(0, 0)); // iOS 對焦後會把游標放到最後，下一格再放回開頭
   }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
