@@ -235,9 +235,11 @@ export function Paper({ n }: { n: Note }) {
   const [kbPad, setKbPad] = useState(0);
   const kbLift = useSharedValue(0);
   const barStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -kbLift.value }] }));
-  // 輸入框的位置：鍵盤升起後貼在鍵盤上面（跟膠囊一樣），鍵盤還沒升起時貼著安全區。鍵盤一定比安全區高，所以兩段接得起來、不會跳一下
-  const insetBottom = insets.bottom;
-  const composerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.max(kbLift.value, insetBottom) }] }), WEB_DEPS ? [insetBottom] : undefined);
+  // 輸入框的位置（多米 2026-11-01 第二版：升到中間、背景變暗）：停在「安全區頂到鍵盤頂」那一段的正中。
+  // 框先在整個畫面置中，再往上移鍵盤高度的一半（鍵盤還沒升起時用安全區底，鍵盤一定比它高所以接得起來）、往下移安全區頂的一半，就是那段的中點；
+  // 鍵盤升降時跟著同一個 kbLift 走
+  const insetBottom = insets.bottom, insetTop = insets.top;
+  const composerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (insetTop - Math.max(kbLift.value, insetBottom)) / 2 }] }), WEB_DEPS ? [insetTop, insetBottom] : undefined);
   function ensureVisible(id: string | null) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
@@ -571,11 +573,18 @@ export function Paper({ n }: { n: Note }) {
         </Animated.View>
       )}
 
-      {/* 底部輸入框（多米 2026-11-01）：跟膠囊同一個位置，跟著鍵盤升降。外層讓觸控穿透，點框外面的行就是在點那一行 */}
+      {/* 輸入框（多米 2026-11-01，同日第二版）：整個畫面鋪暗幕、框升到鍵盤上方那段的正中，讓人聚焦。暗幕跟動作表單同一組（scrim、sheetBackdrop）、
+          跟框同時出現；點暗幕＝✓（有字送出、收起、鍵盤一起收）。框那層讓觸控穿透到暗幕 */}
       {composing && (
-        <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
-          <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
-        </Animated.View>
+        <>
+          <Animated.View entering={FadeIn.duration(T.motion.sheetBackdrop.in)} exiting={FadeOut.duration(T.motion.sheetBackdrop.out)}
+            style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={doneComposer} />
+          </Animated.View>
+          <Animated.View style={[st.composerWrap, composerStyle]} pointerEvents="box-none">
+            <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
+          </Animated.View>
+        </>
       )}
 
       {/* 排順序模式：底下同一種膠囊，一句說明和 ✓ 排好了 */}
@@ -910,6 +919,7 @@ const st = StyleSheet.create({
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開；排順序的提示也用同一顆
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
+  composerWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: T.space.l }, // 鋪滿畫面、框垂直置中；再由 composerStyle 往上移鍵盤的一半
   kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
   kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
   sortBar: { gap: T.space.s, paddingLeft: T.space.l },
