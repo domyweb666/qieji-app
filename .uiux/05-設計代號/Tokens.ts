@@ -141,6 +141,7 @@ export const T = {
   haptic: {
     strike:    'selection' as const, // 劃掉／恢復（expo-haptics selectionAsync）
     dragStart: 'selection' as const, // 開始拖曳
+    menu:      'selection' as const, // 長按一行跳出選單（重新設計分支）
     // 刪除、復原、釘選、toast、存檔失敗：無
   },
 
@@ -151,6 +152,9 @@ export const T = {
     strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 算劃掉
     deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 算刪除
     dragActivate: 1,
+    pullOpen: 70,       // 紙頂端再往下拉超過這麼多放手＝開目錄（重新設計分支）
+    longPressMs: 500,   // 長按一行多久跳選單
+    longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
   },
   timing: { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 },
 } as const;

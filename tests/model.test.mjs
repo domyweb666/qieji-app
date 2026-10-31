@@ -131,3 +131,60 @@ test('setDone：劃掉搬到劃掉區最前面，恢復搬回最上面', () => {
   setDone(one, 'p', true);
   assert.deepEqual(one.map(i => i.id), ['q', 'p']);
 });
+
+/* ---------------- 刪掉的行進 bin、搬到別張（重新設計分支） ---------------- */
+import { binItem, unbinItem, moveItem } from '../src/lib/model.ts';
+
+const paper = (ids, extra = {}) => ({ id: 'p', type: 'check', title: '', body: '', items: ids.map(id => row(id)), bin: [], color: 'purple',
+  pinned: false, deleted: false, created: 1, updated: 1, b: false, ...extra });
+
+test('舊存檔沒有 bin：載入後是空陣列；bin 裡的行會補齊欄位', () => {
+  const s = parseState(JSON.stringify({ notes: [
+    { id: 'a', type: 'check', title: '', items: [], color: 'purple' },
+    { id: 'b', type: 'check', title: '', items: [], bin: [{ id: 'x', t: '舊的', at: 123 }, { id: 'y', t: '沒時間' }], color: 'purple' },
+  ] }));
+  assert.deepEqual(s.notes[0].bin, []);
+  assert.equal(s.notes[1].bin.length, 2);
+  assert.equal(s.notes[1].bin[0].at, 123);
+  assert.equal(s.notes[1].bin[1].at, undefined);
+  assert.equal(s.notes[1].bin[1].done, false);
+});
+
+test('binItem：行離開紙、記下時間、排在 bin 最前面；找不到回 undefined', () => {
+  const n = paper(['a', 'b', 'c']);
+  assert.equal(binItem(n, 'b', 1000).id, 'b');
+  assert.deepEqual(n.items.map(i => i.id), ['a', 'c']);
+  assert.equal(n.bin[0].at, 1000);
+  binItem(n, 'c', 2000);
+  assert.deepEqual(n.bin.map(i => i.id), ['c', 'b']);
+  assert.equal(binItem(n, 'nope', 3000), undefined);
+});
+
+test('unbinItem：放回最上面或指定位置，時間拿掉，劃掉的沉到後面', () => {
+  const n = paper(['a', 'b']);
+  binItem(n, 'a', 1000);
+  unbinItem(n, 'a');
+  assert.deepEqual(n.items.map(i => i.id), ['a', 'b']);
+  assert.equal(n.items[0].at, undefined);
+  binItem(n, 'a', 1000);
+  unbinItem(n, 'a', 99); // 超過長度就放最後
+  assert.deepEqual(n.items.map(i => i.id), ['b', 'a']);
+  n.items[1].done = true;
+  binItem(n, 'a', 1000);
+  unbinItem(n, 'a', 0); // 劃掉的回來也不會排在沒劃掉的前面
+  assert.deepEqual(n.items.map(i => i.id), ['b', 'a']);
+  assert.equal(unbinItem(n, 'nope'), undefined);
+});
+
+test('moveItem：搬到別張的最上面；同一張不動', () => {
+  const a = paper(['a1', 'a2'], { id: 'a' }), b = paper(['b1'], { id: 'b' });
+  assert.equal(moveItem(a, b, 'a2').id, 'a2');
+  assert.deepEqual(a.items.map(i => i.id), ['a1']);
+  assert.deepEqual(b.items.map(i => i.id), ['a2', 'b1']);
+  assert.equal(moveItem(a, a, 'a1'), undefined);
+  assert.deepEqual(a.items.map(i => i.id), ['a1']);
+  // 劃掉的搬過去也沉到後面
+  a.items[0].done = true;
+  moveItem(a, b, 'a1');
+  assert.deepEqual(b.items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a2', 'b1', 'a1-']);
+});

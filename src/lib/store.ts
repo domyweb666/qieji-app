@@ -98,7 +98,7 @@ export function useStore() {
 
 // 新增筆記：現在只有清單（type 參數留著，舊資料和測試用得到）
 export function newNote(color: ColorKey = 'purple', type: Note['type'] = 'check') {
-  const n: Note = { id: uid(), type, title: '', body: '', items: [], color,
+  const n: Note = { id: uid(), type, title: '', body: '', items: [], bin: [], color,
     pinned: false, deleted: false, created: Date.now(), updated: Date.now(), b: false };
   box.state.notes.push(n);
   store.change();

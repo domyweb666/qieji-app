@@ -164,7 +164,7 @@ export const motion = {
 };
 
 /* ---------- 觸覺：一種事件一種觸覺 ---------- */
-const HAPTIC = { strike: Haptics.selectionAsync, dragStart: Haptics.selectionAsync };
+const HAPTIC = { strike: Haptics.selectionAsync, dragStart: Haptics.selectionAsync, menu: Haptics.selectionAsync };
 export function haptic(event: keyof typeof HAPTIC) { HAPTIC[event]().catch(() => {}); }
 
 /* ---------- 非動畫的門檻與時間 ---------- */
@@ -174,6 +174,9 @@ export const gesture = {
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,
+  pullOpen: 70,       // 紙頂端再往下拉超過這麼多放手＝開目錄（重新設計分支）
+  longPressMs: 500,   // 長按一行多久跳選單
+  longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
 };
 export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 };
 

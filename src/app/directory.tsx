@@ -1,20 +1,22 @@
 // 目錄：從紙最上面的清單名拉起來的面板（重新設計分支「紙是家」，首頁降級成這張面板）。
 // 搜尋、色磚（只有顏色和名字，沒有時間、沒有預覽、沒有數字）、「＋ 新的一張」、最近刪除；篩選、排序、備份在右上 ⋯。
-// 點一塊就換紙、面板收起來。
-import { router } from 'expo-router';
+// 點一塊就換紙、面板收起來。帶 move 參數進來（紙上長按 →「搬到…」）就變成「把這行搬到哪張」：點一塊就搬過去。
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showActs, type Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
+import { ui } from '../components/Overlay';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
-import { CKEYS, col, label, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
+import { CKEYS, col, label, moveItem, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
 export default function Directory() {
+  const { move } = useLocalSearchParams<{ move?: string }>();
   const s = useStore();
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -30,9 +32,26 @@ export default function Directory() {
   // 兩欄：整頁左右各留 16，中間留 12
   const tileW = (width - T.space.l * 2 - T.space.m) / 2;
 
-  const pick = (n: Note) => { store.open(n.id); router.back(); };
-  // 新的一張：篩選中就用那個顏色；開完直接停在紙的輸入列（fresh）
-  const add = () => { const n = newNote(filter !== 'all' ? filter : 'purple', 'check'); store.open(n.id, true); router.back(); };
+  // 搬行模式：來源是現在這張紙、要搬的那一行。行已經不在了（例如同時被刪）就當普通目錄用
+  const from = move ? s.notes.find(n => n.id === store.last && !n.deleted) : undefined;
+  const moving = from?.items.find(i => i.id === move);
+  function pick(n: Note) {
+    if (from && moving) {
+      const name = label(n); // 先取名字：沒標題的紙搬進去後第一行會變成這一行
+      if (moveItem(from, n, moving.id)) { n.updated = from.updated = Date.now(); store.change(); ui.toast(`已搬到「${name}」`); }
+      router.back();
+      return;
+    }
+    store.open(n.id);
+    router.back();
+  }
+  // 新的一張：篩選中就用那個顏色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
+  function add() {
+    const n = newNote(filter !== 'all' ? filter : 'purple', 'check');
+    if (from && moving) { pick(n); return; }
+    store.open(n.id, true);
+    router.back();
+  }
 
   const menu: Act[] = [
     // 篩選與讀屏統一用一般色名（紫色…），不用蔬菜名（詞彙表 #10）
@@ -75,6 +94,9 @@ export default function Directory() {
           </Pressable>
         )}
 
+        {moving && (
+          <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
+        )}
         {!searching && (
           <Pressable onPress={add} accessibilityRole="button" accessibilityLabel="新的一張"
             style={({ pressed }) => [st.tile, st.add, { width: tileW, borderColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
@@ -135,6 +157,7 @@ const st = StyleSheet.create({
   chipDot: { width: CHIP_DOT, height: CHIP_DOT, borderRadius: T.shape.pill(CHIP_DOT), borderWidth: T.shape.borderCard },
   chipText: { ...T.font.subhead },
   head: { ...T.font.sectionHead, marginTop: T.space.l, marginBottom: T.space.s, marginLeft: T.space.xs },
+  moveHead: { ...T.font.subhead, marginBottom: T.space.m, marginLeft: T.space.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
   tile: { height: T.shape.tile, borderRadius: T.shape.radiusCard, borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   add: { borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.s },

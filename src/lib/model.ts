@@ -8,13 +8,14 @@ export const HINT_KEY = 'cn.hint';
 export type ColorKey = 'purple' | 'yellow' | 'orange' | 'red' | 'blue' | 'green' | 'gray' | 'black' | 'white';
 export type SortKey = 'updated' | 'created' | 'title' | 'color';
 
-export type Item = { id: string; t: string; done: boolean; b: boolean };
+export type Item = { id: string; t: string; done: boolean; b: boolean; at?: number }; // at：被刪掉的時間，只有在 bin 裡才有
 export type Note = {
   id: string;
   type: 'text' | 'check';
   title: string;
   body: string;
   items: Item[];
+  bin: Item[]; // 這張紙刪掉的行（最近刪除）；欄位 2026-10-31 加，舊存檔沒有就是空的
   color: ColorKey;
   pinned: boolean;
   deleted: boolean;
@@ -55,7 +56,10 @@ const p2 = (x: number) => String(x).padStart(2, '0');
 
 export function fixNote(n: any): Note {
   if (!COLORS[n.color as ColorKey]) n.color = n.color === 'pink' ? 'red' : 'yellow';
-  n.items = (n.items || []).map((i: any) => ({ id: i.id || uid(), t: i.t || '', done: !!i.done, b: i.b === undefined ? true : !!i.b }));
+  const fixItem = (i: any): Item => ({ id: i.id || uid(), t: i.t || '', done: !!i.done, b: i.b === undefined ? true : !!i.b,
+    ...(typeof i.at === 'number' && Number.isFinite(i.at) && i.at > 0 ? { at: i.at } : {}) });
+  n.items = (n.items || []).map(fixItem);
+  n.bin = (Array.isArray(n.bin) ? n.bin : []).map(fixItem);
   n.title = n.title || '';
   n.body = n.body || '';
   n.b = n.b === undefined ? true : !!n.b;
@@ -206,6 +210,37 @@ export function setDone(items: Item[], id: string, done: boolean) {
   it.done = done;
   const at = done ? items.findIndex(i => i.done) : 0;
   items.splice(at < 0 ? items.length : at, 0, it);
+}
+
+/* ---------------- 刪掉的行：進這張紙的 bin（最近刪除），不是直接消失 ---------------- */
+// 回傳被移走的那行；找不到回 undefined
+export function binItem(n: Note, id: string, now: number): Item | undefined {
+  const idx = n.items.findIndex(i => i.id === id);
+  if (idx < 0) return undefined;
+  const [it] = n.items.splice(idx, 1);
+  it.at = now;
+  n.bin.unshift(it);
+  return it;
+}
+// 從 bin 放回紙上：預設放最上面，給 at 就放回那個位置；劃掉的照樣沉到後面
+export function unbinItem(n: Note, id: string, at = 0): Item | undefined {
+  const idx = n.bin.findIndex(i => i.id === id);
+  if (idx < 0) return undefined;
+  const [it] = n.bin.splice(idx, 1);
+  delete it.at;
+  n.items.splice(Math.max(0, Math.min(at, n.items.length)), 0, it);
+  tidyDone(n.items);
+  return it;
+}
+// 搬到別張紙：放到那張的最上面（劃掉的照樣沉到後面）。同一張不動
+export function moveItem(from: Note, to: Note, id: string): Item | undefined {
+  if (from === to) return undefined;
+  const idx = from.items.findIndex(i => i.id === id);
+  if (idx < 0) return undefined;
+  const [it] = from.items.splice(idx, 1);
+  to.items.unshift(it);
+  tidyDone(to.items);
+  return it;
 }
 
 /* ---------------- list grouping (iOS 備忘錄式分組) ---------------- */
