@@ -1,9 +1,9 @@
 // 紙：app 的根畫面（重新設計分支「紙是家」）。上面是清單名（點一下開目錄）和 ⋯；中間一行一行的字，
-// 像筆記本：沒有卡片，只有一條淡格線；劃掉的行沉到最底下的「劃掉的」區塊（收起來，不印數字）。
-// 最下面一條常駐輸入列「記點什麼…」：打字、按換行，那行就出現在紙的最上面。沒有「＋ 新增一行」了。
-// 往右滑＝劃掉，往左滑＝刪除（進這張紙的最近刪除），長按＝劃掉／搬到／複製／刪除的選單；
-// 把手只在 ⋯ →「排順序」時出現，只能在同一區塊裡拖。紙頂端再往下拉放手＝開目錄。
-// 從 app/note/[id].tsx 搬過來：滑動與拖曳的手勢（worklet）一行沒動，只改排版、拿掉頂部新增列、加輸入列。
+// 像筆記本：沒有卡片，只有一條淡格線。右下角 ＋ 在最上面開一行、鍵盤升起。
+// 一行要「快速點兩下」才會進編輯（上下捲動時碰到字不會跳出鍵盤）；往右滑＝劃掉（留在原位，只加刪除線）；
+// 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
+// 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
+// 從 app/note/[id].tsx 搬過來：滑動與拖曳的手勢（worklet）一行沒動。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
@@ -13,27 +13,23 @@ import {
   AppState, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
-import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture } from 'react-native-gesture-handler';
+import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { binItem, CKEYS, col, convertNote, isEmpty, plain, setDone, tidyDone, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
+import { binItem, CKEYS, col, convertNote, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { PopMenu } from './PopMenu';
 import { Sym } from './Sym';
-import { GlassBtn } from './WebBars';
+import { Fab, GlassBtn } from './WebBars';
 
-// 黏土茄子只出現在輸入列（平常、打字中）和空紙上（睡著）
-const FACE = {
-  calm: require('../../assets/img/face-calm.webp'),
-  happy: require('../../assets/img/face-happy.webp'),
-  sleep: require('../../assets/img/face-sleep.webp'),
-};
-// 底部輸入列佔的高度：藥丸 50 ＋ 上下各留 8
-const COMPOSER_H = T.shape.composer + T.space.s * 2;
+// 黏土茄子只出現在空紙上（睡著）
+const FACE_SLEEP = require('../../assets/img/face-sleep.webp');
+// 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
+const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
@@ -54,24 +50,24 @@ export function Paper({ n }: { n: Note }) {
   const closed = useRef(false);
   const mounted = useRef(true);
   const scrollRef = useRef<any>(null);
-  const composerRef = useRef<TextInputInstance>(null);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [fold, setFold] = useState(true); // 「劃掉的」區塊收起來
-  const [draft, setDraft] = useState(''); // 輸入列裡還沒記下的字
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
-  const [sorting, setSorting] = useState(false); // 排順序模式：把手出現、輸入列換成「排好了」
+  const [sorting, setSorting] = useState(false); // 排順序模式：把手出現、底下換成「排好了」
+  // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行碰到字不會跳出鍵盤（要快速點兩下）
+  const [editing, setEditingState] = useState<string | null>(null);
+  const editingRef = useRef<string | null>(null);
+  const setEditing = (id: string | null) => { editingRef.current = id; setEditingState(id); };
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
 
-  // 舊的文字筆記打開時轉成清單（一段一行）；存檔裡劃掉的行可能夾在中間，先排到後面
-  const tidied = useRef(false);
-  if (!tidied.current) {
-    tidied.current = true;
+  // 舊的文字筆記打開時轉成清單（一段一行）
+  const converted = useRef(false);
+  if (!converted.current) {
+    converted.current = true;
     if (n.type === 'text') { convertNote(n); store.save(); }
-    if (tidyDone(n.items)) store.save();
   }
 
   // quiet＝打字：只存檔不重畫。新增、劃掉、刪除這類改了結構的才重畫。app 正要進背景時立刻寫入
@@ -82,22 +78,12 @@ export function Paper({ n }: { n: Note }) {
     else store.flush();
   }
 
-  /* ---------- 記、劃掉、刪除、移動 ---------- */
-  // 記：輸入列裡的字變成紙最上面的一行，輸入列清空、鍵盤留著
-  function add() {
-    const t = draft.trim();
-    if (!t) return;
-    const it: Item = { id: uid(), t, done: false, b: false };
-    n.items.unshift(it);
-    setDraft('');
-    touch();
-    scrollTo(0);
-  }
+  /* ---------- 劃掉、刪除、移動 ---------- */
+  // 劃掉：留在原位，只加刪除線（多米 2026-10-31：劃掉的還會再看、還會有新想法；真的不要會自己刪）
   function strike(id: string) {
     const it = n.items.find(i => i.id === id);
     if (!it || !it.t.trim()) return;
-    setDone(n.items, id, !it.done);
-    if (it.done) setFold(false); // 剛劃掉的要看得到它沉到哪
+    it.done = !it.done;
     touch();
     store.markHint();
     haptic('strike');
@@ -116,13 +102,21 @@ export function Paper({ n }: { n: Note }) {
       touch();
     } });
   }
+  // VoiceOver 的「往上移／往下移」：拖曳把手用不了時的替代路徑
+  function move(id: string, d: -1 | 1) {
+    const idx = n.items.findIndex(i => i.id === id), to = idx + d;
+    if (idx < 0 || to < 0 || to >= n.items.length) return;
+    const [m] = n.items.splice(idx, 1);
+    n.items.splice(to, 0, m);
+    touch();
+  }
   // 長按一行：跳出選單（滑動之外看得見的路；VoiceOver 另有動作選單）。
   // bottom＝那一行在螢幕上的底邊（行自己量的，不用算捲到哪）；選單放在正下方，放不下就往上收
   function openRowMenu(id: string, bottom: number) {
     Keyboard.dismiss();
     haptic('menu');
     const h = T.shape.menuRow * 4 + T.space.s; // 四個項目
-    setRowMenu({ id, top: Math.max(insets.top, Math.min(bottom, winH - insets.bottom - COMPOSER_H - h)) });
+    setRowMenu({ id, top: Math.max(insets.top, Math.min(bottom, winH - insets.bottom - KBAR_H - h)) });
   }
   function rowActs(id: string): Act[] {
     const it = n.items.find(i => i.id === id);
@@ -134,17 +128,10 @@ export function Paper({ n }: { n: Note }) {
       { label: '刪除', icon: 'trash', destructive: true, fn: () => remove(id) },
     ];
   }
-  // VoiceOver 的「往上移／往下移」：拖曳把手用不了時的替代路徑。只在同一區塊（沒劃掉／劃掉）裡移
-  function move(id: string, d: -1 | 1) {
-    const idx = n.items.findIndex(i => i.id === id), to = idx + d;
-    if (idx < 0 || to < 0 || to >= n.items.length || n.items[to].done !== n.items[idx].done) return;
-    const [m] = n.items.splice(idx, 1);
-    n.items.splice(to, 0, m);
-    touch();
-  }
 
   /* ---------- focus ---------- */
-  function focusItem(id: string, caret?: number) { pending.current = { id, caret }; force(); }
+  // 進某一行編輯：先讓那一行的輸入框收觸控，畫完立刻對焦
+  function focusItem(id: string, caret?: number) { pending.current = { id, caret }; setEditing(id); force(); }
   // 畫完立刻對焦（不等到畫面顯示後），換格時鍵盤不會先收再開
   useLayoutEffect(() => {
     const p = pending.current;
@@ -156,16 +143,28 @@ export function Paper({ n }: { n: Note }) {
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
     inp.setSelection?.(at, at);
   });
+  // 右下角 ＋：唯一會多出一行的地方。先把清單捲回最上面，新的那行就在最上面
+  function focusNew() {
+    if (sorting) return;
+    scrollTo(0, false);
+    const first = n.items[0];
+    if (first && !first.t.trim()) return focusItem(first.id, 0);
+    const it: Item = { id: uid(), t: '', done: false, b: false };
+    n.items.unshift(it);
+    touch();
+    focusItem(it.id, 0);
+  }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
     if (keep.length !== n.items.length) { n.items = keep; store.change(); }
   }
   function onFocus(id: string) {
     focused.current = id;
-    if (id !== 'composer' && id !== 'title') requestAnimationFrame(() => ensureVisible(id));
+    if (id !== 'title') requestAnimationFrame(() => ensureVisible(id));
   }
   function onBlur(id: string) {
     if (focused.current === id) focused.current = null;
+    if (editingRef.current === id) setEditing(null); // 換到別行時 editing 已經是新的那行，這裡不會清掉它
     setTimeout(() => {
       if (focused.current || !mounted.current || closed.current) return;
       cleanupEmpty();
@@ -173,7 +172,8 @@ export function Paper({ n }: { n: Note }) {
   }
 
   /* ---------- 鍵盤：不讓系統自動推畫面 ---------- */
-  // 自己記住鍵盤頂在哪：正在打的那一行被擋住才捲，沒被擋住就一動也不動。輸入列跟著鍵盤升降
+  // 系統的自動推畫面，在鍵盤和上面那條工具列先後出現時會推兩次（新的一行先往上跑再往下掉）。
+  // 改成自己記住鍵盤頂在哪：正在打的那一行被擋住才捲，沒被擋住就一動也不動。
   const boxRef = useRef<ViewInstance>(null);
   const view = useRef({ top: 0, h: 0, y: 0, kb: Infinity }); // 清單在螢幕上的頂、高，目前捲到哪，鍵盤頂
   const [kbPad, setKbPad] = useState(0);
@@ -182,9 +182,8 @@ export function Paper({ n }: { n: Note }) {
   function ensureVisible(id: string | null) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
-    // 輸入列永遠蓋住最下面一截：有鍵盤時在鍵盤上面，沒鍵盤時在安全區上面
-    const bottom = v.kb < Infinity ? v.kb - COMPOSER_H : v.top + v.h - COMPOSER_H - insets.bottom;
-    const shown = bottom - v.top - T.space.l;
+    // 沒被鍵盤和工具列擋住的高度，底下留一點空
+    const shown = Math.min(v.h, v.kb - v.top - (v.kb < Infinity ? KBAR_H : 0)) - T.space.l;
     if (l.y < v.y) scrollTo(l.y);
     else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
   }
@@ -205,8 +204,7 @@ export function Paper({ n }: { n: Note }) {
       const v = view.current;
       v.kb = e.endCoordinates.screenY;
       const lift = Math.max(0, v.top + v.h - v.kb);
-      // 輸入列平常停在安全區上面，跟著鍵盤走時要扣掉那段，藥丸才會剛好停在鍵盤上面 8
-      kbLift.value = withTiming(Math.max(0, lift - insets.bottom), { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) });
+      kbLift.value = withTiming(lift, { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) });
       setKbPad(lift);
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
@@ -216,7 +214,7 @@ export function Paper({ n }: { n: Note }) {
       Keyboard.addListener('keyboardWillHide', hide), Keyboard.addListener('keyboardDidHide', hide),
     ];
     return () => subs.forEach(s => s.remove());
-  }, [kbLift, insets.bottom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kbLift]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- 在一行裡打字 ---------- */
   // 換行、貼上多行都留在同一格，不會自己拆成好幾行
@@ -237,22 +235,19 @@ export function Paper({ n }: { n: Note }) {
     focusItem(prev.id, prev.t.length);
   }
 
-  /* ---------- 拖曳排序：只在同一區塊（沒劃掉／劃掉）裡拖 ---------- */
+  /* ---------- 拖曳排序 ---------- */
   const dragIdx = useSharedValue(-1);
   const dragTo = useSharedValue(-1);
   const dragDy = useSharedValue(0);
   const dragH = useSharedValue(0);
-  // base＝這一區在整張裡的起點；mids＝這一區每一行的中線
-  const drag = useRef<{ idx: number; base: number; mids: number[] } | null>(null);
+  const drag = useRef<{ idx: number; mids: number[] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragApi = {
     start(id: string) {
       Keyboard.dismiss();
       const idx = n.items.findIndex(i => i.id === id);
-      const done = n.items[idx].done;
-      const base = done ? n.items.findIndex(i => i.done) : 0;
-      const mids = n.items.filter(i => i.done === done).map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
-      drag.current = { idx, base, mids };
+      const mids = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
+      drag.current = { idx, mids };
       dragH.value = (layouts.current[id]?.h ?? ROW_MIN);
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       setDragging(true);
@@ -261,10 +256,9 @@ export function Paper({ n }: { n: Note }) {
     move(dy: number) {
       const d = drag.current;
       if (!d) return;
-      const k = d.idx - d.base;
-      const y = d.mids[k] + dy;
+      const y = d.mids[d.idx] + dy;
       dragDy.value = dy;
-      dragTo.value = d.base + d.mids.filter((m, j) => j !== k && m < y).length;
+      dragTo.value = d.mids.filter((m, k) => k !== d.idx && m < y).length;
     },
     end() {
       const d = drag.current;
@@ -294,10 +288,10 @@ export function Paper({ n }: { n: Note }) {
     if (closed.current && !n.deleted && !store.s.notes.some(x => x.id === n.id)) store.s.notes.push(n);
     closed.current = false;
     let t: ReturnType<typeof setTimeout> | undefined;
-    // 剛從目錄開的新的一張：目錄收起來之後直接停在輸入列（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）
+    // 剛從目錄開的新的一張：目錄收起來之後直接開第一行、鍵盤升起（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）
     if (store.fresh === n.id) {
       store.clearFresh();
-      t = setTimeout(() => { if (mounted.current) composerRef.current?.focus(); }, T.timing.freshFocusFallback);
+      t = setTimeout(() => { if (mounted.current) focusNew(); }, T.timing.freshFocusFallback);
     }
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
     return () => { clearTimeout(t); mounted.current = false; closeNote(); };
@@ -306,8 +300,7 @@ export function Paper({ n }: { n: Note }) {
   /* ---------- actions ---------- */
   const name = n.title.trim() || '沒有名字的一張';
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
-  const liveItems = n.items.filter(i => !i.done), doneItems = n.items.filter(i => i.done);
-  const anyDone = doneItems.length > 0;
+  const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); router.push('/directory'); }
   function togglePin() { n.pinned = !n.pinned; touch(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); }
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
@@ -335,14 +328,13 @@ export function Paper({ n }: { n: Note }) {
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
     { label: '分享', icon: 'square.and.arrow.up', fn: share },
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
-    { label: '清單', inline: true, hidden: liveItems.length < 2 && !anyDone, sub: [
-      // 反轉只反沒劃掉的那一區，劃掉的照樣留在底下
-      { label: '排順序', icon: 'line.3.horizontal', hidden: liveItems.length < 2, fn: () => { Keyboard.dismiss(); setSorting(true); } },
-      { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: liveItems.length < 2, fn: () => setItems([...liveItems].reverse().concat(doneItems)) },
+    { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
+      { label: '排順序', icon: 'line.3.horizontal', hidden: n.items.length < 2, fn: () => { Keyboard.dismiss(); setSorting(true); } },
+      { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
         const before = n.items;
-        setItems(liveItems);
+        setItems(before.filter(i => !i.done));
         ui.toast('已清掉劃掉的行', { label: '復原', fn: () => {
           if (!mounted.current || closed.current) return;
           setItems(before);
@@ -352,22 +344,7 @@ export function Paper({ n }: { n: Note }) {
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
-  const showHint = !store.hintSeen && liveItems.some(i => i.t.trim());
-  const rows = n.items.map((it, index) => ({ it, index }));
-  const line = ({ it, index }: { it: Item; index: number }) => (
-    <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
-      count={n.items.length} calm={calm} fs={fs} grip={sorting}
-      dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
-      refInput={r => { inputs.current[it.id] = r; }}
-      onLayoutRow={(y, h) => {
-        layouts.current[it.id] = { y, h };
-        if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
-      }}
-      onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
-      onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
-      onStrike={() => strike(it.id)} onRemove={() => remove(it.id)} onMenu={y => openRowMenu(it.id, y)}
-      onMove={d => move(it.id, d)} drag={dragApi} />
-  );
+  const showHint = !store.hintSeen && n.items.some(i => i.t.trim());
 
   return (
     <View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false}>
@@ -401,64 +378,66 @@ export function Paper({ n }: { n: Note }) {
           keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
           onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
-          {/* 空紙：一顆睡著的茄子，一句話指到下面的輸入列（06-首次體驗：第一次的空） */}
+          {/* 空紙：一顆睡著的茄子，一句話指到右下角的 ＋（06-首次體驗：第一次的空） */}
           {n.items.length === 0 && (
             <View style={st.empty}>
-              <Image source={FACE.sleep} style={st.emptyFace} contentFit="contain" accessible={false} />
+              <Image source={FACE_SLEEP} style={st.emptyFace} contentFit="contain" accessible={false} />
               <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
-              <Text style={[st.emptyText, { color: c.textSecondary }]}>想到什麼，先打在下面</Text>
+              <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
           )}
-          <View>{rows.filter(r => !r.it.done).map(line)}</View>
-          {/* 劃掉的沉到這條線底下，預設收起來；不印幾行（不做清單 #5、#7） */}
-          {anyDone && (
-            <Pressable style={({ pressed }) => [st.divider, pressed && { opacity: T.motion.pressDim }]} onPress={() => setFold(f => !f)}
-              accessibilityRole="button" accessibilityLabel="劃掉的" accessibilityState={{ expanded: !fold }}>
-              <View style={[st.rule, { backgroundColor: nc.rule }]} />
-              <Text style={[st.dividerText, { color: c.textSecondary }]}>劃掉的</Text>
-              <Sym name={fold ? 'chevron.right' : 'chevron.down'} size={12} color={c.textSecondary} />
-            </Pressable>
-          )}
-          {anyDone && !fold && <View>{rows.filter(r => r.it.done).map(line)}</View>}
-          {showHint && !sorting && <Text style={[st.hint, { color: c.textMuted }]}>往右滑劃掉　·　往左滑刪除　·　按住有更多</Text>}
-          {/* 留白讓最後一行能捲到輸入列上面；點這裡不會新增一行。200 只用一次 */}
-          <View style={{ height: 200 + kbPad + COMPOSER_H + insets.bottom }} />
+          <View>
+            {n.items.map((it, index) => (
+              <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
+                count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id}
+                dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
+                refInput={r => { inputs.current[it.id] = r; }}
+                onLayoutRow={(y, h) => {
+                  layouts.current[it.id] = { y, h };
+                  if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
+                }}
+                onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
+                onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
+                onStrike={() => strike(it.id)} onRemove={() => remove(it.id)}
+                onMenu={y => openRowMenu(it.id, y)} onEdit={() => focusItem(it.id)}
+                onMove={d => move(it.id, d)} drag={dragApi} />
+            ))}
+          </View>
+          {showHint && !sorting && <Text style={[st.hint, { color: c.textMuted }]}>點兩下改字　·　往右滑劃掉　·　往左滑刪除　·　按住有更多</Text>}
+          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
+          <View style={{ height: 200 + kbPad + KBAR_H + insets.bottom }} />
         </ScrollView>
       </View>
 
-      {/* 底部輸入列：奶油白藥丸，左邊茄子臉（打字時換成開心的那顆），右邊有字時是「記下」、沒字但鍵盤開著時是 ✓ 收鍵盤。
-          平常停在安全區上面，鍵盤出現時跟著升到鍵盤上面 */}
-      <Animated.View style={[st.composerWrap, { paddingBottom: insets.bottom + T.space.s }, barStyle]} pointerEvents="box-none">
-        {sorting ? (
-          // 排順序模式：輸入列先讓位，這裡只剩一句說明和 ✓ 排好了
-          <View style={[st.composer, { backgroundColor: c.surface }]}>
+      {/* 右下角 ＋：在最上面開一行。鍵盤開著時被鍵盤蓋住，乾脆不畫；排順序時也不畫 */}
+      {!sorting && kbPad === 0 && <Fab onPress={focusNew} label="新增一行" />}
+
+      {/* 鍵盤上面那顆：奶油白膠囊，右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
+      {kbPad > 0 && (
+        <Animated.View style={[st.kbarWrap, barStyle]}>
+          <View style={[st.kbar, { backgroundColor: c.surface }]}>
+            <View style={{ flex: 1 }} />
+            <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]} onPress={dismissKb}
+              accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
+              <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* 排順序模式：底下同一種膠囊，一句說明和 ✓ 排好了 */}
+      {sorting && (
+        <View style={[st.kbarWrap, { paddingBottom: insets.bottom + T.space.s }]}>
+          <View style={[st.kbar, st.sortBar, { backgroundColor: c.surface }]}>
             <Sym name="line.3.horizontal" size={18} color={c.textSecondary} />
-            <Text style={[st.composerInput, { color: c.textSecondary }]} numberOfLines={1}>拖右邊的把手排順序</Text>
+            <Text style={[st.sortText, { color: c.textSecondary }]} numberOfLines={1}>拖右邊的把手排順序</Text>
             <Pressable onPress={() => setSorting(false)} accessibilityRole="button" accessibilityLabel="排好了"
               style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
               <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
             </Pressable>
           </View>
-        ) : (
-        <View style={[st.composer, { backgroundColor: c.surface }]}>
-          <Image source={draft.trim() ? FACE.happy : FACE.calm} style={st.face} contentFit="contain" accessible={false} />
-          <TextInput ref={composerRef} value={draft} onChangeText={setDraft} placeholder="記點什麼…" placeholderTextColor={c.textMuted}
-            style={[st.composerInput, { color: c.textPrimary }]} returnKeyType="done" submitBehavior="submit" onSubmitEditing={add}
-            onFocus={() => onFocus('composer')} onBlur={() => onBlur('composer')} accessibilityLabel="記點什麼" />
-          {draft.trim() ? (
-            <Pressable onPress={add} hitSlop={T.space.xs} accessibilityRole="button" accessibilityLabel="記下"
-              style={({ pressed }) => [st.send, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>
-              <Sym name="arrow.up" size={18} color={c.fabIcon} weight="semibold" />
-            </Pressable>
-          ) : kbPad > 0 ? (
-            <Pressable onPress={dismissKb} accessibilityRole="button" accessibilityLabel="完成，收起鍵盤"
-              style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
-              <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
-            </Pressable>
-          ) : null}
         </View>
-        )}
-      </Animated.View>
+      )}
 
       {menu && (
         <PopMenu acts={moreActs} top={insets.top + T.shape.hitMin + T.space.m} onClose={() => setMenu(false)}
@@ -490,25 +469,27 @@ function Swatch({ k, on, onPress }: { k: ColorKey; on: boolean; onPress: () => v
 }
 
 type LineProps = {
-  it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number; grip: boolean;
+  it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
+  grip: boolean; editing: boolean;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
-  onStrike: () => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void;
+  onStrike: () => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
   drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
 };
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
 const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
-  && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs && a.grip === b.grip);
+  && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
+  && a.grip === b.grip && a.editing === b.editing);
 
 function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
   const op = useSharedValue(1);
   const w = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
-  const { onStrike, onRemove, onMenu, index, calm, dragIdx, dragTo, dragDy, dragH } = p;
+  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH } = p;
   const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
   const { swipeStrikeBg, swipeDeleteBg } = p.colors;
   const id = p.it.id;
@@ -539,7 +520,7 @@ function LineRow(p: LineProps) {
       } else tx.value = calm ? 0 : withTiming(0, { duration: M.snapBack.duration });
     },
   });
-  // 長按：在 JS 端跑（只是開選單）。手指移超過門檻就不算長按、讓給滑動；滑動要等長按先放棄（Exclusive）
+  // 長按：在 JS 端跑（只是開選單）。手指移超過門檻就不算長按、讓給滑動
   const rowRef = useRef<ViewInstance>(null);
   const hold = useLongPressGesture({
     runOnJS: true,
@@ -547,7 +528,15 @@ function LineRow(p: LineProps) {
     maxDistance: G.longPressMove,
     onActivate: () => { rowRef.current?.measureInWindow((x, y, w, h) => onMenu(y + h)); },
   });
-  const rowGesture = useExclusiveGestures(hold, swipe);
+  // 快速點兩下＝進這一行編輯（一下不會，捲動時碰到字才不會跳出鍵盤）
+  const dbl = useTapGesture({
+    runOnJS: true,
+    numberOfTaps: 2,
+    maxDistance: G.longPressMove,
+    onActivate: () => onEdit(),
+  });
+  // 長按、點兩下、滑動只有一個會成立：手指移超過門檻長按和點兩下就放棄，滑動才接手
+  const rowGesture = useExclusiveGestures(hold, dbl, swipe);
   const grip = usePanGesture({
     runOnJS: true,
     minDistance: G.dragActivate,
@@ -595,7 +584,8 @@ function LineRow(p: LineProps) {
       </Animated.View>
       <GestureDetector gesture={rowGesture}>
         <Animated.View style={[st.cin, !p.grip && st.cinNoGrip, { backgroundColor: p.bg }, slide]}>
-          <View style={st.field}>
+          {/* 只有正在編輯的那一行，輸入框才收觸控；其他行碰到字沒反應（要點兩下） */}
+          <View style={st.field} pointerEvents={p.editing ? 'auto' : 'none'}>
             <Field text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
               onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
           </View>
@@ -657,21 +647,16 @@ const st = StyleSheet.create({
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, paddingHorizontal: T.space.l, paddingTop: T.space.m },
-  rule: { flex: 1, height: T.shape.borderCard },
-  dividerText: { ...T.font.sectionHead },
   hint: { ...T.font.footnote, textAlign: 'center', padding: T.space.m },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
-  composerWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: T.space.s, paddingHorizontal: T.space.l },
-  composer: { height: T.shape.composer, borderRadius: T.shape.pill(T.shape.composer), flexDirection: 'row', alignItems: 'center', gap: T.space.s,
-    paddingLeft: T.space.m, paddingRight: T.space.s, ...T.shape.shadowStrong },
-  face: { width: T.shape.face, height: T.shape.face },
-  composerInput: { flex: 1, minWidth: 0, ...T.font.body, paddingVertical: 0 },
-  // 「記下」：藥丸裡一顆茄紫圓鈕（紙上唯一的 accent），36 只用一次，熱區靠 hitSlop 補到 44
-  send: { width: 36, height: 36, borderRadius: T.shape.pill(36), alignItems: 'center', justifyContent: 'center' },
+  // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開；排順序的提示也用同一顆
+  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
+  kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
   kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
+  sortBar: { gap: T.space.s, paddingLeft: T.space.l },
+  sortText: { flex: 1, minWidth: 0, ...T.font.subhead },
   swatches: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.m, paddingVertical: T.space.m },
   swatchBox: { width: T.shape.swatchDot, height: T.shape.swatchDot, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderSelected - T.shape.borderCard },
   swatch: { flex: 1, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderCard },

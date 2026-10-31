@@ -105,32 +105,7 @@ test('複製全文：每行編號、中間空一行，劃掉的行照常顯示�
   assert.equal(plain(n), '1.寫交接\n\n2.（劃線）做茄子田');
 });
 
-/* ---------------- 紙上的順序（重新設計分支） ---------------- */
-import { setDone, tidyDone } from '../src/lib/model.ts';
-
 const row = (id, done = false) => ({ id, t: id, done, b: false });
-
-test('tidyDone：劃掉的行排到後面，沒動到就回 false', () => {
-  const items = [row('a'), row('b', true), row('c'), row('d', true)];
-  assert.equal(tidyDone(items), true);
-  assert.deepEqual(items.map(i => i.id), ['a', 'c', 'b', 'd']);
-  assert.equal(tidyDone(items), false); // 已經排好
-  assert.deepEqual(items.map(i => i.id), ['a', 'c', 'b', 'd']);
-});
-
-test('setDone：劃掉搬到劃掉區最前面，恢復搬回最上面', () => {
-  const items = [row('a'), row('b'), row('c'), row('x', true), row('y', true)];
-  setDone(items, 'b', true);
-  assert.deepEqual(items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a', 'c', 'b-', 'x-', 'y-']);
-  setDone(items, 'y', false);
-  assert.deepEqual(items.map(i => `${i.id}${i.done ? '-' : ''}`), ['y', 'a', 'c', 'b-', 'x-']);
-  setDone(items, 'nope', true); // 找不到：什麼都不動
-  assert.equal(items.length, 5);
-  // 一張沒有劃掉的紙：劃掉第一行就排到最後
-  const one = [row('p'), row('q')];
-  setDone(one, 'p', true);
-  assert.deepEqual(one.map(i => i.id), ['q', 'p']);
-});
 
 /* ---------------- 刪掉的行進 bin、搬到別張（重新設計分支） ---------------- */
 import { binItem, unbinItem, moveItem } from '../src/lib/model.ts';
@@ -160,7 +135,7 @@ test('binItem：行離開紙、記下時間、排在 bin 最前面；找不到�
   assert.equal(binItem(n, 'nope', 3000), undefined);
 });
 
-test('unbinItem：放回最上面或指定位置，時間拿掉，劃掉的沉到後面', () => {
+test('unbinItem：放回最上面或指定位置，時間拿掉', () => {
   const n = paper(['a', 'b']);
   binItem(n, 'a', 1000);
   unbinItem(n, 'a');
@@ -171,8 +146,8 @@ test('unbinItem：放回最上面或指定位置，時間拿掉，劃掉的沉�
   assert.deepEqual(n.items.map(i => i.id), ['b', 'a']);
   n.items[1].done = true;
   binItem(n, 'a', 1000);
-  unbinItem(n, 'a', 0); // 劃掉的回來也不會排在沒劃掉的前面
-  assert.deepEqual(n.items.map(i => i.id), ['b', 'a']);
+  unbinItem(n, 'a', 0); // 劃掉的也照指定位置放回去，不另外排
+  assert.deepEqual(n.items.map(i => i.id), ['a', 'b']);
   assert.equal(unbinItem(n, 'nope'), undefined);
 });
 
@@ -183,8 +158,8 @@ test('moveItem：搬到別張的最上面；同一張不動', () => {
   assert.deepEqual(b.items.map(i => i.id), ['a2', 'b1']);
   assert.equal(moveItem(a, a, 'a1'), undefined);
   assert.deepEqual(a.items.map(i => i.id), ['a1']);
-  // 劃掉的搬過去也沉到後面
+  // 劃掉的搬過去也放最上面，狀態不變
   a.items[0].done = true;
   moveItem(a, b, 'a1');
-  assert.deepEqual(b.items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a2', 'b1', 'a1-']);
+  assert.deepEqual(b.items.map(i => `${i.id}${i.done ? '-' : ''}`), ['a1-', 'a2', 'b1']);
 });

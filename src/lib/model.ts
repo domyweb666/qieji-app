@@ -194,24 +194,6 @@ export function convertNote(n: Note) {
   }
 }
 
-/* ---------------- 紙上的順序：劃掉的行一律排在沒劃掉的後面 ---------------- */
-// 存檔裡劃掉的行可能夾在中間（舊版留在原位），打開紙時先排到後面。回傳有沒有動到順序（有才需要存）
-export function tidyDone(items: Item[]): boolean {
-  const next = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
-  if (next.every((it, k) => it === items[k])) return false;
-  items.splice(0, items.length, ...next);
-  return true;
-}
-// 劃掉：搬到「劃掉的」區塊最前面；恢復：搬回紙的最上面（跟剛記的一樣，最新的在上面）
-export function setDone(items: Item[], id: string, done: boolean) {
-  const idx = items.findIndex(i => i.id === id);
-  if (idx < 0) return;
-  const [it] = items.splice(idx, 1);
-  it.done = done;
-  const at = done ? items.findIndex(i => i.done) : 0;
-  items.splice(at < 0 ? items.length : at, 0, it);
-}
-
 /* ---------------- 刪掉的行：進這張紙的 bin（最近刪除），不是直接消失 ---------------- */
 // 回傳被移走的那行；找不到回 undefined
 export function binItem(n: Note, id: string, now: number): Item | undefined {
@@ -222,24 +204,22 @@ export function binItem(n: Note, id: string, now: number): Item | undefined {
   n.bin.unshift(it);
   return it;
 }
-// 從 bin 放回紙上：預設放最上面，給 at 就放回那個位置；劃掉的照樣沉到後面
+// 從 bin 放回紙上：預設放最上面，給 at 就放回那個位置
 export function unbinItem(n: Note, id: string, at = 0): Item | undefined {
   const idx = n.bin.findIndex(i => i.id === id);
   if (idx < 0) return undefined;
   const [it] = n.bin.splice(idx, 1);
   delete it.at;
   n.items.splice(Math.max(0, Math.min(at, n.items.length)), 0, it);
-  tidyDone(n.items);
   return it;
 }
-// 搬到別張紙：放到那張的最上面（劃掉的照樣沉到後面）。同一張不動
+// 搬到別張紙：放到那張的最上面。同一張不動
 export function moveItem(from: Note, to: Note, id: string): Item | undefined {
   if (from === to) return undefined;
   const idx = from.items.findIndex(i => i.id === id);
   if (idx < 0) return undefined;
   const [it] = from.items.splice(idx, 1);
   to.items.unshift(it);
-  tidyDone(to.items);
   return it;
 }
 
