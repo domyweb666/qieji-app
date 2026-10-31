@@ -400,7 +400,8 @@ export function Paper({ n }: { n: Note }) {
               <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
           )}
-          <View>
+          {/* 第一行跟標題列之間留一段：以前有時間列和「新增一行」墊著，現在沒有了，打字時字會貼著標題（多米 2026-10-31） */}
+          <View style={st.rows}>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id}
@@ -674,6 +675,7 @@ const st = StyleSheet.create({
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
+  rows: { paddingTop: T.space.xl },
   hint: { ...T.font.footnote, textAlign: 'center', padding: T.space.m },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
