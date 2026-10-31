@@ -96,8 +96,8 @@ export function useStore() {
   return box.state;
 }
 
-// 新增筆記：現在只有清單（type 參數留著，舊資料和測試用得到）
-export function newNote(color: ColorKey = 'purple', type: Note['type'] = 'check') {
+// 新增筆記：現在只有清單（type 參數留著，舊資料和測試用得到）。預設黃色（多米 2026-10-31 定）
+export function newNote(color: ColorKey = 'yellow', type: Note['type'] = 'check') {
   const n: Note = { id: uid(), type, title: '', body: '', items: [], bin: [], color,
     pinned: false, deleted: false, created: Date.now(), updated: Date.now(), b: false };
   box.state.notes.push(n);

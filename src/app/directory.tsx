@@ -47,7 +47,7 @@ export default function Directory() {
   }
   // 新的一張：篩選中就用那個顏色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
   function add() {
-    const n = newNote(filter !== 'all' ? filter : 'purple', 'check');
+    const n = newNote(filter !== 'all' ? filter : 'yellow', 'check');
     if (from && moving) { pick(n); return; }
     store.open(n.id, true);
     router.back();

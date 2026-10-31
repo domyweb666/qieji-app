@@ -154,6 +154,13 @@ export function Paper({ n }: { n: Note }) {
     touch();
     focusItem(it.id, 0);
   }
+  // 鍵盤膠囊左邊的 ∧ ∨：游標跳到上一行／下一行（多米 2026-10-31 要的；之前拿掉過，這次是明確要回來）
+  const editIdx = editing ? n.items.findIndex(i => i.id === editing) : -1;
+  function focusNeighbor(d: -1 | 1) {
+    const to = n.items[editIdx + d];
+    if (editIdx < 0 || !to) return;
+    focusItem(to.id);
+  }
   function cleanupEmpty() {
     const keep = n.items.filter(i => i.t.trim());
     if (keep.length !== n.items.length) { n.items = keep; store.change(); }
@@ -412,10 +419,20 @@ export function Paper({ n }: { n: Note }) {
       {/* 右下角 ＋：在最上面開一行。鍵盤開著時被鍵盤蓋住，乾脆不畫；排順序時也不畫 */}
       {!sorting && kbPad === 0 && <Fab onPress={focusNew} label="新增一行" />}
 
-      {/* 鍵盤上面那顆：奶油白膠囊，右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
+      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
       {kbPad > 0 && (
         <Animated.View style={[st.kbarWrap, barStyle]}>
           <View style={[st.kbar, { backgroundColor: c.surface }]}>
+            {([[-1, 'chevron.up', '上一行'], [1, 'chevron.down', '下一行']] as const).map(([d, icon, label]) => {
+              const off = editIdx < 0 || !n.items[editIdx + d];
+              return (
+                <Pressable key={label} onPress={() => focusNeighbor(d)} disabled={off}
+                  accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: off }}
+                  style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
+                  <Sym name={icon} size={20} color={off ? c.textMuted : c.textPrimary} weight="semibold" />
+                </Pressable>
+              );
+            })}
             <View style={{ flex: 1 }} />
             <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]} onPress={dismissKb}
               accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
