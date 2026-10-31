@@ -146,6 +146,7 @@ export const shape = {
   tileTag: 40,   // 色磚右下角露出的色圓
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   emptyFace: 96, // 空紙上的茄子（扁平線條版）
+  composerLines: 4, // 底部輸入框最多長到幾行，再多就在框裡捲（多米 2026-11-01：按 ＋ 升起的輸入框）
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋
 };

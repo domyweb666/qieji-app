@@ -26,6 +26,7 @@ import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { ui } from './Overlay';
+import { Composer } from './Composer';
 import { PopMenu } from './PopMenu';
 import { Sym } from './Sym';
 import { Fab, GlassBtn } from './WebBars';
@@ -67,6 +68,9 @@ export function Paper({ n }: { n: Note }) {
   const [renaming, setRenaming] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
   const [sorting, setSorting] = useState(false); // 排順序模式：把手出現、底下換成「排好了」
+  // 底部輸入框（多米 2026-11-01）：按 ＋ 升起、在裡面打；draft＝框裡現在的字（不受控輸入框，送出或收起時才拿）
+  const [composing, setComposing] = useState(false);
+  const draft = useRef('');
   // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行要經過點一下的手勢才會進來（捲動時手指有移動，手勢不成立）
   const [editing, setEditingState] = useState<string | null>(null);
   const editingRef = useRef<string | null>(null);
@@ -158,18 +162,32 @@ export function Paper({ n }: { n: Note }) {
     placeCaret(inp, at);
     requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
-  // ＋（右下角那顆、鍵盤膠囊那顆）：在最上面多出一行。先把清單捲回最上面，新的那行就在最上面
-  function addLine() { haptic('add'); focusNew(); }
-  function focusNew() {
-    if (sorting) return;
-    scrollTo(0, false);
-    const first = n.items[0];
-    if (first && !first.t.trim()) return focusItem(first.id, 0);
-    const it: Item = { id: uid(), t: '', done: false, b: false };
-    n.items.unshift(it);
+  // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
+  function addLine() { if (sorting || composing) return; haptic('add'); openComposer(); }
+  function openComposer() { if (sorting || composing) return; draft.current = ''; setComposing(true); }
+  const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
+  // 輸入框送出的字變成紙最上面的一行，清單捲上去讓人看到它落下（核心迴圈第 4 格：看到才敢忘）
+  function addFromDraft(t: string) {
+    n.items.unshift({ id: uid(), t, done: false, b: false });
     touch();
-    focusItem(it.id, 0);
+    scrollTo(0);
   }
+  // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
+  function sendDraft() {
+    const t = takeDraft();
+    if (!t) { closeComposer(); return false; }
+    addFromDraft(t);
+    return true;
+  }
+  // 收起輸入框：有字就先送出（字不能丟，2-8）。這裡不收鍵盤：失焦時焦點可能已經在別行的輸入框上，收了會把它的鍵盤也收掉；
+  // 輸入框卸載時，它自己的鍵盤會跟著收
+  function closeComposer() {
+    const t = takeDraft();
+    if (t) addFromDraft(t);
+    setComposing(false);
+  }
+  // ✓：送出並收起，這條沒有別的輸入框在等焦點，鍵盤一起收
+  function doneComposer() { closeComposer(); Keyboard.dismiss(); }
   // 鍵盤膠囊左邊的 ∧ ∨：游標跳到上一行／下一行（多米 2026-10-31 要的；之前拿掉過，這次是明確要回來）
   const editIdx = editing ? n.items.findIndex(i => i.id === editing) : -1;
   // 不走 focusItem（那條要等畫面重畫才對焦，中間舊的輸入框先放掉，鍵盤會收了再開）：
@@ -209,6 +227,9 @@ export function Paper({ n }: { n: Note }) {
   const [kbPad, setKbPad] = useState(0);
   const kbLift = useSharedValue(0);
   const barStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -kbLift.value }] }));
+  // 輸入框的位置：鍵盤升起後貼在鍵盤上面（跟膠囊一樣），鍵盤還沒升起時貼著安全區。鍵盤一定比安全區高，所以兩段接得起來、不會跳一下
+  const insetBottom = insets.bottom;
+  const composerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.max(kbLift.value, insetBottom) }] }), WEB_DEPS ? [insetBottom] : undefined);
   function ensureVisible(id: string | null) {
     const l = id && layouts.current[id], v = view.current;
     if (!l || !v.h) return;
@@ -347,6 +368,8 @@ export function Paper({ n }: { n: Note }) {
     if (closed.current) return;
     closed.current = true;
     Keyboard.dismiss();
+    const t = takeDraft();
+    if (t) n.items.unshift({ id: uid(), t, done: false, b: false }); // 輸入框裡打到一半的字跟著這張紙走，不丟
     n.items = n.items.filter(i => i.t.trim());
     if (isEmpty(n)) store.s.notes = store.s.notes.filter(x => x !== n);
     store.change();
@@ -358,13 +381,22 @@ export function Paper({ n }: { n: Note }) {
     if (closed.current && !n.deleted && !store.s.notes.some(x => x.id === n.id)) store.s.notes.push(n);
     closed.current = false;
     let t: ReturnType<typeof setTimeout> | undefined;
-    // 剛從目錄開的新的一張：目錄收起來之後直接開第一行、鍵盤升起（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）
+    // 剛從目錄開的新的一張：目錄收起來之後直接升起輸入框、鍵盤升起（等面板收完才叫鍵盤，兩個動畫疊在一起會卡）
     if (store.fresh === n.id) {
       store.clearFresh();
-      t = setTimeout(() => { if (mounted.current) focusNew(); }, T.timing.freshFocusFallback);
+      t = setTimeout(() => { if (mounted.current) openComposer(); }, T.timing.freshFocusFallback);
     }
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
     return () => { clearTimeout(t); mounted.current = false; closeNote(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 切到別的 app、鎖屏（被打斷）：輸入框裡打到一半的字先送出、框收起、立刻寫入，字不會丟（多米 2026-11-01 定）
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active' || !draft.current.trim()) return;
+      closeComposer();
+      store.flush();
+    });
+    return () => sub.remove();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- actions ---------- */
@@ -492,11 +524,12 @@ export function Paper({ n }: { n: Note }) {
         </ScrollView>
       </View>
 
-      {/* 右下角 ＋：在最上面開一行。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；排順序時也不畫 */}
-      {!sorting && kbPad === 0 && <Fab onPress={addLine} label="新增一行" />}
+      {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；排順序、輸入框開著時也不畫 */}
+      {!sorting && kbPad === 0 && !composing && <Fab onPress={addLine} label="新增一行" />}
 
-      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 開新的一行（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
-      {kbPad > 0 && (
+      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 升起輸入框（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見；
+          輸入框開著時不畫（那三顆是在行裡編輯用的） */}
+      {kbPad > 0 && !composing && (
         <Animated.View style={[st.kbarWrap, barStyle]}>
           <View style={[st.kbar, { backgroundColor: c.surface }]}>
             {([[-1, 'chevron.up', '上一行'], [1, 'chevron.down', '下一行']] as const).map(([d, icon, label]) => {
@@ -519,6 +552,13 @@ export function Paper({ n }: { n: Note }) {
               <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
             </Pressable>
           </View>
+        </Animated.View>
+      )}
+
+      {/* 底部輸入框（多米 2026-11-01）：跟膠囊同一個位置，跟著鍵盤升降。外層讓觸控穿透，點框外面的行就是在點那一行 */}
+      {composing && (
+        <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
+          <Composer calm={calm} onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
         </Animated.View>
       )}
 
