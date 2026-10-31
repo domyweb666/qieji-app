@@ -5,7 +5,7 @@
 // 一行點一下就進編輯（多米 2026-10-31 第二輪試驗：之前是點兩下，因為輸入框自己收觸控時捲動會誤觸；現在輸入框上有蓋板、
 // 點擊走手勢系統，手指一移動手勢就作廢，理論上捲動不會再誤觸。真機還會誤觸就改回 numberOfTaps: 2）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
-// 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
+// 每行右邊常駐一個把手，拖了就排順序（多米 2026-11-01 定；之前要先 ⋯ →「排順序」進模式，推翻重新設計第二輪 #127）。紙頂端再往下拉放手＝開目錄。
 // 從 app/note/[id].tsx 搬過來的滑動與拖曳手勢（worklet），2026-11-01 手感第一輪改了放手那段：滑回、彈回、滑出、讓位、落地都是接手指速度的彈簧，
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
@@ -51,7 +51,7 @@ const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop'); // 排順序放手那一刻
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
-// 行的過場（2026-11-01 第二輪 K4）：長出來淡入、拿掉淡出，其他行滑到新位置。排順序模式與減少動態時不滑（直接到位），淡入淡出照舊；
+// 行的過場（2026-11-01 第二輪 K4）：長出來淡入、拿掉淡出，其他行滑到新位置。拖曳中（拿起到放下）與減少動態時不滑（直接到位，不然會跟落地動畫打架），淡入淡出照舊；
 // 整張紙第一次畫出來時不播（LayoutAnimationConfig skipEntering）。換紙時整張紙淡入（S2），第一次打開 app 那張不淡，交給啟動畫面
 const ROW_IN = FadeIn.duration(T.motion.fade);
 const ROW_OUT = FadeOut.duration(T.motion.fade);
@@ -75,7 +75,6 @@ export function Paper({ n }: { n: Note }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
-  const [sorting, setSorting] = useState(false); // 排順序模式：把手出現、底下換成「排好了」
   // 底部輸入框（多米 2026-11-01）：按 ＋ 升起、在裡面打；draft＝框裡現在的字（不受控輸入框，送出或收起時才拿）
   const [composing, setComposing] = useState(false);
   const draft = useRef('');
@@ -171,8 +170,8 @@ export function Paper({ n }: { n: Note }) {
     requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
-  function addLine() { if (sorting || composing) return; haptic('add'); openComposer(); }
-  function openComposer() { if (sorting || composing) return; draft.current = ''; setComposing(true); }
+  function addLine() { if (composing) return; haptic('add'); openComposer(); }
+  function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行，清單捲上去讓人看到它落下（核心迴圈第 4 格：看到才敢忘）
   function addFromDraft(t: string) {
@@ -448,7 +447,6 @@ export function Paper({ n }: { n: Note }) {
     { label: '分享', icon: 'square.and.arrow.up', fn: share },
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
     { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
-      { label: '排順序', icon: 'line.3.horizontal', hidden: n.items.length < 2, fn: () => { Keyboard.dismiss(); setSorting(true); } },
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
@@ -516,7 +514,7 @@ export function Paper({ n }: { n: Note }) {
           <View>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
-                count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
+                count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
@@ -532,7 +530,7 @@ export function Paper({ n }: { n: Note }) {
           </View>
           </LayoutAnimationConfig>
           {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點。行在滑的時候它跟著滑 */}
-          {showHint && !sorting && (
+          {showHint && (
             <Animated.View style={st.hint} layout={calm ? undefined : ROW_MOVE}>
               {['點一下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
             </Animated.View>
@@ -542,8 +540,8 @@ export function Paper({ n }: { n: Note }) {
         </ScrollView>
       </View>
 
-      {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；排順序、輸入框開著時也不畫 */}
-      {!sorting && kbPad === 0 && !composing && <Fab onPress={addLine} label="新增一行" />}
+      {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；輸入框開著時也不畫 */}
+      {kbPad === 0 && !composing && <Fab onPress={addLine} label="新增一行" />}
 
       {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 升起輸入框（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見；
           輸入框開著時不畫（那三顆是在行裡編輯用的） */}
@@ -588,20 +586,6 @@ export function Paper({ n }: { n: Note }) {
         </>
       )}
 
-      {/* 排順序模式：底下同一種膠囊，一句說明和 ✓ 排好了 */}
-      {sorting && (
-        <View style={[st.kbarWrap, { paddingBottom: insets.bottom + T.space.s }]}>
-          <View style={[st.kbar, st.sortBar, { backgroundColor: c.surface }]}>
-            <Sym name="line.3.horizontal" size={18} color={c.textSecondary} />
-            <Text style={[st.sortText, { color: c.textSecondary }]} numberOfLines={1}>拖右邊的把手排順序</Text>
-            <Pressable onPress={() => setSorting(false)} accessibilityRole="button" accessibilityLabel="排好了"
-              style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
-              <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
-            </Pressable>
-          </View>
-        </View>
-      )}
-
       {menu && (
         <PopMenu acts={moreActs} top={insets.top + T.shape.hitMin + T.space.m} onClose={() => setMenu(false)}
           header={<Swatches current={n.color} onPick={pickColor} />} />
@@ -636,7 +620,7 @@ type Sel = { start: number; end: number };
 
 type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
-  grip: boolean; editing: boolean; rev: number;
+  dragging: boolean; editing: boolean; rev: number; // dragging＝紙上有一行正被拖著（拿起到放下），那段關掉行的 layout 過場
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   dragMids: SharedValue<number[]>; dragTops: SharedValue<number[]>; dragHs: SharedValue<number[]>; dragLift: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
@@ -650,7 +634,7 @@ type LineProps = {
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
 const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
   && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
-  && a.grip === b.grip && a.editing === b.editing && a.rev === b.rev);
+  && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev);
 
 function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
@@ -725,8 +709,10 @@ function LineRow(p: LineProps) {
   const rowGesture = useExclusiveGestures(hold, tap, swipe);
   // 把手：拿起、放下回 JS（量位置、改資料）；手指移動中「拖到第幾個位置」與放下的落地動畫在這裡（UI 執行緒）算，不等 JS。
   // 拿起來的那幾毫秒 dragIdx 還是 -1（JS 還沒量完），先不算；跨過一行排回 JS 震一下
+  // 把手常駐之後要分工（多米 2026-11-01）：把手上「上下」動才算拿起，「左右」動就讓給整行的滑動（從把手往左滑一樣是刪除，不會變成拖）
   const grip = usePanGesture({
-    minDistance: G.dragActivate,
+    activeOffsetY: [-G.dragActivate, G.dragActivate],
+    failOffsetX: [-G.dragFailX, G.dragFailX],
     onActivate: () => { 'worklet'; scheduleOnRN(dragStart, id); },
     onUpdate: e => {
       'worklet';
@@ -815,14 +801,14 @@ function LineRow(p: LineProps) {
   return (
     <Animated.View ref={rowRef} collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
-      entering={ROW_IN} exiting={ROW_OUT} layout={p.grip || calm ? undefined : ROW_MOVE}
+      entering={ROW_IN} exiting={ROW_OUT} layout={p.dragging || calm ? undefined : ROW_MOVE}
       style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, shift]}>
       <Animated.View style={[StyleSheet.absoluteFill, st.under, under]}>
         <Animated.Text style={[st.underText, { color: p.colors.textOnSwipe }, leftLabel]}>{p.done ? '恢復' : '劃掉'}</Animated.Text>
         <Animated.Text style={[st.underText, { color: p.colors.textOnSwipe }, rightLabel]}>刪除</Animated.Text>
       </Animated.View>
       <GestureDetector gesture={rowGesture}>
-        <Animated.View style={[st.cin, !p.grip && st.cinNoGrip, { backgroundColor: p.bg }, slide]}>
+        <Animated.View style={[st.cin, { backgroundColor: p.bg }, slide]}>
           {/* 沒在編輯的行：輸入框上面蓋一層看不見的板子，手指碰不到它（點一下、長按、滑動由外層手勢接）。
               不用 pointerEvents='none'：RN 在 iOS 把它做成關掉整塊的 userInteractionEnabled，
               正在打字的那行一被關，輸入框就被迫放掉焦點、鍵盤收起（∧ ∨ 切行時鍵盤收了再開就是這個） */}
@@ -834,14 +820,12 @@ function LineRow(p: LineProps) {
               onChange={p.onChange} onKey={p.onKey} onSubmit={p.onSubmit} onFocus={p.onFocus} onBlur={p.onBlur} />
             {!p.editing && <View style={StyleSheet.absoluteFill} collapsable={false} accessible={false} importantForAccessibility="no" />}
           </View>
-          {/* 把手只在排順序模式出現，熱區 44 寬；平常右邊留一樣的內距，字才不會在切換時跳 */}
-          {p.grip && (
-            <GestureDetector gesture={grip}>
-              <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
-                <Sym name="line.3.horizontal" size={18} color={p.colors.textSecondary} />
-              </View>
-            </GestureDetector>
-          )}
+          {/* 把手：每行常駐、熱區 44 寬，三條線是 iOS 的慣例。VoiceOver 不讀它（用輸入框動作選單的往上移／往下移） */}
+          <GestureDetector gesture={grip}>
+            <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
+              <Sym name="line.3.horizontal" size={18} color={p.colors.textSecondary} />
+            </View>
+          </GestureDetector>
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -901,7 +885,6 @@ const st = StyleSheet.create({
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.l },
   underText: { ...T.font.subheadBold },
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },
-  cinNoGrip: { paddingRight: T.space.l },
   field: { flex: 1, minWidth: 0 },
   ta: { ...T.font.bodyLine, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: T.space.xs },
   // 撐高度用的隱形文字：右邊只比輸入框多留 1 點。留太多字快滿一行時隱形文字會先換行，底下就多出一整行空白；
@@ -918,12 +901,10 @@ const st = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
-  // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開；排順序的提示也用同一顆
+  // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
   kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
   kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
-  sortBar: { gap: T.space.s, paddingLeft: T.space.l },
-  sortText: { flex: 1, minWidth: 0, ...T.font.subhead },
   swatches: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.m, paddingVertical: T.space.m },
   swatchBox: { width: T.shape.swatchDot, height: T.shape.swatchDot, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderSelected - T.shape.borderCard },
   swatch: { flex: 1, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderCard },

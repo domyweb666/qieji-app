@@ -163,7 +163,8 @@ export const T = {
     swipeActivate: 14, swipeFailY: 12,
     strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 算劃掉
     deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 算刪除
-    dragActivate: 1,
+    dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
+    dragFailX: 10,      // 把手上「左右」動超過這麼多就不算拿起，讓給整行的滑動（把手常駐，2026-11-01）
     pullOpen: 70,       // 紙頂端再往下拉超過這麼多放手＝開目錄（重新設計分支）
     longPressMs: 500,   // 長按一行多久跳選單
     longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
