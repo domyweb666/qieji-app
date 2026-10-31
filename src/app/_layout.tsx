@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
@@ -15,13 +15,18 @@ const ios = Platform.OS === 'ios';
 // iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊
 const glass = ios && parseInt(String(Platform.Version), 10) >= 26;
 
+// 啟動畫面撐到資料讀完、紙畫出來才收（2026-10-31 低風險三件之一）。不然 expo-router 第一次畫完就收，
+// 中間會閃一下空白的奶油色再出現紙。要在第一次畫之前叫，所以放模組層級；沒有原生模組（網頁）時它自己什麼都不做
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
   const c = useColors();
   const [ready, setReady] = useState(store.loaded);
   useEffect(() => { store.load().then(() => setReady(true)); }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.page }}>
+    // onLayout：ready 之後第一次排版完才收啟動畫面，畫面上已經是紙，不是空白
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.page }} onLayout={() => { if (ready) SplashScreen.hide(); }}>
       <StatusBar style={c.mode === 'dark' ? 'light' : 'dark'} />
       {ready ? (
         <Stack screenOptions={{

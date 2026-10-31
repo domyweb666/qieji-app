@@ -29,8 +29,8 @@ import { PopMenu } from './PopMenu';
 import { Sym } from './Sym';
 import { Fab, GlassBtn } from './WebBars';
 
-// 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets）
-const FACE_FLAT = require('../../assets/img/face-flat.png');
+// 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
+const FACE_FLAT = require('../../assets/img/face-flat.webp');
 // 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
 const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
