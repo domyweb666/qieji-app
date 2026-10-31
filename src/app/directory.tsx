@@ -1,17 +1,15 @@
 // 目錄：從紙最上面的清單名拉起來的面板（重新設計分支「紙是家」，首頁降級成這張面板）。
-// 搜尋、色磚（只有顏色和名字，沒有時間、沒有預覽、沒有數字）、「＋ 新的一張」、最近刪除；篩選、排序、備份在右上 ⋯。
+// 搜尋、色磚（只有顏色和名字，沒有時間、沒有預覽、沒有數字）、「＋ 新的一張」、最近刪除。
+// 右上 ⋯ 2026-11-01 拿掉：裡面的排序、顏色篩選、匯出、匯入多米同日一項一項定拿掉，空了就整顆不畫（資料搬家交給之後的 iCloud 同步）。
 // 點一塊就換紙、面板收起來。帶 move 參數進來（紙上長按 →「搬到…」）就變成「把這行搬到哪張」：點一塊就搬過去。
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
 import { ui } from '../components/Overlay';
-import { PopMenu } from '../components/PopMenu';
 import { Sym } from '../components/Sym';
-import { GlassBtn, native } from '../components/WebBars';
-import { importData } from '../lib/backup';
+import { native } from '../components/WebBars';
 import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
@@ -24,7 +22,6 @@ export default function Directory() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const [menu, setMenu] = useState(false);
   const [q, setQ] = useState('');
   const searching = !!q.trim();
 
@@ -65,11 +62,6 @@ export default function Directory() {
     router.back();
   }
 
-  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。同日稍後排序與顏色篩選拿掉；
-  // 再晚一點匯出備份也拿掉（多米：一般人用不到），只剩匯入（網頁版搬家用）
-  const acts: Act[] = [
-    { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
-  ];
   // 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留
   const padTop = native ? T.space.l : insets.top + T.space.s;
 
@@ -83,7 +75,6 @@ export default function Directory() {
           <TextInput value={q} onChangeText={setQ} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
             style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel="搜尋清單" />
         </View>
-        <GlassBtn icon="ellipsis" label="選單" onPress={() => setMenu(true)} />
       </View>
 
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
@@ -119,10 +110,6 @@ export default function Directory() {
           </Pressable>
         )}
       </ScrollView>
-
-      {menu && (
-        <PopMenu acts={acts} top={padTop + T.shape.hitMin + T.space.s} onClose={() => setMenu(false)} />
-      )}
     </View>
   );
 }
