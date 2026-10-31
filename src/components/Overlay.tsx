@@ -7,7 +7,8 @@ import { colors, T, useColors } from '../lib/tokens';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
 type SheetSpec = { title?: string; rows: Row[] };
-type ConfirmSpec = { msg: string; ok: () => void; okLabel: string };
+// title 有值＝只有一顆按鈕的提示框（存檔失敗這類要讀完的訊息），沒有「取消」
+type ConfirmSpec = { title?: string; msg: string; ok: () => void; okLabel: string };
 type ToastSpec = { msg: string; action?: { label: string; fn: () => void } };
 
 let host: {
@@ -32,6 +33,11 @@ export const ui = {
   confirm: (msg: string, ok: () => void, okLabel = '永久刪除') => {
     if (Platform.OS !== 'ios') return host?.confirm({ msg, ok, okLabel });
     Alert.alert(msg, undefined, [{ text: '取消', style: 'cancel' }, { text: okLabel, style: 'destructive', onPress: ok }]);
+  },
+  // 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像 toast 會自己消失（06-首次體驗 ❓7）
+  alert: (title: string, msg: string, okLabel = '知道了') => {
+    if (Platform.OS !== 'ios') return host?.confirm({ title, msg, ok: () => {}, okLabel });
+    Alert.alert(title, msg, [{ text: okLabel }]);
   },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
 };
@@ -106,11 +112,14 @@ export function OverlayHost() {
         <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
           style={[StyleSheet.absoluteFill, s.center, { backgroundColor: c.scrim }]}>
           <View style={[s.dlg, { backgroundColor: c.surface }]}>
-            <Text style={[s.dlgText, { color: c.textPrimary }]}>{confirm.msg}</Text>
+            {confirm.title ? <Text style={[s.dlgText, { color: c.textPrimary }]}>{confirm.title}</Text> : null}
+            <Text style={[confirm.title ? s.dlgBody : s.dlgText, { color: c.textPrimary }]}>{confirm.msg}</Text>
             <View style={[s.acts, { borderTopColor: c.separator }]}>
-              <Pressable hitSlop={T.space.s} onPress={() => setConfirm(null)}><Text style={[s.act, { color: c.accent }]}>取消</Text></Pressable>
+              {!confirm.title && (
+                <Pressable hitSlop={T.space.s} onPress={() => setConfirm(null)}><Text style={[s.act, { color: c.accent }]}>取消</Text></Pressable>
+              )}
               <Pressable hitSlop={T.space.s} onPress={() => { const ok = confirm.ok; setConfirm(null); ok(); }}>
-                <Text style={[s.act, { color: c.danger }]}>{confirm.okLabel}</Text>
+                <Text style={[s.act, { color: confirm.title ? c.accent : c.danger }]}>{confirm.okLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -132,6 +141,7 @@ const s = StyleSheet.create({
   on: { ...T.font.emphasis },
   dlg: { borderRadius: T.shape.radiusCard, width: '100%', maxWidth: 300, paddingTop: T.space.l, overflow: 'hidden' }, // maxWidth 只用一次
   dlgText: { ...T.font.emphasis, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
+  dlgBody: { ...T.font.subhead, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
   acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
   act: { flex: 1, ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
   // 長的提示（例如存檔失敗）要能換行，不能超出螢幕

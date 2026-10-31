@@ -8,7 +8,7 @@ import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, t
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
   state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null;
-  saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; subs: Set<() => void>; listening?: boolean;
+  saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
@@ -20,7 +20,11 @@ async function writeNow() {
   if (!box.loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
+    box.saveFailed = false;
   } catch {
+    // 打字中每 0.25 秒會再存一次；失敗只報一次，成功存回去之後再失敗才再報
+    if (box.saveFailed) return;
+    box.saveFailed = true;
     box.onSaveError?.();
   }
 }

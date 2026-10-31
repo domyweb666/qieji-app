@@ -304,7 +304,7 @@ function Editor({ n, fresh }: { n: Note; fresh: boolean }) {
         } });
       } },
     ] },
-    { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('複製失敗')); } },
+    { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
     { label: '刪除', icon: 'trash', destructive: true, fn: del },
   ];
 

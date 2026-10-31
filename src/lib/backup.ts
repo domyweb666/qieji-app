@@ -14,7 +14,7 @@ export async function exportData() {
     file.write(exportJSON(store.s));
     await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: '匯出備份' });
   } catch {
-    ui.toast('匯出失敗');
+    ui.toast('沒匯出成，再試一次');
   }
 }
 
@@ -27,6 +27,6 @@ export async function importData() {
     store.change();
     ui.toast(`匯入完成：新增 ${added}、更新 ${updated}`);
   } catch {
-    ui.toast('這個檔案不是茄記備份');
+    ui.toast('這不是茄記的備份檔，現有清單沒動');
   }
 }

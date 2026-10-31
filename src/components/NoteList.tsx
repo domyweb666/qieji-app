@@ -8,11 +8,14 @@ export function NoteSections({ notes, trash, onPress }: {
   notes: Note[]; trash: boolean; onPress: (n: Note) => void;
 }) {
   const c = useColors();
+  const secs = groupNotes(notes, { trash });
+  // 首頁沒有任何釘選時只剩「其他」一組，這兩個字沒東西可對照，不印（06-首次體驗 ❓2）
+  const showHead = trash || secs.some(sec => sec.title === '已釘選');
   return (
     <>
-      {groupNotes(notes, { trash }).map(sec => (
+      {secs.map(sec => (
         <View key={sec.title}>
-          <Text style={[s.head, { color: c.textSecondary }]}>{sec.title}</Text>
+          {showHead && <Text style={[s.head, { color: c.textSecondary }]}>{sec.title}</Text>}
           <View style={s.cards}>
             {sec.notes.map(n => <Card key={n.id} n={n} onPress={() => onPress(n)} />)}
           </View>

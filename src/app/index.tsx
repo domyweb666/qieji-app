@@ -89,11 +89,16 @@ export default function Home() {
           </Pressable>
         )}
 
+        {/* 三種空說的話分開（06-首次體驗 3-1）：找不到→帶他剛打的字；自己清掉→說東西去哪了；第一次→邀請 */}
         {notes.length
           ? <NoteSections notes={notes} trash={false} onPress={open} />
-          : (searching || filter !== 'all')
-            ? <Empty lines={['找不到符合的清單']} />
-            : <Empty lines={['還沒有清單', '點右下角的＋，開一張新清單']} />}
+          : searching
+            ? <Empty lines={[`找不到含「${q.trim()}」的清單`]} />
+            : filter !== 'all'
+              ? <Empty lines={[`沒有${col(filter).hue}的清單`]} />
+              : trashed
+                ? <Empty lines={['沒有清單了', '刪掉的在選單的「最近刪除」裡，還拿得回來']} />
+                : <Empty lines={['還沒有清單', '點右下角的 ＋ 開一張']} />}
       </ScrollView>
 
       <Fab onPress={add} label="新增清單" />
