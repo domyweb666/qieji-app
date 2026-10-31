@@ -191,7 +191,13 @@ export const gesture = {
 };
 export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 };
 
-export const T = { font, space, shape, motion, gesture, timing };
+/* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
+// 小工具跑在隔離環境、不能 import 這個檔；這裡的值由 src/lib/widget.ts 算好用 props 傳過去
+export const widget = {
+  lines: { small: 3, medium: 4, large: 10, lock: 2 }, // lock＝鎖定畫面長方形那塊
+};
+
+export const T = { font, space, shape, motion, gesture, timing, widget };
 
 /* ---------- 筆記色票：內容色，不是介面色。不當文字色、不當按鈕色。key 不能改（存檔格式） ---------- */
 // bg 整頁底與標題列底；hd 色點、色塊；rule 行卡片框線。深色候選＝hd 混深底（bg 30%、rule 45%）

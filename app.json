@@ -31,7 +31,23 @@
       "expo-router",
       "expo-image",
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "PaperWidget",
+              "displayName": "茄記",
+              "description": "上次那張紙的名字和前幾行",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge", "accessoryRectangular"],
+                "initialLayout": "widgets/PaperWidget.tsx"
+              }
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "router": {

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { emptyState, HINT_KEY, KEY, parseState, uid, type ColorKey, type Note, type State } from './model';
+import { pushWidget } from './widget';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
@@ -21,6 +22,7 @@ async function writeNow() {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
     box.saveFailed = false;
+    pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
   } catch {
     // 打字中每 0.25 秒會再存一次；失敗只報一次，成功存回去之後再失敗才再報
     if (box.saveFailed) return;
@@ -39,6 +41,7 @@ export const store = {
     if (box.last === id) return;
     box.last = id;
     (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
+    if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
   },
 
   // 目錄點了哪張、或剛開了新的一張：換到那張紙（根畫面照 last 畫）。fresh＝新的一張，紙打開後直接停在輸入列
