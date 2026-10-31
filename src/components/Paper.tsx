@@ -35,6 +35,9 @@ const FACE_FLAT = require('../../assets/img/face-flat.png');
 const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
+// 手勢在 UI 執行緒上發現「越線了」「跨過一行了」，排回 JS 震一下。一定要是模組層級的函式（規矩檔：worklet 裡不准直接叫 tokens 的函式）
+const hapticArm = () => haptic('swipeArm');
+const hapticPass = () => haptic('dragPass');
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
 // 一行字的高度與上下留白（17pt 字、1.6 倍行距、上下各 12）
@@ -85,12 +88,13 @@ export function Paper({ n }: { n: Note }) {
 
   /* ---------- 劃掉、刪除、移動 ---------- */
   // 劃掉：留在原位，只加刪除線（多米 2026-10-31：劃掉的還會再看、還會有新想法；真的不要會自己刪）
-  function strike(id: string) {
+  // fromSwipe＝從滑動來的：手指越線那一刻已經震過（swipeArm），放手不再震；長按選單、VoiceOver 走到這裡才震
+  function strike(id: string, fromSwipe = false) {
     const it = n.items.find(i => i.id === id);
     if (!it || !it.t.trim()) return;
     it.done = !it.done;
     touch();
-    haptic('strike');
+    if (!fromSwipe) haptic('strike');
   }
   // 刪一行：進這張紙的最近刪除（目錄 → 最近刪除裡找得回來），toast 的「復原」只是快速路徑。空行直接拿掉
   function remove(id: string) {
@@ -273,28 +277,23 @@ export function Paper({ n }: { n: Note }) {
   const dragTo = useSharedValue(-1);
   const dragDy = useSharedValue(0);
   const dragH = useSharedValue(0);
-  const drag = useRef<{ idx: number; mids: number[] } | null>(null);
+  // 每一行的中點（拿起來那一刻量的）。放 shared value 是因為「拖到第幾個位置」在手勢的 worklet 裡算（UI 執行緒），
+  // 不再每一格畫面跨到 JS 算一次（第三輪，2026-10-31）：JS 忙的時候被拖的那行不會慢半拍
+  const dragMids = useSharedValue<number[]>([]);
+  const drag = useRef<{ idx: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
       Keyboard.dismiss();
       const idx = n.items.findIndex(i => i.id === id);
-      const mids = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
-      drag.current = { idx, mids };
+      if (idx < 0) return;
+      drag.current = { idx };
+      dragMids.value = n.items.map(i => { const l = layouts.current[i.id]; return l ? l.y + l.h / 2 : 0; });
       dragH.value = (layouts.current[id]?.h ?? ROW_MIN);
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       setDragging(true);
       haptic('dragStart');
-    },
-    move(dy: number) {
-      const d = drag.current;
-      if (!d) return;
-      const y = d.mids[d.idx] + dy;
-      dragDy.value = dy;
-      const to = d.mids.filter((m, k) => k !== d.idx && m < y).length;
-      if (to === dragTo.value) return;
-      dragTo.value = to;
-      haptic('dragPass'); // 每跨過一行「嗒」一下
     },
     end() {
       const d = drag.current;
@@ -434,7 +433,7 @@ export function Paper({ n }: { n: Note }) {
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
-                dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
+                dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
                   layouts.current[it.id] = { y, h };
@@ -442,7 +441,7 @@ export function Paper({ n }: { n: Note }) {
                 }}
                 onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)} onSubmit={caret => onSubmit(it.id, caret)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
-                onStrike={() => strike(it.id)} onRemove={() => remove(it.id)}
+                onStrike={fromSwipe => strike(it.id, fromSwipe)} onRemove={() => remove(it.id)}
                 onMenu={y => openRowMenu(it.id, y)} onEdit={() => focusItem(it.id)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
@@ -535,11 +534,12 @@ type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
   grip: boolean; editing: boolean; rev: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
+  dragMids: SharedValue<number[]>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
-  onStrike: () => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
-  drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
+  onStrike: (fromSwipe?: boolean) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
+  drag: { start: (id: string) => void; end: () => void };
 };
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
@@ -553,29 +553,40 @@ function LineRow(p: LineProps) {
   const op = useSharedValue(1);
   const w = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
-  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH } = p;
-  const { start: dragStart, move: dragMove, end: dragEnd } = p.drag;
+  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragMids } = p;
+  const { start: dragStart, end: dragEnd } = p.drag;
   const { swipeStrikeBg, swipeDeleteBg } = p.colors;
   const id = p.it.id;
   const M = T.motion, G = T.gesture;
+  // 手指現在在哪一區：1＝已越過劃掉門檻、-1＝已越過刪除門檻、0＝都沒有。換區那一刻震一下（iOS 郵件、備忘錄的做法），放手不震
+  const armed = useSharedValue(0);
 
   // 往右滑過門檻＝劃掉，往左滑過門檻＝刪除，沒滑夠就彈回。
   // 減少動態：不播滑回、滑出，改成整行淡回／淡出（回饋要在，只是不移動）
   const swipe = usePanGesture({
     activeOffsetX: [-G.swipeActivate, G.swipeActivate],
     failOffsetY: [-G.swipeFailY, G.swipeFailY],
-    onActivate: () => { 'worklet'; scheduleOnRN(dismissKb); },
-    onUpdate: e => { 'worklet'; tx.value = e.translationX; },
+    onActivate: () => { 'worklet'; armed.value = 0; scheduleOnRN(dismissKb); },
+    onUpdate: e => {
+      'worklet';
+      const dx = e.translationX, W = w.value;
+      tx.value = dx;
+      const zone = dx > Math.min(G.strikeMax, W * G.strikeRatio) ? 1 : dx < -Math.min(G.deleteMax, W * G.deleteRatio) ? -1 : 0;
+      if (zone === armed.value) return;
+      armed.value = zone;
+      if (zone !== 0) scheduleOnRN(hapticArm);
+    },
     onDeactivate: e => {
       'worklet';
+      armed.value = 0;
       const dx = e.translationX, W = w.value;
       if (!e.canceled && dx > Math.min(G.strikeMax, W * G.strikeRatio)) {
         if (calm) {
           tx.value = 0;
           op.value = M.reducedDimFrom;
           op.value = withTiming(1, { duration: M.strikeReturn.reducedFade });
-          scheduleOnRN(onStrike);
-        } else tx.value = withTiming(0, { duration: M.strikeReturn.duration }, () => scheduleOnRN(onStrike));
+          scheduleOnRN(onStrike, true);
+        } else tx.value = withTiming(0, { duration: M.strikeReturn.duration }, () => scheduleOnRN(onStrike, true));
       } else if (!e.canceled && dx < -Math.min(G.deleteMax, W * G.deleteRatio)) {
         if (calm) {
           tx.value = 0;
@@ -601,12 +612,24 @@ function LineRow(p: LineProps) {
   });
   // 長按、點一下、滑動只有一個會成立：手指移超過門檻長按和點一下就放棄，滑動才接手；按住超過長按時間就不算點
   const rowGesture = useExclusiveGestures(hold, tap, swipe);
+  // 把手：拿起、放下回 JS（量位置、改資料）；手指移動中「拖到第幾個位置」在這裡（UI 執行緒）算，不等 JS。
+  // 拿起來的那幾毫秒 dragIdx 還是 -1（JS 還沒量完），先不算；跨過一行排回 JS 震一下
   const grip = usePanGesture({
-    runOnJS: true,
     minDistance: G.dragActivate,
-    onActivate: () => dragStart(id),
-    onUpdate: e => dragMove(e.translationY),
-    onFinalize: () => dragEnd(),
+    onActivate: () => { 'worklet'; scheduleOnRN(dragStart, id); },
+    onUpdate: e => {
+      'worklet';
+      const from = dragIdx.value;
+      if (from < 0) return;
+      const mids = dragMids.value, dy = e.translationY, y = mids[from] + dy;
+      dragDy.value = dy;
+      let to = 0;
+      for (let k = 0; k < mids.length; k++) if (k !== from && mids[k] < y) to++;
+      if (to === dragTo.value) return;
+      dragTo.value = to;
+      scheduleOnRN(hapticPass);
+    },
+    onFinalize: () => { 'worklet'; scheduleOnRN(dragEnd); },
   });
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }], opacity: op.value }));

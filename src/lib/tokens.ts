@@ -174,6 +174,7 @@ const HAPTIC = {
   add: light,                       // 右下 ＋、膠囊 ＋ 新增一行
   color: Haptics.selectionAsync,    // ⋯ 選單換紙的顏色
   dragPass: Haptics.selectionAsync, // 排順序時拖過另一行
+  swipeArm: Haptics.selectionAsync, // 滑動時手指越過劃掉／刪除門檻那一刻（放手不再震）；第三輪加
 };
 export function haptic(event: keyof typeof HAPTIC) { HAPTIC[event]().catch(() => {}); }
 
