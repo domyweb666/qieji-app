@@ -18,9 +18,10 @@ import {
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
 import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
+import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
-  Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
+  Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
+  useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -232,7 +233,20 @@ export function Paper({ n }: { n: Note }) {
   const boxRef = useRef<ViewInstance>(null);
   const view = useRef({ top: 0, h: 0, y: 0, kb: Infinity }); // 清單在螢幕上的頂、高，目前捲到哪，鍵盤頂
   const [kbPad, setKbPad] = useState(0);
-  const kbLift = useSharedValue(0);
+  // K7（2026-11-01 第四輪）：膠囊與輸入框的位置不再靠 keyboardWillShow 事件知道終點、自己跑一段 withTiming 猜中間，
+  // 改由 react-native-keyboard-controller 在 UI 執行緒逐格給鍵盤高度（kbH，從螢幕底算起）：升降、手指把鍵盤往下拖
+  // （ScrollView 的 keyboardDismissMode='interactive'）、拖一半放手彈回，膠囊都貼著鍵盤上緣走。
+  // 寫法照套件自家 KeyboardAvoidingView：onMove（升降每一格）、onInteractive（手指拖的每一格）、onEnd（停下）都寫進同一個 shared value；
+  // 四個回呼都是 worklet，裡面只准碰 shared value（規矩檔）。網頁沒有這個原生模組，kbH 永遠是 0，跟之前一樣
+  const kbH = useSharedValue(0);
+  // 清單底邊到視窗底邊的距離（紙是根畫面，實際上是 0）；鍵盤蓋住清單的高度＝鍵盤高度扣掉它
+  const below = useSharedValue(0);
+  useKeyboardHandler({
+    onMove: e => { 'worklet'; kbH.value = e.height; },
+    onInteractive: e => { 'worklet'; kbH.value = e.height; },
+    onEnd: e => { 'worklet'; kbH.value = e.height; },
+  }, []);
+  const kbLift = useDerivedValue(() => Math.max(0, kbH.value - below.value), WEB_DEPS ? [] : undefined);
   const barStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -kbLift.value }] }));
   // 輸入框的位置：貼在鍵盤上面（跟膠囊同一個位置），鍵盤還沒升起時貼著安全區。鍵盤一定比安全區高，所以兩段接得起來、不會跳一下。
   // 2026-11-01 第二版曾改成「升到鍵盤上方那段的正中」，多米真看之後說體感很糟：框自己的滑入（220）疊在跟著鍵盤的位移（250、另一條曲線）上，
@@ -258,29 +272,25 @@ export function Paper({ n }: { n: Note }) {
     scrolled(e);
     if (e.nativeEvent.contentOffset.y < -T.gesture.pullOpen) openDir();
   };
+  // 鍵盤頂在哪、要不要捲（ensureVisible）仍在 JS 這邊算，只是事件改聽套件的（跟系統一樣 will／did 兩對）：
+  // 它給的是鍵盤高度（從視窗底算），鍵盤頂＝視窗高 − 高度；位置動畫本身已交給上面的 kbH，這裡不再推
   useEffect(() => {
-    const [x1, y1, x2, y2] = T.motion.keyboardFollow.easing;
-    const show = (e: { endCoordinates: { screenY: number }; duration?: number }) => {
+    const show = (e: { height: number }) => {
       const v = view.current;
-      v.kb = e.endCoordinates.screenY;
-      const lift = Math.max(0, v.top + v.h - v.kb);
-      kbLift.value = withTiming(lift, { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) });
-      setKbPad(lift);
+      v.kb = winH - e.height;
+      setKbPad(Math.max(0, v.top + v.h - v.kb));
       requestAnimationFrame(() => ensureVisible(focused.current));
     };
-    // 收起時膠囊（和輸入框）跟著鍵盤一起下去，動畫跑完才收掉底部留白、把 ＋ 放回來（第二輪 K2；之前是瞬間消失）。
-    // 中途鍵盤又升起，show 會蓋掉這個動畫，回呼的 finished 是 false，留白就不會被收掉
-    const hide = (e: { duration?: number }) => {
-      view.current.kb = Infinity;
-      kbLift.value = withTiming(0, { duration: e.duration || T.motion.keyboardFollow.duration, easing: Easing.bezier(x1, y1, x2, y2) },
-        finished => { if (finished) scheduleOnRN(setKbPad, 0); });
-    };
+    // 收起：膠囊（和輸入框）由 kbH 帶著跟鍵盤一起下去；底部留白與 ＋ 等鍵盤真的收完（didHide）才還原（第二輪 K2；之前是瞬間消失）。
+    // 中途鍵盤又升起，willShow 會先把 kb 設回有限值，didHide 就不收留白（套件排 did 事件時會取消前一個，照理不會到這裡，留著當保險）
+    const hide = () => { view.current.kb = Infinity; };
+    const hidden = () => { if (view.current.kb === Infinity) setKbPad(0); };
     const subs = [
-      Keyboard.addListener('keyboardWillShow', show), Keyboard.addListener('keyboardDidShow', show),
-      Keyboard.addListener('keyboardWillHide', hide), Keyboard.addListener('keyboardDidHide', hide),
+      KeyboardEvents.addListener('keyboardWillShow', show), KeyboardEvents.addListener('keyboardDidShow', show),
+      KeyboardEvents.addListener('keyboardWillHide', hide), KeyboardEvents.addListener('keyboardDidHide', hidden),
     ];
     return () => subs.forEach(s => s.remove());
-  }, [kbLift]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [winH]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- 在一行裡打字 ---------- */
   // K5（2026-11-01 第三輪）：貼上帶換行的字自動拆成多行。只在「新字的換行數比舊字多」時拆（舊資料本來就帶換行的格，打一個字不會整格炸開）；
@@ -518,9 +528,10 @@ export function Paper({ n }: { n: Note }) {
       </View>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
-        onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; })}>
+        onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
+        {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
-          keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
+          keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}
