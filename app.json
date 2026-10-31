@@ -28,6 +28,16 @@
       "expo-router",
       "expo-image",
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "d02dc6a2-0a03-4d33-8f89-a443a841b626"
+      }
+    }
   }
 }
