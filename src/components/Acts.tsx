@@ -11,6 +11,7 @@ export type Act = {
   on?: boolean;
   sub?: Act[];      // 子選單
   inline?: boolean; // 子選單直接攤開成一個區塊
+  head?: boolean;   // inline 攤開時，把這個 label 印成那一組的小標題（PopMenu；例如目錄的「排序」）
   hidden?: boolean;
 };
 

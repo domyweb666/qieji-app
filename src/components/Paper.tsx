@@ -25,13 +25,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, CKEYS, col, convertNote, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { Composer } from './Composer';
 import { PopMenu } from './PopMenu';
+import { Swatches } from './Swatches';
 import { Sym } from './Sym';
 import { Fab, GlassBtn } from './WebBars';
 
@@ -141,7 +142,7 @@ export function Paper({ n }: { n: Note }) {
   function openRowMenu(id: string, bottom: number) {
     Keyboard.dismiss();
     haptic('menu');
-    const h = T.shape.menuRow * 4 + T.space.s; // 四個項目
+    const h = T.shape.menuRow * 4 + T.space.xs * 3 + T.space.s * 2; // 四個項目、三個縫、卡片上下內距（PopMenu 的藥丸版）
     setRowMenu({ id, top: Math.max(insets.top, Math.min(bottom, winH - insets.bottom - KBAR_H - h)) });
   }
   function rowActs(id: string): Act[] {
@@ -628,25 +629,7 @@ export function Paper({ n }: { n: Note }) {
   );
 }
 
-/* ---------- ⋯ 選單最上面一排九個色塊：點了紙直接換色，選單不關（看得到後面換了） ---------- */
-function Swatches({ current, onPick }: { current: ColorKey; onPick: (k: ColorKey) => void }) {
-  return (
-    <View style={st.swatches} accessibilityRole="radiogroup" accessibilityLabel="顏色">
-      {CKEYS.map(k => <Swatch key={k} k={k} on={k === current} onPress={() => onPick(k)} />)}
-    </View>
-  );
-}
-function Swatch({ k, on, onPress }: { k: ColorKey; on: boolean; onPress: () => void }) {
-  const c = useColors();
-  const nc = useNoteColors(k);
-  return (
-    <Pressable onPress={onPress} hitSlop={T.space.s} accessibilityRole="radio"
-      accessibilityLabel={`${col(k).hue}（${col(k).name}）`} accessibilityState={{ selected: on, checked: on }}
-      style={({ pressed }) => [st.swatchBox, { borderColor: on ? c.accent : 'transparent' }, pressed && { opacity: T.motion.pressDim }]}>
-      <View style={[st.swatch, { backgroundColor: nc.hd, borderColor: c.dotOutline }]} />
-    </Pressable>
-  );
-}
+// ⋯ 選單最上面一排九個色塊（Swatches.tsx，目錄的篩選也用它）：點了紙直接換色，選單不關（看得到後面換了）
 
 // 按鍵那一刻游標選到哪（start＝end 就是沒選取、游標在 start）
 type Sel = { start: number; end: number };
@@ -948,7 +931,4 @@ const st = StyleSheet.create({
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
   kbar: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', ...T.shape.shadowSoft },
   kb: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
-  swatches: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.m, paddingVertical: T.space.m },
-  swatchBox: { width: T.shape.swatchDot, height: T.shape.swatchDot, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderSelected - T.shape.borderCard },
-  swatch: { flex: 1, borderRadius: T.shape.pill(T.shape.swatchDot), borderWidth: T.shape.borderCard },
 });

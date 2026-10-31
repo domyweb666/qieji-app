@@ -5,7 +5,7 @@ import { groupNotes, label, type Note } from '../lib/model';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
 export function NoteSections({ notes, trash, onPress }: {
-  notes: Note[]; trash: boolean; onPress: (n: Note) => void;
+  notes: Note[]; trash: boolean; onPress: (n: Note, y: number) => void; // y＝按下去的位置（視窗座標），給選單當錨點
 }) {
   const c = useColors();
   const secs = groupNotes(notes, { trash });
@@ -17,7 +17,7 @@ export function NoteSections({ notes, trash, onPress }: {
         <View key={sec.title}>
           {showHead && <Text style={[s.head, { color: c.textSecondary }]}>{sec.title}</Text>}
           <View style={s.cards}>
-            {sec.notes.map(n => <Card key={n.id} n={n} onPress={() => onPress(n)} />)}
+            {sec.notes.map(n => <Card key={n.id} n={n} onPress={y => onPress(n, y)} />)}
           </View>
         </View>
       ))}
@@ -25,11 +25,11 @@ export function NoteSections({ notes, trash, onPress }: {
   );
 }
 
-function Card({ n, onPress }: { n: Note; onPress: () => void }) {
+function Card({ n, onPress }: { n: Note; onPress: (y: number) => void }) {
   const c = useColors();
   const nc = useNoteColors(n.color);
   return (
-    <Pressable onPress={onPress}
+    <Pressable onPress={e => onPress(e.nativeEvent.pageY)}
       style={({ pressed }) => [s.card, { backgroundColor: pressed ? c.pressedFill : c.surface, borderColor: c.separator }]}>
       {/* 色點本身的對比不夠（7/9 不到 3:1），靠描邊；名字永遠在旁邊，色點只是裝飾 */}
       <View style={[s.dot, { backgroundColor: nc.hd, borderColor: c.dotOutline }]} />

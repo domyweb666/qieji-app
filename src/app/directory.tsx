@@ -5,13 +5,15 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { showActs, type Act } from '../components/Acts';
+import type { Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
 import { ui } from '../components/Overlay';
+import { PopMenu } from '../components/PopMenu';
+import { Swatches } from '../components/Swatches';
 import { Sym } from '../components/Sym';
 import { GlassBtn, native } from '../components/WebBars';
 import { exportData, importData } from '../lib/backup';
-import { CKEYS, col, label, moveItem, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
+import { col, label, moveItem, SORTS, visibleNotes, type ColorKey, type Note, type SortKey } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
@@ -24,6 +26,7 @@ export default function Directory() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [filter, setFilter] = useState<ColorKey | 'all'>('all');
+  const [menu, setMenu] = useState(false);
   const [q, setQ] = useState('');
   const searching = !!q.trim();
   const chipColor = useNoteColors(filter === 'all' ? 'purple' : filter);
@@ -63,13 +66,11 @@ export default function Directory() {
     router.back();
   }
 
-  const menu: Act[] = [
-    // 篩選與讀屏統一用一般色名（紫色…），不用蔬菜名（詞彙表 #10）
-    { label: '依顏色篩選', icon: 'circle.grid.2x2', sub: [
-      { label: '全部', on: filter === 'all', fn: () => setFilter('all') },
-      ...CKEYS.map(k => ({ label: `${col(k).dot} ${col(k).hue}`, on: filter === k, fn: () => setFilter(k) })),
-    ] },
-    { label: '排序方式', icon: 'arrow.up.arrow.down', sub: (Object.keys(SORTS) as SortKey[]).map(k => ({
+  // ⋯ 選單（2026-11-01 多米定 A1 全部自繪）：跟紙的 ⋯ 同一張卡（PopMenu）。顏色篩選＝卡最上面那排真色塊（跟紙換色同一排，點選中的那顆＝取消篩選），
+  // 排序攤開成一組打勾項，不再像原生表單那樣選一層再升一層；讀屏的色名統一用一般色名（紫色…），不用蔬菜名（詞彙表 #10）
+  const acts: Act[] = [
+    { label: '全部顏色', icon: 'circle.grid.2x2', on: filter === 'all', fn: () => setFilter('all') },
+    { label: '排序', inline: true, head: true, sub: (Object.keys(SORTS) as SortKey[]).map(k => ({
       label: SORTS[k], on: s.sort === k, fn: () => { s.sort = k; store.change(); },
     })) },
     { label: '備份', inline: true, sub: [
@@ -77,19 +78,20 @@ export default function Directory() {
       { label: '匯入備份', icon: 'square.and.arrow.down', fn: importData },
     ] },
   ];
+  // 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留
+  const padTop = native ? T.space.l : insets.top + T.space.s;
 
   const tiles = (list: Note[]) => list.map(n => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />);
 
   return (
     <View style={{ flex: 1, backgroundColor: c.surface }} collapsable={false}>
-      {/* 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留 */}
-      <View style={[st.top, { paddingTop: native ? T.space.l : insets.top + T.space.s }]}>
+      <View style={[st.top, { paddingTop: padTop }]}>
         <View style={[st.search, { backgroundColor: c.page }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
           <TextInput value={q} onChangeText={setQ} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
             style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel="搜尋清單" />
         </View>
-        <GlassBtn icon="ellipsis" label="選單" onPress={() => showActs(menu, '選單')} />
+        <GlassBtn icon="ellipsis" label="選單" onPress={() => setMenu(true)} />
       </View>
 
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
@@ -136,6 +138,12 @@ export default function Directory() {
           </Pressable>
         )}
       </ScrollView>
+
+      {menu && (
+        <PopMenu acts={acts} top={padTop + T.shape.hitMin + T.space.s} onClose={() => setMenu(false)}
+          header={<Swatches label="依顏色篩選" current={filter === 'all' ? null : filter}
+            onPick={k => { setFilter(k === filter ? 'all' : k); setMenu(false); }} />} />
+      )}
     </View>
   );
 }
