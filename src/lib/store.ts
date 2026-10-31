@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { emptyState, HINT_KEY, KEY, parseState, purgeExpiredBin, purgeExpiredTrash, stampOldBin, stampOldTrash, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
@@ -21,6 +21,7 @@ async function writeNow() {
   clearTimeout(box.saveT);
   if (!box.loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
   try {
+    stampMods(box.state, Date.now()); // iCloud 同步用：內容變了的紙記下改動時間（S0；畫面上的 updated 不動）
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
     box.saveFailed = false;
     pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
@@ -72,14 +73,14 @@ export const store = {
   },
   // 最近刪除 30 天自動清（2026-11-01 接上，多米定；規則在 model.ts 與 tests/trash.test.mjs，鐵則是拿不準就不刪）：
   // 打開 app 讀完資料、回到前景時各跑一次。先把沒有可信時間的張與行補成現在（從今天起算 30 天），再清掉滿 30 天的；清了才重畫，只補時間就只存檔。
-  // 清掉不留紀錄、不提示（跟 iOS 備忘錄一樣；最近刪除頁那句「放滿 30 天會自動清掉」就是告知）。回傳清掉幾張＋幾行
+  // 清掉不提示、只留一筆墓碑（紙的 id＋時間，給 iCloud 同步擋復活）（跟 iOS 備忘錄一樣；最近刪除頁那句「放滿 30 天會自動清掉」就是告知）。回傳清掉幾張＋幾行
   purgeTrash(now = Date.now()) {
     if (!box.loaded) return 0;
     const notes = box.state.notes;
     const stamped = stampOldTrash(notes, now) + stampOldBin(notes, now);
-    const { kept, removed } = purgeExpiredTrash(notes, now);
-    const lines = purgeExpiredBin(notes, now);
-    if (removed.length) box.state.notes = kept;
+    // 清掉的紙立墓碑（S0）：不然 iCloud 同步會從另一台把它帶回來
+    const removed = dropNotes(box.state, n => isExpiredTrash(n, now), now);
+    const lines = purgeExpiredBin(box.state.notes, now);
     if (removed.length || lines) store.change();
     else if (stamped) store.save();
     return removed.length + lines;

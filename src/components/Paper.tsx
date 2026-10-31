@@ -25,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -402,7 +402,7 @@ export function Paper({ n }: { n: Note }) {
     const t = takeDraft();
     if (t) n.items.unshift({ id: uid(), t, done: false, b: false }); // 輸入框裡打到一半的字跟著這張紙走，不丟
     n.items = n.items.filter(i => i.t.trim());
-    if (isEmpty(n)) store.s.notes = store.s.notes.filter(x => x !== n);
+    if (isEmpty(n)) dropNotes(store.s, x => x === n, Date.now()); // 立墓碑（iCloud 同步 S0）
     store.change();
     store.flush();
   }
@@ -453,7 +453,7 @@ export function Paper({ n }: { n: Note }) {
     markDeleted(n, Date.now()); n.pinned = false;
     n.items = n.items.filter(i => i.t.trim());
     const empty = isEmpty(n);
-    if (empty) store.s.notes = store.s.notes.filter(x => x !== n);
+    if (empty) dropNotes(store.s, x => x === n, Date.now());
     closed.current = true;
     const next = store.s.notes.filter(x => !x.deleted).sort((a, b) => b.updated - a.updated)[0] ?? newNote();
     store.open(next.id);

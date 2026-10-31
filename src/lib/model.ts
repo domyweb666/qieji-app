@@ -23,10 +23,16 @@ export type Note = {
   created: number;
   updated: number;
   b: boolean;
+  // iCloud 同步用（S0，2026-11-01 加；舊存檔沒有就是還沒算過）。h＝內容指紋；mod＝指紋上次變的時間（同步比新舊用，
+  // 跟畫面上的 updated 分開：清掉最近刪除裡的行不會讓紙跳到目錄最前面）；sh＝上次跟 iCloud 對上時的指紋（合併時的共同祖先）
+  h?: string;
+  mod?: number;
+  sh?: string;
 };
 export type Day = { f: number; e: number; g: number };
 export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } };
-export type State = { sort: SortKey; notes: Note[]; garden: Garden };
+// gone＝墓碑：永久拿掉的紙 id → 拿掉的時間（S0，2026-11-01 加）。沒有它，另一台還留著的那張會被同步回來，刪掉的紙復活
+export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number> };
 
 // name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
 // 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
@@ -85,7 +91,7 @@ export function fixGarden(s: any) {
   };
 }
 
-export const emptyState = (): State => ({ notes: [], sort: 'updated', garden: { days: {}, tot: { f: 0, e: 0 } } });
+export const emptyState = (): State => ({ notes: [], sort: 'updated', garden: { days: {}, tot: { f: 0, e: 0 } }, gone: {} });
 
 // 讀進存檔字串（可能是 null、壞掉的 JSON、或任何舊版格式）
 // 同一個 id 出現兩次（同一則筆記被重複存進去）時只留最新的那份；不同 id 的筆記一則都不動
@@ -106,6 +112,7 @@ export function parseState(raw: string | null): State {
       s.notes = dedupe(s.notes);
       fixGarden(s);
       if (!SORTS[s.sort as SortKey]) s.sort = 'updated';
+      s.gone = fixGone(s.gone);
       return s;
     }
   } catch {}
@@ -340,4 +347,138 @@ export function purgeExpiredBin(notes: Note[], now: number) {
 export function restampTrash(n: Note, now: number) {
   if (n.deleted) n.deletedAt = now; else delete n.deletedAt;
   for (const it of n.bin) it.at = now;
+}
+
+/* ---------------- iCloud 同步：資料規則（S0，2026-11-01） ----------------
+   只有規則，不碰 iCloud、不碰儲存；傳輸那層（S2 上傳、S3 下載）再接。規則全部用 tests/sync.test.mjs 釘死。
+   鐵則：拿不準就兩邊都留——寧可多一行、多一張，不能少。
+   比的單位是一張紙：一邊改＝拿改的那邊；兩邊都改＝把兩邊的行合起來（同一行兩邊都在就用比較新的那邊）；永久拿掉的紙靠墓碑擋住復活 */
+
+function fixGone(g: any): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (g && typeof g === 'object') for (const [id, t] of Object.entries(g)) if (validTime(t)) out[id] = t as number;
+  return out;
+}
+
+// 指紋：紙的內容（不含 h、mod、sh 自己）照鍵名排好再算，欄位順序不同、兩台存出來的 JSON 長得不一樣也算同一份
+const NO_PRINT = new Set(['h', 'mod', 'sh']);
+function canon(v: any): string {
+  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).filter(k => !NO_PRINT.has(k) && v[k] !== undefined).sort()
+      .map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v) ?? 'null';
+}
+// FNV-1a 兩個起始值各算一次接起來（64 位元），只拿來判斷「有沒有變」，不是加密
+function fnv(str: string, seed: number) {
+  let x = seed >>> 0;
+  for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619) >>> 0; }
+  return x.toString(16).padStart(8, '0');
+}
+export function fingerprint(n: Note) {
+  const c = canon(n);
+  return fnv(c, 2166136261) + fnv(c, 3735928559);
+}
+
+// 存檔前呼叫：內容變了的紙記下 mod＝現在。還沒算過指紋的（舊存檔、剛開的新紙）mod 從 updated 起算，
+// 不然升級後第一次存檔每張紙都變成「剛剛改的」，跟 iCloud 上的版本比會亂贏。回傳變了幾張
+export function stampMods(s: State, now: number) {
+  let changed = 0;
+  for (const n of s.notes) {
+    const f = fingerprint(n);
+    if (n.h === f) continue;
+    n.mod = n.h === undefined ? (validTime(n.mod) ? n.mod : n.updated || now) : now;
+    n.h = f;
+    changed++;
+  }
+  return changed;
+}
+
+// 永久拿掉紙（永久刪除、清空最近刪除、30 天清、空紙關掉）一律走這裡：拿掉、同時立墓碑。回傳拿掉的紙
+export function dropNotes(s: State, pick: (n: Note) => boolean, now: number) {
+  const gone = (s.gone ??= {});
+  const removed: Note[] = [];
+  s.notes = s.notes.filter(n => {
+    if (!pick(n)) return true;
+    removed.push(n);
+    gone[n.id] = Math.max(gone[n.id] ?? 0, now);
+    return false;
+  });
+  return removed;
+}
+
+// 上傳成功之後呼叫：這張紙跟 iCloud 對上了
+export function markSynced(n: Note) { n.sh = n.h; }
+
+// 墓碑比這張紙最後一次改動還新（或一樣）＝它在別台被永久拿掉之後就沒人動過，拿掉。
+// 比墓碑新＝拿掉之後還有人改（例如離線那台還在記），拿不準，留著
+const buried = (gone: Record<string, number>, n: Note) => gone[n.id] !== undefined && gone[n.id] >= (n.mod ?? n.updated);
+
+// 兩邊都改了同一張：以 mod 比較新的那張為主（一樣新就本機），另一張多出來的行插回它原本的前一行後面；
+// 主的那張刪掉的行（在 bin 裡）不會被救回來——還在最近刪除裡，找得回來。內文（文字筆記）不一樣就兩段都留
+function unite(w: Note, x: Note): Note {
+  const items = w.items.map(i => ({ ...i }));
+  const seen = new Set([...items.map(i => i.id), ...w.bin.map(i => i.id)]);
+  let prev: string | null = null;
+  for (const it of x.items) {
+    if (!seen.has(it.id)) {
+      const at = prev === null ? 0 : items.findIndex(i => i.id === prev) + 1;
+      items.splice(at, 0, { ...it });
+      seen.add(it.id);
+    }
+    if (items.some(i => i.id === it.id)) prev = it.id;
+  }
+  const bin = [...w.bin.map(i => ({ ...i })), ...x.bin.filter(i => !seen.has(i.id)).map(i => ({ ...i }))];
+  const body = w.body === x.body || !x.body.trim() ? w.body : !w.body.trim() ? x.body : w.body + '\n\n' + x.body;
+  return { ...w, title: w.title || x.title, body, items, bin,
+    created: Math.min(w.created, x.created), updated: Math.max(w.updated, x.updated) };
+}
+
+// 把 iCloud 上的紙與墓碑合進本機。remote 的紙可能來自另一台、舊版本、甚至網頁版備份，一律先 fixNote。
+// 回傳數字（測試與日後的紀錄用）和 push：合完之後本機比 iCloud 新、要上傳的紙 id
+export function mergeRemote(s: State, remote: { notes: any[]; gone?: any }, now: number) {
+  stampMods(s, now);
+  const gone = (s.gone ??= {});
+  for (const [id, t] of Object.entries(fixGone(remote.gone))) gone[id] = Math.max(gone[id] ?? 0, t);
+  const theirs = new Map<string, Note>();
+  for (const r0 of remote.notes || []) {
+    if (!r0 || typeof r0.id !== 'string') continue;
+    const r = fixNote(r0);
+    r.h = fingerprint(r);
+    if (!validTime(r.mod)) r.mod = r.updated || 0;
+    const o = theirs.get(r.id);
+    if (!o || (r.mod ?? 0) > (o.mod ?? 0)) theirs.set(r.id, r);
+  }
+  const out: Note[] = [], push: string[] = [];
+  let added = 0, taken = 0, united = 0, removed = 0;
+  for (const l of s.notes) {
+    const r = theirs.get(l.id);
+    theirs.delete(l.id);
+    if (!r) {
+      // iCloud 上沒有：墓碑擋住就拿掉；不然留著（可能是還沒上傳、或 iCloud 那份還沒下載下來），要上傳
+      if (buried(gone, l)) { removed++; continue; }
+      out.push(l);
+      if (l.h !== l.sh) push.push(l.id);
+      continue;
+    }
+    const newest = Math.max(l.mod ?? 0, r.mod ?? 0);
+    if (gone[l.id] !== undefined && gone[l.id] >= newest) { removed++; continue; }
+    if (l.h === r.h) { l.sh = r.h; out.push(l); continue; }
+    if (l.sh !== undefined && l.h === l.sh) { r.sh = r.h; out.push(r); taken++; continue; } // 只有 iCloud 那邊改了
+    if (l.sh !== undefined && r.h === l.sh) { out.push(l); push.push(l.id); continue; }       // 只有本機改了
+    // 兩邊都改了（或這台從沒跟 iCloud 對過、內容又不一樣）：合起來，比兩邊都新，要上傳
+    const m = (r.mod ?? 0) > (l.mod ?? 0) ? unite(r, l) : unite(l, r);
+    m.h = fingerprint(m);
+    m.mod = Math.max(now, newest + 1);
+    m.sh = r.h;
+    out.push(m); push.push(m.id); united++;
+  }
+  for (const r of theirs.values()) {
+    if (buried(gone, r)) continue;
+    r.sh = r.h;
+    out.push(r); added++;
+  }
+  s.notes = out;
+  return { added, taken, united, removed, push };
 }

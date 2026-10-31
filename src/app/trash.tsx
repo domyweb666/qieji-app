@@ -9,7 +9,7 @@ import { listStyles, NoteSections } from '../components/NoteList';
 import { ui } from '../components/Overlay';
 import { PopMenu } from '../components/PopMenu';
 import { GlassBtn, WebTop } from '../components/WebBars';
-import { label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
+import { dropNotes, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
 import { store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
@@ -34,7 +34,7 @@ export default function Trash() {
   function onPress(n: Note, y: number) {
     openMenu([
       { label: '還原', icon: 'arrow.uturn.backward', fn: () => { markRestored(n); store.change(); ui.toast('已還原'); } },
-      { label: '永久刪除', icon: 'trash', destructive: true, fn: () => { s.notes = s.notes.filter(x => x !== n); store.change(); } },
+      { label: '永久刪除', icon: 'trash', destructive: true, fn: () => { dropNotes(s, x => x === n, Date.now()); store.change(); } },
     ], y);
   }
   function onPressLine(n: Note, it: Item, y: number) {
@@ -46,7 +46,7 @@ export default function Trash() {
   const acts: Act[] = [{
     label: `清空最近刪除（${total}）`, icon: 'trash', destructive: true,
     fn: () => ui.confirm('永久刪除這裡的所有清單和行？', () => {
-      s.notes = s.notes.filter(n => !n.deleted);
+      dropNotes(s, n => n.deleted, Date.now());
       s.notes.forEach(n => { n.bin = []; });
       store.change();
     }),
