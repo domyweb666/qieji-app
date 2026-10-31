@@ -1,73 +1,66 @@
-# Handoff: 2026-11-01 手感第一輪、底部輸入框、「未命名」、第二輪（過場）、輸入框暗幕（第五包，居中版體感糟已退回貼鍵盤）、排順序常駐把手（第六包）、第三輪打字本體（第七包）、30 天自動清接上（第八包）全部寫完並 commit，八包都還沒真機
+# Handoff: 2026-11-01 八包純 JS 改動全部 commit、全部待真機；多米要「一次做完再一次真機」，下一步是第四輪兩個原生件（要重建）
 
-> 產出時間：2026-11-01 01:49（上一版 2026-10-31 15:55 在 `.vibe/handoff/archive/2026-10-31-1555.md`；10/31 晚上到今天凌晨一路追加的補記已併進這份）
+> 產出時間：2026-11-01 03:06（上一版 2026-11-01 01:49 在 `.vibe/handoff/archive/2026-11-01-0149.md`；本會話從它接續，一路追加後這份重寫）
 > 前一會話的最後狀態，給下一個會話接續用
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／React Native 0.88，iOS 原生 app，多米沒有 Mac）
-> **測試方式**：多米用自己的開發版 app（EAS 建置、內部發佈、裝在 iPhone 17）測，`npx expo start --tunnel` 連（手機走 4G）；要回 Expo Go 加 `--go`。只改 JS 不用重建；改 `app.json`、加原生套件、升 SDK 才要重建（先 `npx expo-doctor`）。EAS 的來龍去脈在 `.vibe/EAS建置-申請與設定步驟.md`。
-> **今天的四個 commit 都是純 JS，不用重建，重載就能看。**
+> **測試方式**：多米用自己的開發版 app（EAS 建置、內部發佈、裝在 iPhone 17）測，`npx expo start --tunnel --port 8082` 連（8081 常被另一個專案「豆帳」佔著）；只改 JS 不用重建；改 `app.json`、加原生套件、升 SDK 才要重建（先 `npx expo-doctor`）。EAS 來龍去脈在 `.vibe/EAS建置-申請與設定步驟.md`。
+> **多米 2026-11-01 定的工作節奏：「一次做完，我再一次真機測試」**——不要每包停下來等真機，把不用重建的都做完、要重建的做完再一起建一次，然後他照驗收清單一次走完。
 
 ## ✅ 這次完成了什麼
 
-（commit 由舊到新）
+（commit 由舊到新，每包獨立、`git revert` 就能單獨退）
 
-- 補完 10/31 交接列的兩個文件尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗` 待答清單的 ❓D 改成「由 Return 回答」；同兩檔「點兩下」對齊成「點一下」
-- 寫了 `.vibe/待審-手感極致微調清單.md`：22 項分五輪，每項附現況／改法／風險／真機看什麼／退回，第九節是 API 查證紀錄；`lessons.md` 加一條（對照網頁版抓不到「兩邊都沒有」的差）
-- **手感第一輪**（commit `33eb83e`）：H1 越線的字漸亮＋越線那刻放大；H2 滑動起步不跳 14 點；H3 滑回／彈回／滑出改成接手指速度的彈簧；H4 放手那一刻就劃；D1 放下滑進落點＋`dragDrop` 震動；D2 拿起來浮起（放大 1.02＋陰影）；D3 讓位改彈簧。tokens 的 `motion` 四個時長改 `spring`、新增 `dragLand`／`dragLift`／`swipeLabel`，`HAPTIC` 加 `dragDrop`
-- 沒取名的清單名「沒有名字的一張」改成「**未命名**」（commit `8c9740a`，多米定）
-- **底部輸入框**（commit `b464086`，多米提的、選「照推薦做」）：新檔 `src/components/Composer.tsx`＋`Paper.tsx`。按右下 ＋、膠囊 ＋、目錄「新的一張」→ 框從底下升起、貼在鍵盤上面、跟著字長高最多四行；Return 送出一行到最上面、清單捲上去、框清空不收（可以連續記）；空的按 Return 收起；✓、點外面、開選單、滑動、切 app、換紙：有字就先變成一行再收起（字不丟）。`focusNew` 拿掉。tokens 加 `shape.composerLines`
-- **手感第二輪（過場）**（commit `bc11f66`）：K2 膠囊與輸入框跟著鍵盤一起下去（`hide()` 改 `withTiming`，跑完才收底部留白）；K3 右下 ＋ 淡進淡出；K4 行長出來淡入、拿掉淡出、其他行滑到新位置（`LineRow` 的 entering／exiting／layout，新 token `motion.rowShift` 180；排順序與減少動態不滑；`LayoutAnimationConfig skipEntering` 讓整張紙第一次畫出來不播；底部提示那行跟著滑）；S2 換紙淡入（`Paper` 根 entering；`index.tsx` 包 `LayoutAnimationConfig skipEntering`，第一次打開 app 不淡）
-- **輸入框暗幕**（第五包，多米 11/01 下午提）：先做了「升到正中＋暗幕」（第二版，commit `67f0d98`），多米看了說**體感很糟糕**、全權交 Agent 改。走 `domi-uiux-review` 審查（`.uiux/審查紀錄.md` 2026-11-01）：2-5 核心動作被做成正中對話框、2-4 框的滑入疊在跟鍵盤的位移上兩段不連續、四個時鐘。**第三版**：框貼回鍵盤上面（第一版位置），框與暗幕進出都用 `keyboardFollow`（跟鍵盤一個時鐘），暗幕留著、點暗幕＝✓（有字先送出）、**點外面不能再點到別行**。沒加 token。設計檔、待審第十一節、提案第八輪、驗收清單 C1／C5／C5b 同步
-- **排順序把手常駐**（第六包，多米 11/01 提、選「照推薦做」）：每行右邊常駐三條線把手，`sorting` 模式、⋯「排順序」項、「排好了」膠囊全拿掉；把手上「上下」動＝拿起、「左右」動讓給滑動（tokens 新加 `gesture.dragFailX` 10）；行的 `layout` 過場開關改成 `dragging`。推翻重新設計第二輪 #127。提案第九輪、詞彙表 #18、02-流程、06 狀態表同步
-- **第三輪打字本體**（第七包，多米 11/01 說「繼續往下做」，先真機的規矩由他解除）：H5 乙滑動不收鍵盤（commit `deca5b5`，一行）；K5 貼多行自動拆行（`model.ts` `splitPasted`＋測試，`onChange` 只在換行數變多時拆）；K1 點一下游標落在點的位置（`model.ts` `caretAt`＋測試，Field 隱形 Text `onTextLayout` 回報每行，tap 的 e.x 扣 cin 左內距；網頁沒 onTextLayout 照舊落尾）；K6 目錄面板聽自己的 `transitionEnd`（closing）→ `store.panelClosed()` → 紙馬上開輸入框，700 留當保險。沒加 token；測試 25 → 27
-- **30 天自動清接上**（第八包，多米 11/01 說「接」；Agent 當審查工程師，答案寫在 `.vibe/待審-最近刪除30天自動清.md` 最後一節）：`store.purgeTrash()` 在 `load()` 與回到前景各跑一次，張看 `deletedAt`、行看 `bin` 的 `at`，同一套「拿不準就不刪」四條；`del()`／還原改用 `markDeleted`／`markRestored`；風險 1、2 用 `importBackup` 的 `restampTrash`（匯進來的最近刪除一律從匯入當下重算 30 天）＋ `fixNote` 拿掉殘留時間解掉；風險 3 不留紀錄；最近刪除頁換接上後文案（`TRASH_DAYS` 帶進字串）。測試 27 → 29。核心動作卡 #11 ✅
-- 每個 commit 都過：check:tokens、typecheck、lint、測試；網頁預覽都走過（細節見 🗑️）；設計檔同步：02-流程、03-單手、04-參數表、05-原始清單／設計版 `Tokens.ts`／詞彙表 #20「輸入框」、06-首次體驗、提案第七輪、待審清單
+- `05fb208` 文件：H5 多米定乙；四包「真機看什麼」彙成 `.vibe/真機驗收-四包-2026-11-01.md` 勾選清單（之後每包都往這份加一節）
+- `67f0d98`／`934c92a` **輸入框暗幕**（第五包）：多米提「升到正中＋背景變暗」，做了第二版；他看了說**體感很糟糕**、全權交 Agent 改 → 走 `domi-uiux-review` 審查（`.uiux/審查紀錄.md` 2026-11-01）：2-5 核心動作被做成正中對話框、2-4 框的滑入疊在跟鍵盤的位移上兩段不連續、四個時鐘各自到位 → **第三版**：框貼回鍵盤上面，框與暗幕進出都用 `keyboardFollow`（跟鍵盤一個時鐘），暗幕留著、點暗幕＝✓（有字先送出）、**點外面不能再點到別行**
+- `451092e` **排順序把手常駐**（第六包）：每行右邊三條線把手，`sorting` 模式、⋯「排順序」項、「排好了」膠囊全拿掉；把手上「上下」動＝拿起、「左右」動讓給滑動（tokens 加 `gesture.dragFailX` 10）；行的 `layout` 過場開關改成 `dragging`。推翻重新設計第二輪 #127
+- `deca5b5` **H5 乙**：滑動不收鍵盤（拿掉 swipe `onActivate` 的 `dismissKb`）
+- `5f0aae3` **第三輪打字本體**（第七包）：K5 貼多行自動拆行（`model.ts` `splitPasted`＋測試，`onChange` 只在換行數變多時拆）；K1 點一下游標落在點的位置（`model.ts` `caretAt`＋測試，Field 隱形 Text `onTextLayout`，tap 的 e.x 扣 cin 左內距；網頁沒 onTextLayout 照舊落尾）；K6 目錄面板聽自己的 `transitionEnd`（closing）→ `store.panelClosed()` → 紙馬上開輸入框，700ms 留當保險
+- `a1a127b` **30 天自動清接上**（第八包，核心動作卡 #11）：`store.purgeTrash()` 在 `load()` 與回到前景各跑一次，張看 `deletedAt`、刪掉的行看 `bin` 的 `at`，同一套「拿不準就不刪」；匯入備份的最近刪除一律從匯入當下重算 30 天（`restampTrash`）；不留清掉紀錄；最近刪除頁換接上後文案。Agent 當審查工程師，答案在 `.vibe/待審-最近刪除30天自動清.md` 最後一節
+- 每包都過 check:tokens、typecheck、lint、測試（25 → 29）；網頁能驗的都驗過（細節見 🗑️）；設計檔每包同步（02-流程、06 首次體驗、03 單手、04 參數表、05 原始清單／設計版 `Tokens.ts`／詞彙表、提案第八、九輪、lessons）
 
 ## 🚧 還沒做完 / 待決定
 
-- **八包全部待真機**（第一輪、輸入框、未命名、第二輪、暗幕第三版、把手常駐、第三輪打字本體、30 天自動清）。一條路走完的勾選清單在 `.vibe/真機驗收-四包-2026-11-01.md`（第五包併進第三節 C1／C5／C5b，第六包第七節，第七包第八節，第八包第九節）。原始出處：第一輪在待審清單第一、二節每項的「真機看什麼」欄；輸入框在第十節末段；第二輪在第八節下方「第二輪做了的細節」；暗幕第三版在第十一節開頭與 `.uiux/審查紀錄.md`。
-- **排順序常駐把手**（第六包）：多米 11/01 提、選「照推薦做」，**已做、待真機**（待審第十二節「做了的」、驗收清單第七節 G1～G10）。最要看 G3 右緣捲動誤拿起，會就加 `activateAfterLongPress` 150（數字進 tokens）碰到 worklet、鍵盤、焦點，規矩檔的坑都在附近——多米這次定「**先真機再接第三輪**」
-- ✅ **H5** 多米 2026-11-01 定**乙**（滑動完全不收鍵盤），已做（commit `deca5b5`），待真機
-- ~~**第三輪**（打字本體）~~ ✅ 已做（第七包）。**第四輪**兩個原生件要重建、各自一輪：K7 `react-native-keyboard-controller`（互動式收鍵盤，SDK 58 內建相容庫）、S1 `expo-splash-screen` 淡出（順便收 ❓12）。**第五輪**量了才做：E1、S3、D4、P1～P4
-- E2 延遲基準從沒量過（閘門 3 第一條）：240fps 慢動作六項，量法在待審清單第六節
-- 上一份交接列的仍未動：小工具上的 ＋（延伸端寫回 app 的資料共用，待審-EAS 第四節）、閘門 1、2 未過
-- 小尾巴：詞彙表 #11 的「點兩下改字（提示句）」與 `02-流程` T7 仍寫點兩下；詞彙表 #20「輸入框」名字未經使用者驗證
+- **八包全部待真機**：手感第一輪、底部輸入框、未命名、第二輪過場（上一會話四包）＋暗幕第三版、把手常駐、第三輪打字本體、30 天自動清（本會話四包）。**一條路走完的勾選清單：`.vibe/真機驗收-四包-2026-11-01.md` 第一～九節**（檔名沒改，內容已是八包）。最要看的三處：把手 G3 右緣捲動會不會誤拿起（會就加 `activateAfterLongPress` 150，數字進 tokens）、暗幕第三版 C1 框與鍵盤是不是一起到位、30 天 T4／T6 不該刪的沒被刪
+- **第四輪兩個原生件，各自一輪、要重建**（待審清單第三、四節）：4a K7 `react-native-keyboard-controller`（互動式收鍵盤，SDK 58 內建相容庫，`npx expo install`；元件與 hook 名字動工前開套件文件對一次）；4b S1 `expo-splash-screen` 淡出（順便收 06 的 ❓12）。建置前 `npx expo-doctor`，不符就 `--fix`。多米要一次做完，所以兩個都做完再建一次；但**兩個各自一個 commit**，真機出事才知道是誰
+- **第五輪**量了才做：E1、S3、D4、P1～P4。E2 延遲基準從沒量過（閘門 3 第一條，240fps 慢動作六項，量法在待審清單第六節）
+- 上一份交接列的仍未動：小工具上的 ＋（延伸端寫回 app 的資料共用，`.vibe/待審-EAS建置與小工具.md` 第四節）、閘門 1、2 未過
+- 小尾巴：詞彙表 #20「輸入框」名字未經使用者驗證；`02-流程` T7 與詞彙表 #11 仍寫「點兩下」；`00-原始清單` 第 158 行「拖曳把手 36 × 52」是舊數字（現在熱區 44 × 行高）
 
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
 
-- 手感剩下的差距在三處：放手之後（第一輪，已做）、東西出現／消失的過場（第二輪，已做）、游標落點（第三輪）。對照網頁版只抓得到「對方有、我沒有」的差，要抓「兩邊都沒有」的差得照 2-4 的四件事（延遲、連續、物理、同步）逐項過
-- 放手類動畫一律彈簧＋手指放開速度（Reanimated 4 `withSpring`：`duration`＝感知時長、`dampingRatio` 1＝不過頭、刪除滑出 `overshootClamping`）；讓位、落地也是彈簧；行的過場用時長型 `rowShift` 180（不是手推的）
-- 越線的字漸亮、越線放大，是震動的「看得見的版本」（2-4 失效邊界 2）；刪除線在放手那一刻就畫，不等滑回跑完
-- 震動詞彙不變；新增 `dragDrop`＝impact Light（放下一個東西）。輸入框送出不震（跟 Return 開新行不震同一個理由），＋ 按下照震
-- 底部輸入框跟提案第三輪拿掉的「常駐輸入列」不同：按 ＋ 才出現、會長高到四行。一顆 ＋ 一個意思：右下 ＋、膠囊 ＋、新的一張都開它；送出的行仍插最上面並捲上去（核心迴圈第 4 格：看到才敢忘）；Return 鍵標籤跟行一樣「下一個」；提示字「記一行」
-- `closeComposer` 不收鍵盤（失焦時焦點可能已經在別行，收了會把那行的鍵盤也收掉），只有 ✓ 那條（`doneComposer`）收；輸入框卸載鍵盤自己會收
-- 第一次打開 app 的紙和行不播進場（交給啟動畫面）；排順序模式不給 layout 過場（會跟落地動畫打架）
-- 沒取名顯示「未命名」；目錄磚與小工具沒名字也沒字時的「（無標題）」（`model.ts` 的 `label`）是另一處，多米沒提，沒動
+- **多米提畫面改法時，寫提案前先照歸因順序過 2-4、2-5**，違反的章節寫進提案的「代價」欄讓他選；「一個東西同時被兩個動畫推」一律紅旗（lessons 2026-11-01，居中暗幕那次的教訓）
+- 輸入框：貼鍵盤上面、暗幕留、框與暗幕與鍵盤一個時鐘；Return 送出不收、長高四行、點暗幕＝✓；**體感只能由多米真機定，網頁開發版的動畫極慢不能拿來判斷**
+- 把手常駐、排順序模式拿掉（一件事一個入口）；提示那行不加第五個詞（把手本身是提示，閘門 2 看沒看過的人會不會自己拖）；把手樣式三條線（iOS 慣例）、顏色 `textSecondary`，太吵再降 `textMuted` 但先跑對比
+- 手勢分工門檻：把手上橫移 `dragFailX` 10 就讓給滑動，比 `swipeActivate` 14 小，兩個手勢不在同一點打架
+- H5 乙：滑動完全不收鍵盤（記是核心動作，劃掉是周邊）
+- 30 天自動清：拿不準就不刪；匯入的一律從匯入當下重算（網頁版不動）；不留紀錄不提示；打開 app 與回到前景各跑一次；每則不顯示倒數
+- K6 走「目錄自己發事件通知 store」不走「紙監聽別人的路由」；700 永遠留當保險
+- 三輪以來不動的仍不動：底部常駐輸入列、劃掉下沉、點兩下、空白區新增一行、Return 不震、∧ ∨ 跳行首、劃掉的字低對比、滑動加阻力、音效、更多震動
 
 ## 📂 下個會話最重要的檔案
 
 - `.vibe/HANDOFF.md` ← 就是這份
-- `.vibe/待審-手感極致微調清單.md` ← 22 項、五輪、每項的真機看什麼與退回法；第十節是輸入框
-- `src/components/Paper.tsx`：`LineRow` 的 swipe／grip 手勢與 animated style（第一輪）、`hide()`（K2）、`addLine`／`openComposer`／`sendDraft`／`closeComposer`／`doneComposer`（輸入框）、`ROW_IN`／`ROW_OUT`／`ROW_MOVE`（K4）
-- `src/components/Composer.tsx`：輸入框（卡片、✓、進出動畫、對焦重試）
-- `src/components/WebBars.tsx`（Fab 淡進淡出）、`src/app/index.tsx`（換紙淡入、第一次不播）
-- `src/lib/tokens.ts`：`motion`（spring、rowShift）、`HAPTIC.dragDrop`、`shape.composerLines`；設計版 `.uiux/05-設計代號/Tokens.ts` 同步
-- `.vibe/規矩檔.md`（三個坑：pointerEvents、worklet 叫 JS、Backspace preventDefault）、`.uiux/04-手感/參數表-暫定.md`、`.uiux/05-設計代號/00-原始清單.md` 第五／六節
+- `.vibe/真機驗收-四包-2026-11-01.md` ← 八包的真機勾選清單，多米測完照編號回報
+- `.vibe/待審-手感極致微調清單.md` ← 第三、四節是第四輪要做的 K7、S1（改法、風險、真機看什麼、退回都在）；第八節動工順序；第十一、十二節是暗幕與把手的始末
+- `.vibe/待審-效能與手感優化清單.md`、`.vibe/待審-EAS建置與小工具.md`（第四節小工具 ＋）、`.vibe/EAS建置-申請與設定步驟.md`（第四輪要重建時照它）
+- `src/components/Paper.tsx`：`composerStyle`／輸入框與暗幕那段、`LineRow` 的 `grip` 手勢（`activeOffsetY`／`failOffsetX`）、`tap` 的 `caretAt`、`onChange` 的拆行、`del()`；`src/components/Composer.tsx`（進出用 `keyboardFollow`）
+- `src/lib/model.ts`：`splitPasted`、`caretAt`、`restampTrash`、`isExpiredAt`、`stampOldBin`／`purgeExpiredBin`；`src/lib/store.ts`：`purgeTrash`、`panelClosed`／`onPanelClosed`；`src/app/directory.tsx`：`transitionEnd` 監聽；`src/app/trash.tsx`：接上後文案
+- `src/lib/tokens.ts`：`gesture.dragFailX`、`motion.keyboardFollow` 註解；設計版 `.uiux/05-設計代號/Tokens.ts` 同步
+- `.uiux/審查紀錄.md`（2026-11-01 那段：輸入框體感審查）、`.uiux/lessons.md`（最後一條）、`.vibe/規矩檔.md`（三個坑：pointerEvents、worklet 叫 JS、Backspace preventDefault）
 
 ## ⏭️ 下一步從哪繼續
 
-1. 先讀這份。多米真機這四包：只改 JS，`npx expo start --tunnel` 重載即可，不用重建
-2. 照待審清單各節「真機看什麼」逐項回過／不過；不過的照每項「退回」欄退（每輪一個 commit，`git revert` 就好）；彈簧數字要調都在 `tokens.ts` 的 `motion`（改完設計版 `Tokens.ts`、參數表、原始清單一起改）
-3. ~~多米回 H5 甲或乙~~ 已回：乙
-4. ~~第三輪~~ 已做；真機過了接第四輪兩個原生件各自一輪、各自重建（建置前 `npx expo-doctor`）；~~30 天自動清~~ 已接（第八包）
-5. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
+1. 先讀這份。多米定「一次做完再一次真機」，所以**不要停下來等真機**，直接接第四輪
+2. **4a K7 互動式收鍵盤**：照待審清單第三節 K7 那列——先開 `react-native-keyboard-controller` 的文件對元件與 hook 名字（Expo SDK 58 頁只示範 `KeyboardAwareScrollView`、`KeyboardToolbar`），`npx expo install react-native-keyboard-controller`，根 `_layout` 包 `KeyboardProvider`，膠囊與輸入框改吃它的鍵盤高度 shared value 驅動 `kbLift`，`ScrollView` 的 `keyboardDismissMode` 改 `interactive`，`ensureVisible` 不動。一個 commit。網頁預覽驗不到鍵盤，只能驗沒壞掉
+3. **4b S1 啟動畫面淡出**：待審清單第四節 S1 那列，`expo-splash-screen` 的淡出設定；順便收 06 的 ❓12（啟動畫面與紙不同色）。一個 commit
+4. 兩個都做完：`npx expo-doctor`（不符 `--fix`）→ 照 `.vibe/EAS建置-申請與設定步驟.md` 建開發版 → 多米裝新版 → 照驗收清單第一～九節＋第四輪新加的一節一次走完，照編號回報過／不過
+5. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機；多米提畫面改法先過 2-4、2-5 再寫提案
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
-- 網頁預覽測手勢：先在 console 把 `Element.prototype.setPointerCapture`／`releasePointerCapture` 換成空函式、`hasPointerCapture` 回 true，再用有間隔的 `PointerEvent`（`pointerType: 'touch'`、`buttons: 1`）慢慢滑或拖；不然 RNGH 的 pointerdown 丟 NotFoundError、LogBox 蓋住畫面
-- 網頁上 `.click()` 點不到包在 `Animated.View` 裡的右下 ＋，要用真的點擊（computer left_click）或 dispatch pointerdown／pointerup／click 三連發；✓ 與選單項目用 `.click()` 可以
-- 網頁測 Return 送出要對輸入框 dispatch `keydown Enter`（跟行一樣）
-- 網頁預覽裡 Reanimated 的進場動畫會先把元素藏一兩格（`visibility: hidden`），那時 `focus()` 無效、RNW 的 `autoFocus` 也不生效；Composer 用「沒對到就下一格再試，上限 180 格」解掉，別再查
-- 網頁開發版的 Reanimated 動畫（彈簧、過場）跑得極慢（一格幾十毫秒，刪除滑出要三秒），是測試環境的事，別拿它判斷手感；真機走 UI 執行緒。K2 網頁沒鍵盤事件測不到
-- `navigator.vibrate` 被瀏覽器擋是正常的（網頁版的震動）
-- 這個資料夾最多五個開發伺服器；8081 被佔時 preview 會改用 8082（另一個 localStorage，資料不同）
-- 不做的（理由在待審清單第七節）：滑動加阻力、音效、長按改短、`activeOffsetX` 改小、更多震動。多米已定的不重提：底部常駐輸入列、劃掉下沉、點兩下、空白區新增一行、Return 不震、∧ ∨ 跳行首、劃掉的字低對比
+- 網頁預覽的限制全在上一版 archive 的 🗑️（pointer capture 要先換掉、`.click()` 點不到 Fab、Return 送出要派 `keydown Enter`、進場動畫先藏元素、Reanimated 開發版極慢、`navigator.vibrate` 被擋、8081 被佔用 8082）。這次多的：
+  - 網頁測拖曳：合成 `PointerEvent`（`pointerType: 'touch'`、`buttons: 1`）每 16ms 一步，落地彈簧在網頁要跑好幾秒，2.5 秒後讀 DOM 順序可能還沒換，截圖才是準的
+  - 網頁測 30 天自動清：往 localStorage 塞資料會被切頁時的背景存檔（`AppState` → `writeNow`）蓋掉；要塞進 `globalThis.__qiejiStore.state.notes` 再 `location.reload()`
+  - HMR 中途會噴 `sorting is not defined` 這類「改到一半」的錯，重載後乾淨就不用理
+  - 第一次建輸入框居中版時 `StyleSheet.absoluteFillObject` 在 RN 0.88 的型別裡沒有，要寫四個邊
+- 討論過但不做：K6 走路由監聽（紙聽 index 的 transitionEnd）——formSheet 收起時底下那頁不一定發 onAppear，改成目錄自己發；把手上加 150ms 按住——先零延遲，真機誤拿起才加；30 天清掉前自動備份——鍍金，不做
