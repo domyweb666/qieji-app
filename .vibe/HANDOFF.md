@@ -50,7 +50,8 @@
 2. ~~文件同步~~ ✅ 已做
 3. ~~A4 字放大到 20~~ ✅ 已做、commit、**真機過**（密度可、最大字級不爆）
 4. ~~A5 Backspace 併行~~ ✅ 已做、commit、**真機過**（併行且游標在接點、注音只刪注音、鍵盤不閃）。多米定「劃掉的不併」
-5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨」**，而且他本來就是付費會員，門直接開。執行清單在 `.vibe/EAS建置-申請與設定步驟.md`。**當天做完：** EAS 登入、expo-dev-client、專案連到 @fcharlie/qieji、iPhone 登錄、憑證、**第一個能跑的 iOS 開發版建置＝ a37a893a（commit 2cecc4f）**。中間踩了三個坑（prepare 腳本、lock 缺 @emnapi → 釘 Node 24、expo-font 比 expo 核心新 → 一開就閃退 → `expo install --fix` 對齊），全在步驟檔丁段；**新規則：建置前先 `npx expo-doctor`，不符就 `--fix`**。**多米裝了 a37a893a、`npx expo start --tunnel` 連上（手機走 4G）、第一輪驗收「功能都有」＝過。現在狀態＝門跨完了，下一步是小工具：`expo-widgets` 第一版只讀不寫，中型桌面＋鎖定畫面一行，顯示上次那張紙的名字和前幾行；要先設計 app 存檔時推 snapshot 的那一段。**另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
+5. **效能與手感這條線到此收尾**，待審清單只剩第四節原生小工具。EAS 建置的完整評估在 `.vibe/待審-EAS建置與小工具.md`。**多米 2026-10-31 決定「跨」**，而且他本來就是付費會員，門直接開。執行清單在 `.vibe/EAS建置-申請與設定步驟.md`。**當天做完：** EAS 登入、expo-dev-client、專案連到 @fcharlie/qieji、iPhone 登錄、憑證、**第一個能跑的 iOS 開發版建置＝ a37a893a（commit 2cecc4f）**。中間踩了三個坑（prepare 腳本、lock 缺 @emnapi → 釘 Node 24、expo-font 比 expo 核心新 → 一開就閃退 → `expo install --fix` 對齊），全在步驟檔丁段；**新規則：建置前先 `npx expo-doctor`，不符就 `--fix`**。**多米裝了 a37a893a、`npx expo start --tunnel` 連上（手機走 4G）、第一輪驗收「功能都有」＝過。**
+- **小工具第一版已做（commit a22111e）**：`widgets/PaperWidget.tsx`（隔離環境，不能 import、不能碰外面變數；顏色字級全由 props 來）、`src/lib/widget.ts`（從 tokens 算 props、`pickPaper` 跟根畫面同規則、只在 iOS 推）、`store.ts` 存檔成功與換紙時 `pushWidget`、`tokens.ts` 加 `widget.lines`、`app.json` 加 plugin 設定（PaperWidget：systemSmall／Medium／Large＋accessoryRectangular）。多米定「照紙上順序，劃掉的加刪除線」。**建置 abe697fa 成功；現在狀態＝待多米裝 abe697fa、加小工具到桌面和鎖定畫面看：名字對不對、行照紙上順序、劃掉的有刪除線、底色跟紙同色、深色模式、打字存檔後小工具會不會跟著更新、點小工具開到那張紙。**另外兩個小尾巴：`03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 還寫著「要先收鍵盤」，要補成 Return
 6. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
