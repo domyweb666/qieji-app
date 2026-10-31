@@ -658,7 +658,8 @@ function LineRow(p: LineProps) {
   const swipe = usePanGesture({
     activeOffsetX: [-G.swipeActivate, G.swipeActivate],
     failOffsetY: [-G.swipeFailY, G.swipeFailY],
-    onActivate: () => { 'worklet'; armed.value = 0; labelScale.value = 1; scheduleOnRN(dismissKb); },
+    // H5 多米 2026-11-01 定乙：滑動不收鍵盤（記是核心動作，劃掉是周邊，周邊不打斷核心；之前 onActivate 就 dismissKb，正在打 A 行順手劃 B 行鍵盤會沒了）
+    onActivate: () => { 'worklet'; armed.value = 0; labelScale.value = 1; },
     onUpdate: e => {
       'worklet';
       const dx = e.translationX, W = w.value, A = G.swipeActivate;
