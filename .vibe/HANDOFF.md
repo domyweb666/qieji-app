@@ -11,7 +11,8 @@
 （commit 由舊到新，每包獨立、`git revert` 就能單獨退）
 
 - `f35e812` **4a K7 互動式收鍵盤**：裝 `react-native-keyboard-controller` 1.22.7（SDK 58 內建相容版，`npx expo install`）。根 `_layout.tsx` 在 `GestureHandlerRootView` 裡包 `KeyboardProvider`；`Paper.tsx` 的膠囊與輸入框位置改由 `useKeyboardHandler` 的 `onMove`／`onInteractive`／`onEnd` 三個 worklet 逐格寫 `kbH`（鍵盤高度，從視窗底算），`kbLift = useDerivedValue(max(0, kbH − below))`，`below`＝清單底邊到視窗底邊（onLayout 量，紙是根畫面所以實際是 0）；`ScrollView` 的 `keyboardDismissMode` 改 `interactive`；JS 端的 show／hide 改聽套件的 `KeyboardEvents`（will／did 兩對，事件給 `height`，鍵盤頂＝`winH − height`），`ensureVisible` 邏輯不動；底部留白 `kbPad` 與右下 ＋ 等 `keyboardDidHide` 才還原（保險：`view.kb` 仍是 Infinity 才收）。`Easing` 與 keyboardFollow 的 `withTiming` 從 Paper 拿掉（Composer 進出與暗幕仍用 keyboardFollow）
-- `b74ac8f` **4b S1 啟動畫面淡出**：裝 `expo-splash-screen` 58.0.12——**之前根本沒裝**（`npm ls` 空的，prebuild-config 這版也沒有 legacy splash plugin），`expo install` 自動把 plugin 加進 `app.json`，沒給參數會變白底，所以明寫 `backgroundColor: "#FBF3E7"`（＝`page` 淺色值）。`_layout.tsx` 模組層級 `SplashScreen.setOptions({ fade: true, duration: T.motion.splashFade })`，`preventAutoHideAsync`／`hide` 改用這個套件的（expo-router 的殼沒有 `setOptions`）。tokens 加 `motion.splashFade` 300。06 的 ❓12 收掉：不改色、加淡出；❓10 深色啟動畫面仍留 launch（現在深色模式下啟動畫面也是奶油底）
+- `b74ac8f` **4b S1 啟動畫面淡出**：裝 `expo-splash-screen` 58.0.12——**之前根本沒裝**（`npm ls` 空的，prebuild-config 這版也沒有 legacy splash plugin），`expo install` 自動把 plugin 加進 `app.json`，沒給參數會變白底，所以明寫 `backgroundColor: "#FBF3E7"`（＝`page` 淺色值）。`_layout.tsx` 模組層級 `SplashScreen.setOptions({ fade: true, duration: T.motion.splashFade })`，`preventAutoHideAsync`／`hide` 改用這個套件的（expo-router 的殼沒有 `setOptions`）。tokens 加 `motion.splashFade` 300。06 的 ❓12 收掉：不改色、加淡出
+- （下一個 commit）**深色啟動畫面一起設**：多米 2026-11-01 選「一起設，再建」，plugin 加 `dark.backgroundColor #211A27`（`page` 深色值），06 的 ❓10 收掉、驗收清單 S1 深色那列改成看深茄紫底
 - `8fb9b5e` **建置前對齊**：`npx expo-doctor` 列 6 個小版落後 → `npx expo install --fix` → 20/20
 - 每包都過 check:tokens、typecheck、lint、測試 29；網頁預覽只能驗「沒壞掉」（鍵盤與啟動畫面網頁都沒有）；設計檔每包同步（04 參數表、05 原始清單／設計版 `Tokens.ts`、06 首次體驗、待審清單 K7／S1 ✅、驗收清單第十節）
 
@@ -19,7 +20,7 @@
 
 - **十包全部待真機，而且這次要裝新建置**：上一會話八包（手感第一輪、底部輸入框、未命名、第二輪過場、暗幕第三版、把手常駐、第三輪打字本體、30 天自動清）＋本會話 K7、S1。**一條路走完的勾選清單：`.vibe/真機驗收-四包-2026-11-01.md` 第一～十節**（檔名沒改）。第十節先看 K8 沒閃退（新原生模組第一關），再看 K7 拖鍵盤、S1 冷啟動
 - **`eas build` 由多米按**（Claude 不代按）：`npx eas-cli@latest build --platform ios --profile development`。指令與注意事項在 ⏭️ 第 1 步
-- **要問多米的**：(1) ❓10 深色啟動畫面：plugin 加一行 `"dark": { "backgroundColor": "#211A27" }` 就能設成 `page` 深色值，但 v0 定了留到 launch，這次沒動；要不要趁這次建置一起改？改了要再建一次。(2) `splashFade` 300 是初值，真機覺得慢就往 200 調（系統預設 400）
+- **待調的數字**：`splashFade` 300 是初值，真機覺得慢就往 200 調（系統預設 400）
 - **第五輪**量了才做：E1、S3、D4、P1～P4。E2 延遲基準從沒量過（閘門 3 第一條，量法在待審清單第六節）
 - 上一份交接列的仍未動：小工具上的 ＋（`.vibe/待審-EAS建置與小工具.md` 第四節）、閘門 1、2 未過
 - 小尾巴：詞彙表 #20「輸入框」名字未經使用者驗證；`02-流程` T7 與詞彙表 #11 仍寫「點兩下」；`00-原始清單` 第 158 行「拖曳把手 36 × 52」是舊數字
@@ -28,7 +29,7 @@
 
 - **K7 用 `useKeyboardHandler` 自己寫 shared value，不用 `useReanimatedKeyboardAnimation`**：對過套件原始碼，後者在 iOS 只在 `onKeyboardMoveStart`（終點）與 interactive 時更新 shared value，中間靠 UIKit 隱式動畫帶；前者 iOS 每格走 CADisplayLink 的 `onMove`、拖曳走 `onInteractive`，套件自家 `KeyboardAvoidingView` 就是這樣寫。四個回呼都是 worklet，裡面只碰 shared value（規矩檔第三坑）
 - 鍵盤相關的 JS 事件全改聽套件的 `KeyboardEvents`，不再混用 RN 的 `Keyboard.addListener`；`Keyboard.dismiss()` 照舊
-- 啟動畫面：不改色（❓12 收掉）、加淡出；底色明寫在 `app.json` plugin，不再靠「沒設定時剛好是奶油底」這種運氣
+- 啟動畫面：不改色（❓12 收掉）、加淡出；淺色、深色底色都明寫在 `app.json` plugin（＝`page` 兩個值，❓10 多米定一起設），不再靠「沒設定時剛好是奶油底」這種運氣
 - 多米提畫面改法時，寫提案前先照歸因順序過 2-4、2-5（lessons 2026-11-01）；「一個東西同時被兩個動畫推」一律紅旗
 - 三輪以來不動的仍不動：底部常駐輸入列、劃掉下沉、點兩下、空白區新增一行、Return 不震、∧ ∨ 跳行首、劃掉的字低對比、滑動加阻力、音效、更多震動、把手 150ms 按住（真機誤拿起才加）
 
@@ -61,4 +62,4 @@
   - 跑著 Metro 時做 `npx expo install --fix`，巢狀的 `expo-router/node_modules/@expo/*` 被提升後 Metro 的檔案表過期，瀏覽器噴 `Unable to resolve module expo-modules-core`／`@expo/log-box`——**node_modules 沒壞，重開 `expo start` 就好**
   - keyboard-controller 在網頁是個普通 View、hook 全是空轉；expo-splash-screen 在網頁全是空函式；兩個都只能真機。`setOptions` 在 Expo Go 會警告，開發版不會
   - 套件的 `useReanimatedKeyboardAnimation().height` 是**負數**（`-event.height`）；`useKeyboardHandler` 事件裡的 `height` 是正數。這次用後者
-- 討論過但不做：用 `useReanimatedKeyboardAnimation`（見 📌）；用套件的 `KeyboardStickyView` 放膠囊（會跟現有的 kbPad／ensureVisible 分家，先不動結構）；深色啟動畫面順手設（v0 定留 launch，列成問題給多米）
+- 討論過但不做：用 `useReanimatedKeyboardAnimation`（見 📌）；用套件的 `KeyboardStickyView` 放膠囊（會跟現有的 kbPad／ensureVisible 分家，先不動結構）。深色啟動畫面本來列成問題，多米答「一起設，再建」，已做
