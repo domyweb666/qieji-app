@@ -52,6 +52,7 @@ const ALPHA = {
   textStrike: alpha(0.38, 0.45, 0.6, 0.7),   // 劃掉的行：多米 2026-10-31 要「黯淡不起眼」，淺色約 2.3:1，低於 4.5 是刻意的（增加對比模式拉回 4.5 以上）
   textAddRow: alpha(0.72, 0.8, 0.9, 0.95),   // 「＋ 新增一行」
   dotOutline: alpha(0.55, 0.6, 0.7, 0.75),   // 色點描邊（textPrimary）
+  rowEditing: alpha(0.45, 0.08, 0.45, 0.1),  // 正在編輯的那一行：白色壓在紙色上提亮（網頁版是 55% 紙色＋45% 白；深色只提一點）
   pressedFill: 0.08, // 按住卡片／選單項目（accent）
   scrim: 0.3,        // 選單、表單後面的暗幕（黑）
   toastBg: 0.94,
@@ -70,6 +71,7 @@ export type Colors = {
   swipeStrikeBg: string; swipeDeleteBg: string; pressedFill: string; scrim: string;
   toastBg: string; toastText: string; toastAction: string;
   dotOutline: string; fabIcon: string;
+  rowEditingFill: string;
   mode: Mode;
 };
 const cache: Partial<Record<Mode, Colors>> = {};
@@ -88,6 +90,7 @@ export function colors(mode: Mode): Colors {
     toastBg: rgba(COLOR.toastBg[mode], ALPHA.toastBg), toastText: COLOR.toastText[mode], toastAction: COLOR.toastAction[mode],
     dotOutline: rgba(COLOR.textPrimary[mode], ALPHA.dotOutline[mode]),
     fabIcon: COLOR.fabIcon[mode],
+    rowEditingFill: rgba(P.white, ALPHA.rowEditing[mode]),
     mode,
   };
 }
@@ -164,7 +167,14 @@ export const motion = {
 };
 
 /* ---------- 觸覺：一種事件一種觸覺 ---------- */
-const HAPTIC = { strike: Haptics.selectionAsync, dragStart: Haptics.selectionAsync, menu: Haptics.selectionAsync };
+// selection＝最輕的「嗒」（選到、經過）；impact Light＝輕碰撞（生出一個東西、放下）。多米 2026-10-31 第一輪加 add／color／dragPass
+const light = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+const HAPTIC = {
+  strike: Haptics.selectionAsync, dragStart: Haptics.selectionAsync, menu: Haptics.selectionAsync,
+  add: light,                       // 右下 ＋、膠囊 ＋ 新增一行
+  color: Haptics.selectionAsync,    // ⋯ 選單換紙的顏色
+  dragPass: Haptics.selectionAsync, // 排順序時拖過另一行
+};
 export function haptic(event: keyof typeof HAPTIC) { HAPTIC[event]().catch(() => {}); }
 
 /* ---------- 非動畫的門檻與時間 ---------- */

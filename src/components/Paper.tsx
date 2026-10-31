@@ -1,6 +1,7 @@
 // 紙：app 的根畫面（重新設計分支「紙是家」）。上面是清單名（點一下開目錄）和 ⋯；中間一行一行的字，
 // 像筆記本：沒有卡片，只有一條淡格線。標題列下面是時間列；右下角 ＋ 在最上面開一行、鍵盤升起，鍵盤膠囊上也有一顆 ＋。
 // （多米 2026-10-31：頂部「＋ 新增一行」試過一輪拿掉，時間列留著）
+// 打字中按 Return＝在這行下面長出新的一行（游標後面的字一起搬過去）；空行按 Return＝收鍵盤（多米 2026-10-31 第一輪，跟網頁版一樣）。
 // 一行要「快速點兩下」才會進編輯（上下捲動時碰到字不會跳出鍵盤）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
 // 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
@@ -61,6 +62,8 @@ export function Paper({ n }: { n: Note }) {
   const setEditing = (id: string | null) => { editingRef.current = id; setEditingState(id); };
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
   const layouts = useRef<Record<string, { y: number; h: number }>>({});
+  // 輸入框不受控（defaultValue），程式改了某行的字（Return 把游標後面的字切走）要讓那行的輸入框重掛才會更新：每切一次 +1
+  const revs = useRef<Record<string, number>>({});
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
 
@@ -142,7 +145,8 @@ export function Paper({ n }: { n: Note }) {
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
     inp.setSelection?.(at, at);
   });
-  // ＋（右下角那顆、鍵盤膠囊那顆）：唯一會多出一行的地方。先把清單捲回最上面，新的那行就在最上面
+  // ＋（右下角那顆、鍵盤膠囊那顆）：在最上面多出一行。先把清單捲回最上面，新的那行就在最上面
+  function addLine() { haptic('add'); focusNew(); }
   function focusNew() {
     if (sorting) return;
     scrollTo(0, false);
@@ -237,6 +241,21 @@ export function Paper({ n }: { n: Note }) {
     it.t = v;
     touch(true);
   }
+  // Return：這行有字＝在它正下方長出新的一行，游標後面的字搬到新行、游標落在新行開頭；整行空的＝收鍵盤。
+  // 不走 focusNew（那條插最上面、捲回頂端，連續記想法時視線會一直跑）。另一處會多出一行的地方就是這裡
+  function onSubmit(id: string, caret: number) {
+    const idx = n.items.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    const it = n.items[idx];
+    if (!it.t.trim()) { Keyboard.dismiss(); return; }
+    const at = Math.max(0, Math.min(caret, it.t.length));
+    const after = it.t.slice(at);
+    if (after) { it.t = it.t.slice(0, at); revs.current[id] = (revs.current[id] ?? 0) + 1; }
+    const nu: Item = { id: uid(), t: after, done: false, b: false };
+    n.items.splice(idx + 1, 0, nu);
+    touch();
+    focusItem(nu.id, 0);
+  }
   // 空的一行按刪除 → 這行拿掉，回到上一行的最後面（有字的行不會被併到上一行）
   function onKey(id: string, e: TextInputKeyPressEvent) {
     if (e.nativeEvent.key !== 'Backspace') return;
@@ -271,7 +290,10 @@ export function Paper({ n }: { n: Note }) {
       if (!d) return;
       const y = d.mids[d.idx] + dy;
       dragDy.value = dy;
-      dragTo.value = d.mids.filter((m, k) => k !== d.idx && m < y).length;
+      const to = d.mids.filter((m, k) => k !== d.idx && m < y).length;
+      if (to === dragTo.value) return;
+      dragTo.value = to;
+      haptic('dragPass'); // 每跨過一行「嗒」一下
     },
     end() {
       const d = drag.current;
@@ -321,6 +343,7 @@ export function Paper({ n }: { n: Note }) {
     if (n.color === k) return;
     n.color = k;
     touch();
+    haptic('color'); // 選單不關，震一下才知道有換到
   }
   // 刪除這張：換到最近改過的另一張；一張都沒有就開一張新的
   function del() {
@@ -409,14 +432,14 @@ export function Paper({ n }: { n: Note }) {
           <View>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
-                count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id}
+                count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
-                onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)}
+                onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)} onSubmit={caret => onSubmit(it.id, caret)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
                 onStrike={() => strike(it.id)} onRemove={() => remove(it.id)}
                 onMenu={y => openRowMenu(it.id, y)} onEdit={() => focusItem(it.id)}
@@ -435,7 +458,7 @@ export function Paper({ n }: { n: Note }) {
       </View>
 
       {/* 右下角 ＋：在最上面開一行。鍵盤開著時被鍵盤蓋住，乾脆不畫（膠囊上有另一顆）；排順序時也不畫 */}
-      {!sorting && kbPad === 0 && <Fab onPress={focusNew} label="新增一行" />}
+      {!sorting && kbPad === 0 && <Fab onPress={addLine} label="新增一行" />}
 
       {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 開新的一行（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
       {kbPad > 0 && (
@@ -451,7 +474,7 @@ export function Paper({ n }: { n: Note }) {
                 </Pressable>
               );
             })}
-            <Pressable onPress={focusNew} accessibilityRole="button" accessibilityLabel="新增一行"
+            <Pressable onPress={addLine} accessibilityRole="button" accessibilityLabel="新增一行"
               style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
               <Sym name="plus" size={20} color={c.textPrimary} weight="semibold" />
             </Pressable>
@@ -509,10 +532,11 @@ function Swatch({ k, on, onPress }: { k: ColorKey; on: boolean; onPress: () => v
 
 type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
-  grip: boolean; editing: boolean;
+  grip: boolean; editing: boolean; rev: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
-  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onSubmit: (caret: number) => void;
+  onFocus: () => void; onBlur: () => void;
   onStrike: () => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
   drag: { start: (id: string) => void; move: (dy: number) => void; end: () => void };
 };
@@ -521,7 +545,7 @@ type LineProps = {
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
 const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
   && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
-  && a.grip === b.grip && a.editing === b.editing);
+  && a.grip === b.grip && a.editing === b.editing && a.rev === b.rev);
 
 function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
@@ -626,9 +650,12 @@ function LineRow(p: LineProps) {
           {/* 沒在編輯的行：輸入框上面蓋一層看不見的板子，點一下碰不到它（點兩下、長按、滑動由外層手勢接）。
               不用 pointerEvents='none'：RN 在 iOS 把它做成關掉整塊的 userInteractionEnabled，
               正在打字的那行一被關，輸入框就被迫放掉焦點、鍵盤收起（∧ ∨ 切行時鍵盤收了再開就是這個） */}
+          {/* 正在編輯的那一行：整行提亮一點（網頁版有，多米 2026-10-31 第一輪補回來）。墊在字底下，不擋觸控 */}
+          {p.editing && <View style={[StyleSheet.absoluteFill, { backgroundColor: p.colors.rowEditingFill }]} />}
           <View style={st.field}>
-            <Field text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
-              onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
+            {/* key 跟著 rev：程式改了這行的字（Return 切行）就重掛輸入框，defaultValue 才會是新的字 */}
+            <Field key={p.rev} text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
+              onChange={p.onChange} onKey={p.onKey} onSubmit={p.onSubmit} onFocus={p.onFocus} onBlur={p.onBlur} />
             {!p.editing && <View style={StyleSheet.absoluteFill} collapsable={false} accessible={false} importantForAccessibility="no" />}
           </View>
           {/* 把手只在排順序模式出現，熱區 44 寬；平常右邊留一樣的內距，字才不會在切換時跳 */}
@@ -649,21 +676,36 @@ function LineRow(p: LineProps) {
 // 輸入框疊在它上面撐滿，字打到超過一行就一定會長出下一行。打字時只有這一小塊重畫。
 // 字級跟著系統放大。行高不用自己乘倍數：iOS 上 React Native 會自動把行高一起放大，自己再乘一次行距會變兩倍大。
 // 最小高度不會自動放大，才要自己乘
-function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChange, onKey, onFocus, onBlur }: {
+// Return 不換行而是送出（submitBehavior='submit'：鍵盤不收），由上層在下面開新的一行；游標在哪用 onSelectionChange 記著，切行時要用
+function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChange, onKey, onSubmit, onFocus, onBlur }: {
   text: string; done: boolean; fs: number; colors: Colors; refInput: (r: TextInputInstance | null) => void;
   actions: { name: string; label: string }[]; onAction: (e: AccessibilityActionEvent) => void;
-  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onFocus: () => void; onBlur: () => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onSubmit: (caret: number) => void;
+  onFocus: () => void; onBlur: () => void;
 }) {
   const [txt, setTxt] = useState(text);
+  const caret = useRef(text.length);
+  const input = useRef<TextInputInstance | null>(null);
+  const setRef = (r: TextInputInstance | null) => { input.current = r; refInput(r); };
+  // 網頁預覽的 onSelectionChange 只在「選取一段」時觸發，打字移動游標不會；送出時直接讀 DOM 的游標。iOS 沒這個屬性，用記下來的
+  const caretNow = () => {
+    const dom = input.current as unknown as { selectionStart?: number } | null;
+    return typeof dom?.selectionStart === 'number' ? dom.selectionStart : caret.current;
+  };
   const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
     <>
       <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
-      <TextInput ref={refInput} defaultValue={text} multiline scrollEnabled={false}
+      <TextInput ref={setRef} defaultValue={text} multiline scrollEnabled={false}
+        submitBehavior="submit" enterKeyHint="next"
+        // 網頁預覽的 TextInput 不認 submitBehavior，多行只有 blurOnSubmit 才會送出；送出後上層會把焦點放到新的一行。iOS 不給這個
+        {...(Platform.OS === 'web' ? { blurOnSubmit: true } : null)}
         style={[st.ta, lh, st.taFill, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}
         accessibilityHint={done ? '已劃掉' : undefined}
         accessibilityActions={actions} onAccessibilityAction={onAction}
         onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={onKey}
+        onSelectionChange={e => { caret.current = e.nativeEvent.selection.start; }}
+        onSubmitEditing={() => onSubmit(caretNow())}
         onFocus={onFocus} onBlur={onBlur} />
     </>
   );
