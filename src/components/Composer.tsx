@@ -1,17 +1,21 @@
-// 輸入框（多米 2026-11-01）：按右下 ＋ 或膠囊 ＋ 時從底下升起、停在鍵盤上方那段的正中、背景變暗（同日第二版，之前是貼在鍵盤上面），在裡面打字。
+// 輸入框（多米 2026-11-01）：按右下 ＋ 或膠囊 ＋ 時從底下升起、貼在鍵盤上面、背景變暗，在裡面打字。
+// （同日第二版曾升到畫面正中，多米看了說體感很糟，第三版貼回鍵盤：進出跟鍵盤同一個時鐘、同一條曲線，一個東西只有一段動）
 // Return＝送出一行（放到紙的最上面，框清空、鍵盤不收，可以連續記）；空的按 Return＝收起（跟空行按 Return 收鍵盤同一個意思）；
 // ✓＝有字就送出、然後收起；失去焦點（點了別行、開選單、滑動、切 app）＝一樣有字就送出、然後收起。字不會丟（2-8）。
 // 跟提案第三輪拿掉的「常駐輸入列」不同：按 ＋ 才出現，而且跟著字長高（最多 shape.composerLines 行，再多在框裡捲），不會「超過一行看不到前面」。
-// 位置（置中、跟著鍵盤移）與暗幕由 Paper 包在外層；這裡只管卡片、輸入框、✓ 和進出動畫。減少動態：滑入滑出改淡入淡出。
+// 位置（貼鍵盤、跟著升降）與暗幕由 Paper 包在外層；這裡只管卡片、輸入框、✓ 和進出動畫（時長與曲線＝鍵盤的 keyboardFollow）。減少動態：滑入滑出改淡入淡出。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, type TextInputInstance } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { T, useColors } from '../lib/tokens';
 import { Sym } from './Sym';
 
 const LINE_H = T.font.bodyLine.lineHeight;
 const MAX_H = LINE_H * T.shape.composerLines;
+// 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
+const KB = T.motion.keyboardFollow;
+const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
 
 export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
   calm: boolean;
@@ -49,8 +53,8 @@ export function Composer({ calm, onChange, onSubmit, onDone, onBlur }: {
   };
   return (
     <Animated.View
-      entering={calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(T.motion.sheetSlide.in)}
-      exiting={calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(T.motion.sheetSlide.out)}
+      entering={calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(KB.duration).easing(KB_EASE)}
+      exiting={calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(KB.duration).easing(KB_EASE)}
       style={[s.card, { backgroundColor: c.surface }]}>
       <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint="next"
         {...(Platform.OS === 'web' ? { blurOnSubmit: true } : null)}
