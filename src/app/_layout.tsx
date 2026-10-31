@@ -1,4 +1,5 @@
-import { SplashScreen, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
@@ -17,7 +18,10 @@ const ios = Platform.OS === 'ios';
 const glass = ios && parseInt(String(Platform.Version), 10) >= 26;
 
 // 啟動畫面撐到資料讀完、紙畫出來才收（2026-10-31 低風險三件之一）。不然 expo-router 第一次畫完就收，
-// 中間會閃一下空白的奶油色再出現紙。要在第一次畫之前叫，所以放模組層級；沒有原生模組（網頁）時它自己什麼都不做
+// 中間會閃一下空白的奶油色再出現紙。要在第一次畫之前叫，所以放模組層級；沒有原生模組（網頁）時它自己什麼都不做。
+// S1（2026-11-01 第四輪）：收起時淡出（只有 iOS 有），奶油底融進第一張紙、不硬切，06 的 ❓12 不改色就收；
+// 改用 expo-splash-screen 自己的 API（expo-router 的殼沒有 setOptions）。開發版的啟動畫面不完全等於正式版，最後要看 release 建置
+SplashScreen.setOptions({ fade: true, duration: T.motion.splashFade });
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {

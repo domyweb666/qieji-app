@@ -166,6 +166,7 @@ export const motion = {
   rowShift:      { duration: 180 }, // 行長出來、拿掉時其他行滑到新位置（2026-11-01 第二輪）；行本身淡入淡出用 fade。減少動態：直接到位、淡入淡出照舊
   keyboardFollow: { duration: 250, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 系統鍵盤的時長與曲線。輸入框與它的暗幕進出用這組（2026-11-01 第三版：跟鍵盤同一個時鐘）。膠囊與輸入框的「位置」從第四輪 K7 起不再用它推，改由 react-native-keyboard-controller 逐格給鍵盤高度（含手指拖曳收鍵盤）
   fade:          150, // toast、確認框、減少動態時所有滑入／放大的替代
+  splashFade:    300, // 啟動畫面收起時淡出（expo-splash-screen setOptions，只有 iOS 有；系統預設 400）：奶油底融進紙，不是硬切（2026-11-01 第四輪 S1，收 06 的 ❓12；初值待多米真機調）
   sheetSlide:    { in: 220, out: 180 },
   sheetBackdrop: { in: 180, out: 180 },
   menuPop:       { in: 170, out: 120 },

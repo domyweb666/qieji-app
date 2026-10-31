@@ -47,6 +47,12 @@
             }
           ]
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBF3E7"
+        }
       ]
     ],
     "extra": {

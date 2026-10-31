@@ -135,6 +135,7 @@ export const T = {
     swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 }, reduced: { scale: 1 } }, // 露出的字：越線前 0.35→1，越線放大再彈回。減少動態：只有透明度
     rowShift:      { duration: 180, reduced: { move: 0 } }, // 行長出來、拿掉時其他行滑到新位置（2026-11-01 第二輪）；行本身、右下 ＋、換紙用 fade 淡入淡出。減少動態：直接到位
     keyboardFollow: { duration: 'system' as const, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 系統鍵盤的時長與曲線：輸入框與暗幕進出用它；膠囊與輸入框的「位置」從第四輪 K7（2026-11-01）起由 react-native-keyboard-controller 逐格給鍵盤高度，含手指拖曳收鍵盤，不再自己推。減少動態不另外處理
+    splashFade:    300, // 啟動畫面收起時淡出（expo-splash-screen setOptions，只有 iOS；系統預設 400）：奶油底 page 融進第一張紙，不硬切（2026-11-01 第四輪 S1，收 06 ❓12：不改色、加淡出；初值待多米真機調）。減少動態：淡出本來就是替代版，不改
     toastFade:     { in: 150, out: 150 },                              // 本來就是淡入淡出，減少動態不改
     sheetSlide:    { in: 220, out: 180, reduced: { fade: 150 } },      // 滑入滑出改淡入淡出
     sheetBackdrop: { in: 180, out: 180 },
