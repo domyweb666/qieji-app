@@ -423,7 +423,12 @@ export function Paper({ n }: { n: Note }) {
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </View>
-          {showHint && !sorting && <Text style={[st.hint, { color: c.textMuted }]}>點兩下改字　·　往右滑劃掉　·　往左滑刪除　·　按住有更多</Text>}
+          {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點 */}
+          {showHint && !sorting && (
+            <View style={st.hint}>
+              {['點兩下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
+            </View>
+          )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + KBAR_H + insets.bottom }} />
         </ScrollView>
@@ -655,7 +660,7 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChang
     <>
       <Text style={[st.ta, lh, st.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
       <TextInput ref={refInput} defaultValue={text} multiline scrollEnabled={false}
-        style={[st.ta, lh, st.taFill, { color: done ? c.textMuted : c.textPrimary }, done && st.taDone]}
+        style={[st.ta, lh, st.taFill, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}
         accessibilityHint={done ? '已劃掉' : undefined}
         accessibilityActions={actions} onAccessibilityAction={onAction}
         onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={onKey}
@@ -687,7 +692,8 @@ const st = StyleSheet.create({
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
   timeText: { ...T.font.footnote },
   // 提示字縮小（多米 2026-10-31）
-  hint: { ...T.font.caption, textAlign: 'center', padding: T.space.m },
+  hint: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: T.space.l, rowGap: T.space.xs, padding: T.space.m },
+  hintText: { ...T.font.caption },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },

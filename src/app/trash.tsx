@@ -10,6 +10,8 @@ import { label, unbinItem, visibleNotes, type Item, type Note } from '../lib/mod
 import { store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
+const FACE_SLEEP = require('../../assets/img/face-flat-sleep.png');
+
 export default function Trash() {
   const s = useStore();
   const c = useColors();
@@ -62,7 +64,7 @@ export default function Trash() {
             </View>
           </View>
         )}
-        {total === 0 && <Empty lines={['最近刪除是空的', '刪掉的清單和行會先放在這裡']} />}
+        {total === 0 && <Empty face={FACE_SLEEP} lines={['最近刪除是空的', '刪掉的清單和行會先放在這裡']} />}
       </ScrollView>
     </View>
   );

@@ -15,6 +15,8 @@ import { CKEYS, col, label, moveItem, SORTS, visibleNotes, type ColorKey, type N
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
+const FACE_PUZZLED = require('../../assets/img/face-flat-puzzled.png');
+
 export default function Directory() {
   const { move } = useLocalSearchParams<{ move?: string }>();
   const s = useStore();
@@ -112,8 +114,8 @@ export default function Directory() {
         <View style={st.grid}>{tiles(other)}</View>
 
         {/* 三種空分開：找不到→帶他剛打的字；篩選→說是哪個顏色；第一次不會是空的（紙永遠至少一張） */}
-        {notes.length === 0 && searching && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
-        {notes.length === 0 && !searching && filter !== 'all' && <Empty lines={[`沒有${col(filter).hue}的清單`]} />}
+        {notes.length === 0 && searching && <Empty face={FACE_PUZZLED} lines={[`找不到含「${q.trim()}」的清單`]} />}
+        {notes.length === 0 && !searching && filter !== 'all' && <Empty face={FACE_PUZZLED} lines={[`沒有${col(filter).hue}的清單`]} />}
 
         {trashed > 0 && (
           <Pressable onPress={() => router.replace('/trash')} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}

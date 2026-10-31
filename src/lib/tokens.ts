@@ -48,7 +48,8 @@ const COLOR = {
   fabIcon: four(P.white, P.white, P.white, P.white), // 壓在 accent 上
 };
 const ALPHA = {
-  textMuted:  alpha(0.7, 0.8, 0.85, 0.9),    // 提示字、劃掉的行、底部提示（textPrimary 壓在底上）
+  textMuted:  alpha(0.7, 0.8, 0.85, 0.9),    // 提示字、底部提示（textPrimary 壓在底上）
+  textStrike: alpha(0.38, 0.45, 0.6, 0.7),   // 劃掉的行：多米 2026-10-31 要「黯淡不起眼」，淺色約 2.3:1，低於 4.5 是刻意的（增加對比模式拉回 4.5 以上）
   textAddRow: alpha(0.72, 0.8, 0.9, 0.95),   // 「＋ 新增一行」
   dotOutline: alpha(0.55, 0.6, 0.7, 0.75),   // 色點描邊（textPrimary）
   pressedFill: 0.08, // 按住卡片／選單項目（accent）
@@ -64,7 +65,7 @@ function rgba(hex: string, a: number) {
 
 export type Colors = {
   page: string; surface: string; separator: string;
-  textPrimary: string; textSecondary: string; textMuted: string; textAddRow: string; textOnSwipe: string;
+  textPrimary: string; textSecondary: string; textMuted: string; textStrike: string; textAddRow: string; textOnSwipe: string;
   accent: string; danger: string;
   swipeStrikeBg: string; swipeDeleteBg: string; pressedFill: string; scrim: string;
   toastBg: string; toastText: string; toastAction: string;
@@ -77,6 +78,7 @@ export function colors(mode: Mode): Colors {
     page: COLOR.page[mode], surface: COLOR.surface[mode], separator: COLOR.separator[mode],
     textPrimary: COLOR.textPrimary[mode], textSecondary: COLOR.textSecondary[mode],
     textMuted: rgba(COLOR.textPrimary[mode], ALPHA.textMuted[mode]),
+    textStrike: rgba(COLOR.textPrimary[mode], ALPHA.textStrike[mode]),
     textAddRow: rgba(COLOR.textPrimary[mode], ALPHA.textAddRow[mode]),
     textOnSwipe: COLOR.textOnSwipe[mode],
     accent: COLOR.accent[mode], danger: COLOR.danger[mode],
