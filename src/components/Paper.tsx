@@ -1,12 +1,12 @@
 // 紙：app 的根畫面（重新設計分支「紙是家」）。上面是清單名（點一下開目錄）和 ⋯；中間一行一行的字，
-// 像筆記本：沒有卡片，只有一條淡格線。右下角 ＋ 在最上面開一行、鍵盤升起。
+// 像筆記本：沒有卡片，只有一條淡格線。標題列下面是時間列和「＋ 新增一行」（固定不捲），點它在最上面開一行、鍵盤升起；
+// 鍵盤膠囊上也有一顆 ＋。（多米 2026-10-31：試過右下角 ＋，改回這個樣子看看）
 // 一行要「快速點兩下」才會進編輯（上下捲動時碰到字不會跳出鍵盤）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
 // 把手只在 ⋯ →「排順序」時出現。紙頂端再往下拉放手＝開目錄。
 // 從 app/note/[id].tsx 搬過來：滑動與拖曳的手勢（worklet）一行沒動。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
@@ -17,17 +17,15 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { binItem, CKEYS, col, convertNote, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
+import { ago, binItem, CKEYS, col, convertNote, fullDate, isEmpty, plain, uid, unbinItem, type ColorKey, type Item, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { PopMenu } from './PopMenu';
 import { Sym } from './Sym';
-import { Fab, GlassBtn } from './WebBars';
+import { GlassBtn } from './WebBars';
 
-// 黏土茄子只出現在空紙上（睡著）
-const FACE_SLEEP = require('../../assets/img/face-sleep.webp');
 // 鍵盤上面那顆 ✓（收鍵盤）佔的高度：膠囊 44 ＋ 跟鍵盤之間留 8。系統的 InputAccessoryView 在某些輸入法（例如 Typeless）不會出現，所以自己畫
 const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
@@ -85,14 +83,12 @@ export function Paper({ n }: { n: Note }) {
     if (!it || !it.t.trim()) return;
     it.done = !it.done;
     touch();
-    store.markHint();
     haptic('strike');
   }
   // 刪一行：進這張紙的最近刪除（目錄 → 最近刪除裡找得回來），toast 的「復原」只是快速路徑。空行直接拿掉
   function remove(id: string) {
     const idx = n.items.findIndex(i => i.id === id);
     if (idx < 0) return;
-    store.markHint();
     if (!n.items[idx].t.trim()) { n.items.splice(idx, 1); touch(); return; }
     binItem(n, id, Date.now());
     touch();
@@ -143,7 +139,7 @@ export function Paper({ n }: { n: Note }) {
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
     inp.setSelection?.(at, at);
   });
-  // 右下角 ＋：唯一會多出一行的地方。先把清單捲回最上面，新的那行就在最上面
+  // 「＋ 新增一行」（標題列下面那顆、鍵盤膠囊那顆）：唯一會多出一行的地方。先把清單捲回最上面，新的那行就在最上面
   function focusNew() {
     if (sorting) return;
     scrollTo(0, false);
@@ -358,7 +354,8 @@ export function Paper({ n }: { n: Note }) {
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
-  const showHint = !store.hintSeen && n.items.some(i => i.t.trim());
+  // 提示字永遠留著（多米 2026-10-31），有字才印
+  const showHint = n.items.some(i => i.t.trim());
 
   return (
     <View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false}>
@@ -386,22 +383,31 @@ export function Paper({ n }: { n: Note }) {
         <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
       </View>
 
+      {/* 標題列下面：左邊多久前改的、右邊完整時間；再下面「＋ 新增一行」固定在這裡不跟著捲（多米 2026-10-31 要回這個樣子試試看） */}
+      <View style={st.timeRow}>
+        <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
+        <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
+      </View>
+      <Pressable style={({ pressed }) => [st.addrow, { borderBottomColor: nc.rule }, pressed && { opacity: T.motion.pressDim }]} onPress={focusNew}
+        accessibilityRole="button" accessibilityLabel="新增一行">
+        <Text style={[st.addPlus, { color: c.textAddRow }]}>＋</Text>
+        <Text style={[st.addText, { color: c.textAddRow }]}>新增一行</Text>
+      </Pressable>
+
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; })}>
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
           onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
-          {/* 空紙：一顆睡著的茄子，一句話指到右下角的 ＋（06-首次體驗：第一次的空） */}
+          {/* 空紙：兩行灰字指到上面的「＋ 新增一行」。插畫先拿掉（多米 2026-10-31：要就要扁平線條那種風格，不然不放） */}
           {n.items.length === 0 && (
             <View style={st.empty}>
-              <Image source={FACE_SLEEP} style={st.emptyFace} contentFit="contain" accessible={false} />
               <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
-              <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
+              <Text style={[st.emptyText, { color: c.textSecondary }]}>點上面的「＋ 新增一行」開始記</Text>
             </View>
           )}
-          {/* 第一行跟標題列之間留一段：以前有時間列和「新增一行」墊著，現在沒有了，打字時字會貼著標題（多米 2026-10-31） */}
-          <View style={st.rows}>
+          <View>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} grip={sorting} editing={editing === it.id}
@@ -424,10 +430,7 @@ export function Paper({ n }: { n: Note }) {
         </ScrollView>
       </View>
 
-      {/* 右下角 ＋：在最上面開一行。鍵盤開著時被鍵盤蓋住，乾脆不畫；排順序時也不畫 */}
-      {!sorting && kbPad === 0 && <Fab onPress={focusNew} label="新增一行" />}
-
-      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
+      {/* 鍵盤上面那顆：奶油白膠囊，左邊 ∧ ∨ 切上下行、＋ 開新的一行（鍵盤不收）、右端一個 ✓ 收鍵盤。跟著鍵盤升降，鍵盤收起來就不見 */}
       {kbPad > 0 && (
         <Animated.View style={[st.kbarWrap, barStyle]}>
           <View style={[st.kbar, { backgroundColor: c.surface }]}>
@@ -441,6 +444,10 @@ export function Paper({ n }: { n: Note }) {
                 </Pressable>
               );
             })}
+            <Pressable onPress={focusNew} accessibilityRole="button" accessibilityLabel="新增一行"
+              style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]}>
+              <Sym name="plus" size={20} color={c.textPrimary} weight="semibold" />
+            </Pressable>
             <View style={{ flex: 1 }} />
             <Pressable style={({ pressed }) => [st.kb, pressed && { opacity: T.motion.pressDim }]} onPress={dismissKb}
               accessibilityRole="button" accessibilityLabel="完成，收起鍵盤">
@@ -675,10 +682,13 @@ const st = StyleSheet.create({
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
-  rows: { paddingTop: T.space.xl },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.l, paddingVertical: T.space.xs },
+  timeText: { ...T.font.footnote },
+  addrow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.rowMin, paddingHorizontal: T.space.l, borderBottomWidth: T.shape.borderCard },
+  addPlus: { ...T.font.plusGlyph },
+  addText: { ...T.font.body },
   hint: { ...T.font.footnote, textAlign: 'center', padding: T.space.m },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
-  emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開；排順序的提示也用同一顆
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },

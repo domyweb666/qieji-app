@@ -112,7 +112,6 @@ export const T = {
     tile: 84,      // 目錄的色磚高度
     tileTag: 40,   // 色磚右下角露出的色圓
     swatchDot: 26, // ⋯ 選單裡一排九個色塊
-    emptyFace: 72, // 空紙上的茄子
     // 兩種陰影（多米定；⋯ 選單原本的 #000 0.2 r20 y8 併進 soft）
     shadowSoft:   { color: P.shadowInk, opacity: 0.12, radius: 10, offset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
     shadowStrong: { color: P.shadowInk, opacity: 0.3,  radius: 10, offset: { width: 0, height: 4 } }, // 右下 ＋
