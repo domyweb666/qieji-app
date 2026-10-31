@@ -30,34 +30,39 @@ export default function RootLayout() {
   useEffect(() => { store.load().then(() => setReady(true)); }, []);
 
   return (
-    // onLayout：ready 之後第一次排版完才收啟動畫面，畫面上已經是紙，不是空白
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.page }} onLayout={() => { if (ready) SplashScreen.hide(); }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.page }}>
       {/* K7（2026-11-01 第四輪）：鍵盤逐格高度的來源。要包在整個 app 外面，紙上的膠囊與輸入框從它拿鍵盤位置（網頁上只是個 View） */}
       <KeyboardProvider>
         <StatusBar style={c.mode === 'dark' ? 'light' : 'dark'} />
+        {/* 收啟動畫面：ready 之後第一次排版完才收，畫面上已經是紙，不是空白。
+            onLayout 要掛在「ready 才掛上」的這層：之前掛在根 View，它第一次排版時 ready 還是 false，之後子樹換成紙根 View 的框沒變、
+            onLayout 不會再來，啟動畫面就永遠收不掉。以前沒事是因為 expo-splash-screen 的原生模組根本沒裝進去、preventAutoHide 是空轉；
+            第四輪 S1 真的裝上後（2026-11-01 真機：一片白）才露出來 */}
         {ready ? (
-          <Stack screenOptions={{
-            headerShown: ios,
-            headerTransparent: ios,
-            headerBlurEffect: glass ? undefined : 'systemChromeMaterial',
-            headerShadowVisible: false,
-            headerLargeTitleShadowVisible: false,
-            headerTintColor: c.accent,
-            headerBackButtonDisplayMode: 'minimal',
-            headerTitle: '',
-            // 被蓋在下面的畫面（例如開著筆記時的首頁）先暫停，不跟著重畫
-            freezeOnBlur: true,
-            contentStyle: { backgroundColor: c.page },
-          }}>
-            {/* 根畫面就是一張紙（重新設計分支「紙是家」）：不用系統標題列，自己畫一條：清單名和 ⋯ 在同一行 */}
-            <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
-            {/* 目錄：從紙最上面的清單名拉起來的面板，佔九成高。0.9 只用一次 */}
-            <Stack.Screen name="directory" options={{
-              presentation: 'formSheet', sheetAllowedDetents: [0.9], sheetGrabberVisible: true, sheetCornerRadius: T.shape.radiusPanel,
-              headerShown: false, contentStyle: { backgroundColor: c.surface },
-            }} />
-            <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
-          </Stack>
+          <View style={{ flex: 1 }} onLayout={() => SplashScreen.hide()}>
+            <Stack screenOptions={{
+              headerShown: ios,
+              headerTransparent: ios,
+              headerBlurEffect: glass ? undefined : 'systemChromeMaterial',
+              headerShadowVisible: false,
+              headerLargeTitleShadowVisible: false,
+              headerTintColor: c.accent,
+              headerBackButtonDisplayMode: 'minimal',
+              headerTitle: '',
+              // 被蓋在下面的畫面（例如開著筆記時的首頁）先暫停，不跟著重畫
+              freezeOnBlur: true,
+              contentStyle: { backgroundColor: c.page },
+            }}>
+              {/* 根畫面就是一張紙（重新設計分支「紙是家」）：不用系統標題列，自己畫一條：清單名和 ⋯ 在同一行 */}
+              <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
+              {/* 目錄：從紙最上面的清單名拉起來的面板，佔九成高。0.9 只用一次 */}
+              <Stack.Screen name="directory" options={{
+                presentation: 'formSheet', sheetAllowedDetents: [0.9], sheetGrabberVisible: true, sheetCornerRadius: T.shape.radiusPanel,
+                headerShown: false, contentStyle: { backgroundColor: c.surface },
+              }} />
+              <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
+            </Stack>
+          </View>
         ) : <View style={{ flex: 1, backgroundColor: c.page }} />}
         <OverlayHost />
       </KeyboardProvider>
