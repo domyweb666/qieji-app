@@ -608,10 +608,13 @@ function LineRow(p: LineProps) {
       </Animated.View>
       <GestureDetector gesture={rowGesture}>
         <Animated.View style={[st.cin, !p.grip && st.cinNoGrip, { backgroundColor: p.bg }, slide]}>
-          {/* 只有正在編輯的那一行，輸入框才收觸控；其他行碰到字沒反應（要點兩下） */}
-          <View style={st.field} pointerEvents={p.editing ? 'auto' : 'none'}>
+          {/* 沒在編輯的行：輸入框上面蓋一層看不見的板子，點一下碰不到它（點兩下、長按、滑動由外層手勢接）。
+              不用 pointerEvents='none'：RN 在 iOS 把它做成關掉整塊的 userInteractionEnabled，
+              正在打字的那行一被關，輸入框就被迫放掉焦點、鍵盤收起（∧ ∨ 切行時鍵盤收了再開就是這個） */}
+          <View style={st.field}>
             <Field text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
               onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
+            {!p.editing && <View style={StyleSheet.absoluteFill} collapsable={false} accessible={false} importantForAccessibility="no" />}
           </View>
           {/* 把手只在排順序模式出現，熱區 44 寬；平常右邊留一樣的內距，字才不會在切換時跳 */}
           {p.grip && (
