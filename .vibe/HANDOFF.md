@@ -49,12 +49,14 @@
 1. ~~等多米回報四輪真機結果~~ ✅ 四輪全過
 2. ~~文件同步~~ ✅ 已做
 3. ~~A4 字放大到 20~~ ✅ 已做並 commit（多米看過對照選留）。**待真機**：系統字級最大時行會不會爆、密度是否順眼；行最小高度 54 沒動（20＋上下 12 剛好 54，字把行撐滿，太擠就把行高放到 32）
-4. 多米若要繼續：A5 Backspace 併行（真機）→ 原生小工具（先決定要不要 EAS 建置）
-5. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
+4. ~~A5 Backspace 併行~~ ✅ 已做並 commit（多米定「劃掉的不併」）。**待真機三件**：行首 Backspace 真的併且游標在接點；行首剛打一個注音符號再按 Backspace 是刪注音不是併行；鍵盤不閃。細節在待審清單第五節第 6 項
+5. 多米若要繼續：原生小工具（先決定要不要 EAS 建置）；或把 `03-線框/單手檢查表.md` 第 5 項、`06-首次體驗-暫定.md` 待答清單的 ❓D 補成 Return
+6. 之後要改畫面：先 `npm run check:tokens`；碰手勢、鍵盤、worklet 一定真機
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
 - 這個資料夾最多五個開發伺服器，別的聊天佔滿時 `preview_start` 會失敗；直接把瀏覽器開到 `http://localhost:8081` 看同一份原始碼就好（網頁預覽的 console 會殘留改檔中途的 HMR 錯誤 `dbl is not defined`、`dragMove is not defined`，重新載入後不存在，不是 bug）
+- 瀏覽器自動化工具按 Return 在網頁預覽只會失焦、不切行（上一個 commit 也一樣，不是 bug，真機 Return 已過）；要測切行用 JS 對 textarea `dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))`。JS 建出來的新行若接著用自動化按鍵，常跳出長按選單吃掉焦點，先用點擊進那一行再按鍵
 - 自動化工具的瞬間拖曳測不出 worklet 拖曳（拿起要排回 JS，放開已經發生）；要測用有間隔的 PointerEvent 慢慢拖
 - `expo-splash-screen` 沒裝也不用裝：expo-router 的 `SplashScreen` 走 `requireOptionalNativeModule('ExpoSplashScreen')`
 - 每一行的 `index`／`count` 進 memo 比對，按 ＋ 會讓全部的行重畫（待審 P2）——決定先量再做，沒動

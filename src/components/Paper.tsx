@@ -35,6 +35,11 @@ const FACE_FLAT = require('../../assets/img/face-flat.webp');
 const KBAR_H = T.shape.hitMin + T.space.s;
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
+// 把游標放到某一格：iOS 用 setSelection；網頁預覽的輸入框就是 DOM 的 textarea，沒有 setSelection，只有 setSelectionRange
+function placeCaret(inp: TextInputInstance, at: number) {
+  if (typeof inp.setSelection === 'function') return inp.setSelection(at, at);
+  (inp as unknown as { setSelectionRange?: (s: number, e: number) => void }).setSelectionRange?.(at, at);
+}
 // 手勢在 UI 執行緒上發現「越線了」「跨過一行了」，排回 JS 震一下。一定要是模組層級的函式（規矩檔：worklet 裡不准直接叫 tokens 的函式）
 const hapticArm = () => haptic('swipeArm');
 const hapticPass = () => haptic('dragPass');
@@ -148,7 +153,8 @@ export function Paper({ n }: { n: Note }) {
     pending.current = null;
     inp.focus();
     const at = p.caret ?? n.items.find(i => i.id === p.id)?.t.length ?? 0;
-    inp.setSelection?.(at, at);
+    placeCaret(inp, at);
+    requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：在最上面多出一行。先把清單捲回最上面，新的那行就在最上面
   function addLine() { haptic('add'); focusNew(); }
@@ -261,15 +267,34 @@ export function Paper({ n }: { n: Note }) {
     touch();
     focusItem(nu.id, 0);
   }
-  // 空的一行按刪除 → 這行拿掉，回到上一行的最後面（有字的行不會被併到上一行）
-  function onKey(id: string, e: TextInputKeyPressEvent) {
+  // Backspace（多米 2026-10-31 A5，跟網頁版一樣）：
+  // 空的一行 → 這行拿掉，回到上一行的最後面；
+  // 有字的行、游標在行首、沒選取一段 → 這行的字接到上一行尾端、這行拿掉、游標停在接點（字沒丟，不進最近刪除）。
+  // 劃掉的行不參與併行（多米定）：上一行劃掉的、或這行自己是劃掉的，Backspace 在行首就只是沒反應。
+  // 其他情況（游標不在行首、有選取）交給系統照常刪字。
+  // 我們接手的兩種都要 preventDefault：網頁上 Backspace 的預設刪字在這個 handler 之後才跑，那時焦點已經移到上一行、
+  // 游標在接點，會多吃掉接點前一個字（網頁預覽抓到的）。iOS 的刪除是原生先做、JS 後到，沒這個問題，preventDefault 在那邊是空的
+  function onKey(id: string, e: TextInputKeyPressEvent, sel: Sel) {
     if (e.nativeEvent.key !== 'Backspace') return;
     const idx = n.items.findIndex(i => i.id === id);
-    if (idx <= 0 || n.items[idx].t) return;
-    const prev = n.items[idx - 1];
+    if (idx <= 0) return;
+    const it = n.items[idx], prev = n.items[idx - 1];
+    if (!it.t) {
+      e.preventDefault();
+      n.items.splice(idx, 1);
+      touch();
+      focusItem(prev.id, prev.t.length);
+      return;
+    }
+    if (sel.start !== 0 || sel.end !== 0) return;
+    if (prev.done || it.done) return;
+    e.preventDefault();
+    const at = prev.t.length;
+    prev.t += it.t;
+    revs.current[prev.id] = (revs.current[prev.id] ?? 0) + 1; // 上一行被程式改字，輸入框要重掛才會顯示新字
     n.items.splice(idx, 1);
     touch();
-    focusItem(prev.id, prev.t.length);
+    focusItem(prev.id, at);
   }
 
   /* ---------- 拖曳排序 ---------- */
@@ -439,7 +464,7 @@ export function Paper({ n }: { n: Note }) {
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
-                onChange={v => onChange(it.id, v)} onKey={e => onKey(it.id, e)} onSubmit={caret => onSubmit(it.id, caret)}
+                onChange={v => onChange(it.id, v)} onKey={(e, sel) => onKey(it.id, e, sel)} onSubmit={caret => onSubmit(it.id, caret)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
                 onStrike={fromSwipe => strike(it.id, fromSwipe)} onRemove={() => remove(it.id)}
                 onMenu={y => openRowMenu(it.id, y)} onEdit={() => focusItem(it.id)}
@@ -530,13 +555,16 @@ function Swatch({ k, on, onPress }: { k: ColorKey; on: boolean; onPress: () => v
   );
 }
 
+// 按鍵那一刻游標選到哪（start＝end 就是沒選取、游標在 start）
+type Sel = { start: number; end: number };
+
 type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
   grip: boolean; editing: boolean; rev: number;
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   dragMids: SharedValue<number[]>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
-  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onSubmit: (caret: number) => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
   onStrike: (fromSwipe?: boolean) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void; onEdit: () => void;
   drag: { start: (id: string) => void; end: () => void };
@@ -700,21 +728,22 @@ function LineRow(p: LineProps) {
 // 輸入框疊在它上面撐滿，字打到超過一行就一定會長出下一行。打字時只有這一小塊重畫。
 // 字級跟著系統放大。行高不用自己乘倍數：iOS 上 React Native 會自動把行高一起放大，自己再乘一次行距會變兩倍大。
 // 最小高度不會自動放大，才要自己乘
-// Return 不換行而是送出（submitBehavior='submit'：鍵盤不收），由上層在下面開新的一行；游標在哪用 onSelectionChange 記著，切行時要用
+// Return 不換行而是送出（submitBehavior='submit'：鍵盤不收），由上層在下面開新的一行；游標在哪用 onSelectionChange 記著，切行、行首 Backspace 併行時要用
 function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChange, onKey, onSubmit, onFocus, onBlur }: {
   text: string; done: boolean; fs: number; colors: Colors; refInput: (r: TextInputInstance | null) => void;
   actions: { name: string; label: string }[]; onAction: (e: AccessibilityActionEvent) => void;
-  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent) => void; onSubmit: (caret: number) => void;
+  onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
 }) {
   const [txt, setTxt] = useState(text);
-  const caret = useRef(text.length);
+  const sel = useRef<Sel>({ start: text.length, end: text.length });
   const input = useRef<TextInputInstance | null>(null);
   const setRef = (r: TextInputInstance | null) => { input.current = r; refInput(r); };
-  // 網頁預覽的 onSelectionChange 只在「選取一段」時觸發，打字移動游標不會；送出時直接讀 DOM 的游標。iOS 沒這個屬性，用記下來的
-  const caretNow = () => {
-    const dom = input.current as unknown as { selectionStart?: number } | null;
-    return typeof dom?.selectionStart === 'number' ? dom.selectionStart : caret.current;
+  // 網頁預覽的 onSelectionChange 只在「選取一段」時觸發，打字移動游標不會；要用時直接讀 DOM 的游標。iOS 沒這個屬性，用記下來的
+  const selNow = (): Sel => {
+    const dom = input.current as unknown as { selectionStart?: number; selectionEnd?: number } | null;
+    if (typeof dom?.selectionStart === 'number' && typeof dom.selectionEnd === 'number') return { start: dom.selectionStart, end: dom.selectionEnd };
+    return sel.current;
   };
   const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
@@ -727,9 +756,9 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onChang
         style={[st.ta, lh, st.taFill, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}
         accessibilityHint={done ? '已劃掉' : undefined}
         accessibilityActions={actions} onAccessibilityAction={onAction}
-        onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={onKey}
-        onSelectionChange={e => { caret.current = e.nativeEvent.selection.start; }}
-        onSubmitEditing={() => onSubmit(caretNow())}
+        onChangeText={v => { setTxt(v); onChange(v); }} onKeyPress={e => onKey(e, selNow())}
+        onSelectionChange={e => { sel.current = { start: e.nativeEvent.selection.start, end: e.nativeEvent.selection.end }; }}
+        onSubmitEditing={() => onSubmit(selNow().start)}
         onFocus={onFocus} onBlur={onBlur} />
     </>
   );
