@@ -10,7 +10,10 @@
     "backgroundColor": "#FBF3E7",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.domyweb.qieji"
+      "bundleIdentifier": "org.domyweb.qieji",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
