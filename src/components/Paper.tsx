@@ -24,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, pickLabel, PIN_MAX, pinnedNotes, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, pickLabel, PIN_MAX, pinnedNotes, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -574,7 +574,7 @@ export function Paper({ n }: { n: Note }) {
 
   return (
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
-      {/* 最上面一行：清單名（點一下開目錄；⋯ 裡的「改名字」才會變成可以打字）和 ⋯。
+      {/* 最上面一行：清單名（點一下或 ⋯ 裡的「改名字」都會變成可以打字；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         {renaming ? (
@@ -590,15 +590,13 @@ export function Paper({ n }: { n: Note }) {
             onFocus={() => onFocus('title')} onBlur={() => { setRenaming(false); onBlur('title'); touch(); }}
             onSubmitEditing={dismissKb} />
         ) : (
-          <Pressable style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]} onPress={openDir}
-            accessibilityRole="button" accessibilityLabel={`${name}，換一張清單`} accessibilityHint="打開目錄">
+          // 點清單名＝改名（入口甲，2026-11-01 晚（二）；⌄ 拿掉）。開目錄改由下面的分段把手
+          <Pressable style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]} onPress={() => setRenaming(true)}
+            accessibilityRole="button" accessibilityLabel={name} accessibilityHint="改名字">
             {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
             <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
               onLayout={e => setTitleH(e.nativeEvent.layout.height)}
               maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
-            <View style={[st.chev, { backgroundColor: c.surface }]}>
-              <Sym name="chevron.down" size={12} color={c.textPrimary} weight="semibold" />
-            </View>
           </Pressable>
         )}
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
@@ -611,9 +609,12 @@ export function Paper({ n }: { n: Note }) {
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
-      <View style={[st.timeRow, { borderBottomColor: nc.rule }]}>
-        <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
-        <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
+      <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
+        <View style={st.timeRow}>
+          <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
+          <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
+        </View>
+        <SegHandle notes={swipeSet(store.s, n)} cur={n} color={c.textSecondary} onPress={openDir} />
       </View>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
@@ -706,6 +707,19 @@ type LineProps = {
   onEdit: (caret?: number, y?: number) => void; // caret＝游標要落在第幾個字（點一下的位置換算來的）；沒給就落在行尾。y＝點在這行的哪個高度
   drag: { start: (id: string) => void; end: () => void };
 };
+
+// 標題區下面的分段把手（B2）：一段＝標題區換得到的一張，亮的那段＝現在這張；點了開目錄（往下拉是 B3 的捷徑，這裡是看得見的入口）
+function SegHandle({ notes, cur, color, onPress }: { notes: Note[]; cur: Note; color: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [st.handle, pressed && { opacity: T.motion.pressDim }]} onPress={onPress}
+      hitSlop={T.shape.handleSlop} accessibilityRole="button" accessibilityLabel="全部清單" accessibilityHint="打開目錄">
+      {notes.map(x => (
+        <View key={x.id} style={[st.seg, { backgroundColor: color, opacity: x === cur ? 1 : T.shape.handleOff },
+          notes.length === 1 && { width: T.shape.handleSolo }]} />
+      ))}
+    </Pressable>
+  );
+}
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
@@ -980,7 +994,6 @@ const st = StyleSheet.create({
   titleBtn: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.xs },
   title: { flexShrink: 1, minWidth: 0, ...T.font.paperTitle },
   titleInput: { flex: 1, minWidth: 0, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
-  chev: { width: T.shape.chev, height: T.shape.chev, borderRadius: T.shape.pill(T.shape.chev), alignItems: 'center', justifyContent: 'center', ...T.shape.shadowSoft },
   // 一行就是紙上的一行：沒有卡片，底下一條淡格線，左右貼齊整頁
   // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
   ci: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden',
@@ -996,7 +1009,10 @@ const st = StyleSheet.create({
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
+  timeBox: { paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  handle: { alignSelf: 'center', flexDirection: 'row', gap: T.shape.handleGap, marginTop: T.space.xs },
+  seg: { width: T.shape.handleSeg, height: T.shape.handleH, borderRadius: T.shape.pill(T.shape.handleH) },
   timeText: { ...T.font.footnote },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },

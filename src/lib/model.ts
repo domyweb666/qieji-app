@@ -175,6 +175,12 @@ export function pickLabel(n: Note) {
 // 舊資料或別台同步回來超過的不自動拔，等下次釘新的時全部列出來讓人挑
 export const PIN_MAX = 2;
 export const pinnedNotes = (s: State) => s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated);
+// 標題區換張的那幾張（B2 把手的段數、B4 左右滑）：釘選的照建立先後（不照修改時間，改一個字不會換位置），
+// 現在這張不在裡面（沒釘，或舊資料釘超過兩張）就暫時排最左
+export function swipeSet(s: State, cur: Note) {
+  const set = s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => a.created - b.created).slice(0, PIN_MAX);
+  return set.includes(cur) ? set : [cur, ...set];
+}
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {

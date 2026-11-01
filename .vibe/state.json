@@ -1,10 +1,10 @@
 {
-  "station": "spec-standards",
-  "updated_at": "2026-11-02T00:10:00+08:00",
+  "station": "audit-immediate",
+  "updated_at": "2026-11-02T00:40:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
-    "todo": 11,
-    "machine_verified": 2,
+    "todo": 10,
+    "machine_verified": 3,
     "human_verified": 1
   },
   "chunks": [
@@ -18,7 +18,7 @@
     {
       "name": "B 標題區換紙與開目錄",
       "total": 4,
-      "machine_done": 1,
+      "machine_done": 2,
       "human_verified": false,
       "approved": true
     },
@@ -37,7 +37,9 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [],
+  "pending_immediate_verify": [
+    "B2 標題區＋分段把手"
+  ],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -62,6 +64,12 @@
       "why": "多米選第一版先上架，第二版前再做",
       "since": "2026-11-01",
       "status": "認領"
+    },
+    {
+      "what": "B2 真實情境走查＋計畫覆誦",
+      "why": "多米 2026-11-02「繼續做，按你的理解來」",
+      "since": "2026-11-02",
+      "status": "真機立即驗時補確認"
     }
   ],
   "decisions": [
