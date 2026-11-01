@@ -21,6 +21,9 @@ const OP_LIMIT = 10_000;      // 一次讀寫最多等這麼久
 const LIST_LIMIT = 35_000;    // 列資料夾：原生那邊自己最多等 30 秒，多給一點
 const PULL_LIMIT = 60_000;    // 整次拉取最多等這麼久，超過就當這次拉不了、照樣放行上傳（上傳前還有比對指紋擋著）
 const STUCK_RETRY = 5 * 60_000; // 讀到逾時的檔案，這麼久之內不再讀（逾時的原生呼叫還卡在背景，一直重讀會越堆越多）
+// 拉的時候同時讀幾個檔。原本一個一個讀，紙一多（或有幾個要等到逾時）一次拉要好幾十秒，
+// 拉的空檔越長，越容易跟這台的上傳撞在一起（2026-11-02 程式審查）；同時讀太多又怕原生那邊塞住，先開 4 條
+const PULL_PARALLEL = 4;
 
 // store 在載入時接上：synced＝有紙傳上去、sh 改了，要再存一次檔；pull＝去 iCloud 拉一次合進來
 let hooks: { synced: () => void; pull: () => void } | null = null;
@@ -250,21 +253,27 @@ async function fetchAll(c: Cloud) {
   const notes: unknown[] = [];
   let gone: unknown = {};
   let layout: unknown = names.includes(LAYOUT) ? null : undefined;
-  for (const name of names) {
-    if (!name.endsWith('.json') || name.startsWith('.') || isStuck(name)) continue;
-    let text: string;
-    try {
-      text = await read(c, name);
-    } catch (e) {
-      warn(`讀 ${name} `, e);
-      c.triggerSync(name).catch(() => {});
-      continue;
+  const todo = names.filter(name => name.endsWith('.json') && !name.startsWith('.') && !isStuck(name));
+  // 開 PULL_PARALLEL 條一起讀，每條讀完一個再拿下一個（共用 next）
+  let next = 0;
+  const lane = async () => {
+    while (next < todo.length) {
+      const name = todo[next++];
+      let text: string;
+      try {
+        text = await read(c, name);
+      } catch (e) {
+        warn(`讀 ${name} `, e);
+        c.triggerSync(name).catch(() => {});
+        continue;
+      }
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { if (name === LAYOUT) layout = undefined; continue; } // 壞掉的檔案（或別的東西）不理；壞掉的排列當成沒有，會被這台的蓋掉
+      if (name === GONE) gone = data;
+      else if (name === LAYOUT) layout = data;
+      else notes.push(data);
     }
-    let data: unknown;
-    try { data = JSON.parse(text); } catch { if (name === LAYOUT) layout = undefined; continue; } // 壞掉的檔案（或別的東西）不理；壞掉的排列當成沒有，會被這台的蓋掉
-    if (name === GONE) gone = data;
-    else if (name === LAYOUT) layout = data;
-    else notes.push(data);
-  }
+  };
+  await Promise.all(Array.from({ length: PULL_PARALLEL }, lane));
   return { notes, gone, layout, names };
 }

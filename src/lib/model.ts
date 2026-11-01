@@ -358,11 +358,13 @@ export function placeInFolder(s: State, noteId: string, folderId: string, visibl
   fixOrder(s);
   const f = s.folders?.find(x => x.id === folderId);
   if (!f || !visible.includes(noteId) || s.folders!.some(x => x.id === noteId)) return false; // 資料夾不能放進資料夾
+  // 先驗再動：visible 只能有這張和這個資料夾原本的紙、不重複（拖的時候資料夾被同步改了就會對不上），對不上就什麼都不改。
+  // 原本是拿過來之後才驗，驗不過回 false 時紙已經搬進來了，畫面不重畫也不存檔（2026-11-02 程式審查）
+  if (new Set(visible).size !== visible.length || visible.some(id => id !== noteId && !f.ids.includes(id))) return false;
   if (!f.ids.includes(noteId) && !intoFolder(s, noteId, folderId, now)) return false;
   // 拿過來時原本的資料夾空了會被 fixOrder 整理掉，資料夾清單換成新的物件：重新拿一次
   const live = s.folders!.find(x => x.id === folderId)!;
-  const set = new Set(visible.filter(id => live.ids.includes(id)));
-  if (set.size !== visible.length) return false;
+  const set = new Set(visible);
   let k = 0;
   live.ids = live.ids.map(id => (set.has(id) ? visible[k++] : id));
   touchLayout(s, now);
@@ -429,8 +431,12 @@ export function mergeLayout(s: State, raw: unknown): boolean {
     return false;
   }
   const mine = s.orderMod;
-  // 這台的比 iCloud 那份新就留著，傳過了也一樣：拉到一半這台剛好傳了新的上去，拉回來的是舊的那份，不能拿它蓋掉（2026-11-02 錄影回報後查到）
-  if (mine !== undefined && mine > r.mod) return false;
+  // 這台的比 iCloud 那份新就留著，傳過了也一樣：拉到一半這台剛好傳了新的上去，拉回來的是舊的那份，不能拿它蓋掉（2026-11-02 錄影回報後查到）。
+  // 傳過了卻讀到比較舊的：iCloud 上那份可能真的是舊的（被蓋過、沒寫成），記成沒傳再傳一次，別台才拿得到新的（2026-11-02 程式審查）
+  if (mine !== undefined && mine > r.mod) {
+    if (s.orderSent === mine) delete s.orderSent;
+    return false;
+  }
   const before = JSON.stringify([s.order ?? [], s.folders ?? []]);
   s.order = r.order;
   s.folders = r.folders;

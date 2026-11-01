@@ -15,7 +15,10 @@
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type AccessibilityActionEvent, type ScrollViewInstance } from 'react-native';
+import {
+  Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
+} from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation, LinearTransition, makeMutable, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
@@ -47,6 +50,9 @@ const hapticLand = () => haptic('dragDrop');
 // 格子裡第 k 格的左上角（兩欄，磚高 TILE、間距 GAP），與拖到哪一格：看被拖那塊的中心落在哪一格
 const TILE = T.shape.tile, GAP = T.space.m, EDGE = T.gesture.edgeZone, PRESS_DIM = T.motion.pressDim; // worklet 只抓數字，不抓整個 T（裡面有函式）
 const ZONE = T.gesture.stackZone, GROW = T.motion.stackTarget.scale;
+// 彈簧設定抄一份自己的：被抓進 worklet 的物件會被鎖住，不讓 tokens 裡的 M、G 被鎖（規矩檔 2026-11-02）
+const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring }, LIFT_SCALE = M.dragLift.scale;
+const PUSH_CLOSE = G.pushCloseRatio, FLICK = G.flick;
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
 // 一個點（相對格子左上角）落在第幾格：兩欄、磚高 TILE、間距 GAP（D4 起拖曳都用螢幕座標算）
@@ -59,15 +65,17 @@ function slotIn(lx: number, ly: number, w: number, count: number) {
 // 拖曳共用的 shared value（D4）。座標都是目錄的座標＝螢幕座標（面板從螢幕頂端開始，全開時沒有位移）：
 // x0、y0＝浮起那塊拿起時的左上角；dx、dy＝手指移了多少；sw＝浮起那塊的寬；edge＝在不在左右邊緣；aim＝瞄著哪（見 aimOf）；stackK＝準備疊到這頁第幾格；
 // gx、gy＝這頁格子的左上角；gcount＝這頁幾格；glast＝讓出來的那格在這頁第幾格（−1＝不在這頁）；
-// fopen＝資料夾開著在對準；bx…bh＝資料夾框；svx、svy＝框裡格子那層的位置；fcount、flast＝資料夾裡幾格、讓出來的是第幾格
+// fopen＝資料夾開著在對準；bx…bh＝資料夾框；svx、svy＝框裡格子那層的位置；fsy＝框裡捲下去多少；fcount、flast＝資料夾裡幾格、讓出來的是第幾格；
+// ready＝這次拿起後 JS 把格子位置、資料夾開沒開寫好了（拿起那一刻手勢先跑、JS 晚一步，寫好之前不算瞄哪）
 type DG = Record<'x0' | 'y0' | 'dx' | 'dy' | 'sw' | 'lift' | 'edge' | 'aim' | 'stackK' | 'gx' | 'gy' | 'gcount' | 'glast'
-  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'svx' | 'svy' | 'fcount' | 'flast', SharedValue<number>>;
+  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'svx' | 'svy' | 'fsy' | 'fcount' | 'flast' | 'ready', SharedValue<number>>;
 function useDG(): DG {
   return {
     x0: useSharedValue(0), y0: useSharedValue(0), dx: useSharedValue(0), dy: useSharedValue(0), sw: useSharedValue(0), lift: useSharedValue(0),
     edge: useSharedValue(0), aim: useSharedValue(0), stackK: useSharedValue(-1), gx: useSharedValue(0), gy: useSharedValue(0),
     gcount: useSharedValue(1), glast: useSharedValue(-1), fopen: useSharedValue(0), bx: useSharedValue(0), by: useSharedValue(0),
-    bw: useSharedValue(0), bh: useSharedValue(0), svx: useSharedValue(0), svy: useSharedValue(0), fcount: useSharedValue(1), flast: useSharedValue(0),
+    bw: useSharedValue(0), bh: useSharedValue(0), svx: useSharedValue(0), svy: useSharedValue(0), fsy: useSharedValue(0),
+    fcount: useSharedValue(1), flast: useSharedValue(0), ready: useSharedValue(0),
   };
 }
 // aim 的編碼：k＝目錄這頁第 k 格（停一下讓位）；−k−1＝停在第 k 格那張的正中間（停著就疊）；FOLDER_AIM＋k＝資料夾裡第 k 格；
@@ -79,7 +87,8 @@ function aimOf(cx: number, cy: number, dg: DG, gw: number, fw: number) {
     if (!dg.bw.value) return AIM_NONE;
     const inBox = cx >= dg.bx.value && cx <= dg.bx.value + dg.bw.value && cy >= dg.by.value && cy <= dg.by.value + dg.bh.value;
     if (!inBox) return AIM_OUT;
-    return FOLDER_AIM + slotIn(cx - dg.bx.value - dg.svx.value, cy - dg.by.value - dg.svy.value - GAP, fw, dg.fcount.value);
+    // 框裡捲下去了，格子跟著往上：加回捲的距離才對得到第幾格（2026-11-02 程式審查）
+    return FOLDER_AIM + slotIn(cx - dg.bx.value - dg.svx.value, cy - dg.by.value - dg.svy.value - GAP + dg.fsy.value, fw, dg.fcount.value);
   }
   const lx = cx - dg.gx.value, ly = cy - dg.gy.value;
   const k = slotIn(lx, ly, gw, dg.gcount.value);
@@ -104,13 +113,16 @@ function useDragPan(o: DragOpts) {
     onActivate: e => {
       'worklet';
       dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
-      dg.edge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1;
-      dg.lift.value = calm ? 1 : withSpring(1, M.dragLift.spring);
+      dg.edge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0;
+      dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
       scheduleOnRN(onStart);
     },
     onUpdate: e => {
       'worklet';
       dg.dx.value = e.translationX; dg.dy.value = e.translationY;
+      // JS 還沒把這次的格子位置、資料夾開沒開寫好（dragStart → setD）：只跟手，不算邊緣和瞄哪。
+      // 不然用的是上一次拖留下的值：資料夾裡拿起時被當成在目錄某一格，稍微一動放手就被拿出資料夾（多米 2026-11-02 真機記錄 aim:0、fopen:1）
+      if (!dg.ready.value) return;
       const cx = dg.x0.value + e.translationX + dg.sw.value / 2, cy = dg.y0.value + e.translationY + TILE / 2;
       // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候不算
       const z = dg.fopen.value ? 0 : cx < EDGE ? -1 : cx > screenW - EDGE ? 1 : 0;
@@ -124,19 +136,21 @@ function useDragPan(o: DragOpts) {
       'worklet';
       if (dg.edge.value) { dg.edge.value = 0; scheduleOnRN(onEdge, 0); }
       scheduleOnRN(hapticLand);
-      dg.lift.value = calm ? 0 : withSpring(0, M.dragLift.spring);
-      let tx = 0, ty = 0, slide = true;
-      if (dg.fopen.value) {
-        if (dg.aim.value >= FOLDER_AIM) { tx = dg.bx.value + dg.svx.value + slotX(dg.flast.value, fw); ty = dg.by.value + dg.svy.value + GAP + slotY(dg.flast.value); }
+      dg.lift.value = calm ? 0 : withSpring(0, LIFT_SPRING);
+      // 格子位置還沒寫好就放手（剛拿起馬上放）：不滑，交給 JS 原地放回
+      let tx = 0, ty = 0, slide = !!dg.ready.value;
+      if (slide && dg.fopen.value) {
+        // 落點也扣掉框裡捲下去的距離
+        if (dg.aim.value >= FOLDER_AIM) { tx = dg.bx.value + dg.svx.value + slotX(dg.flast.value, fw); ty = dg.by.value + dg.svy.value + GAP + slotY(dg.flast.value) - dg.fsy.value; }
         else slide = false;
-      } else {
+      } else if (slide) {
         const k = dg.stackK.value >= 0 ? dg.stackK.value : dg.glast.value;
         if (k < 0) slide = false;
         else { tx = dg.gx.value + slotX(k, gw); ty = dg.gy.value + slotY(k); }
       }
       if (!slide || calm) { scheduleOnRN(onDrop); return; }
-      dg.dx.value = withSpring(tx - dg.x0.value, { velocity: e.velocityX, ...M.dragLand.spring });
-      dg.dy.value = withSpring(ty - dg.y0.value, { velocity: e.velocityY, ...M.dragLand.spring }, () => scheduleOnRN(onDrop));
+      dg.dx.value = withSpring(tx - dg.x0.value, { velocity: e.velocityX, ...LAND_SPRING });
+      dg.dy.value = withSpring(ty - dg.y0.value, { velocity: e.velocityY, ...LAND_SPRING }, () => scheduleOnRN(onDrop));
     },
   });
 }
@@ -202,7 +216,7 @@ export function DirPanelHost() {
     onUpdate: e => { 'worklet'; p.value = Math.min(1, Math.max(0, 1 + e.translationY / h.value)); },
     onDeactivate: e => {
       'worklet';
-      const shut = e.translationY < -h.value * G.pushCloseRatio || e.velocityY < -G.flick;
+      const shut = e.translationY < -h.value * PUSH_CLOSE || e.velocityY < -FLICK;
       scheduleOnRN(settle, !shut, e.velocityY / h.value);
     },
   });
@@ -324,8 +338,13 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const menuFolder = menu && !menuNote ? s.folders?.find(f => f.id === menu.id) : undefined;
   // 打開的資料夾（D1）：哪一個、名字是不是正在打（新資料夾、選單的改名字一打開就能打）。裡面一張都看不到了就自己收起
   const [openF, setOpenF] = useState<{ id: string; naming: boolean } | null>(null);
-  const openEntry = openF ? seatedEntries(s).find(e => e.id === openF.id && e.folder) : undefined;
+  // 不搜尋時 entries 就是 seatedEntries(s)，不用再算一次
+  const openEntry = openF ? (searching ? seatedEntries(s) : entries).find(e => e.id === openF.id && e.folder) : undefined;
   useEffect(() => { if (openF && !openEntry) setOpenF(null); }, [openF, openEntry]);
+  // 框裡捲到哪（拖的時候算格子、落點都要扣掉）。換一個資料夾或重新打開，捲動從頂端開始（ScrollView 用資料夾 id 當 key 會重掛）
+  const openFolderId = openEntry?.folder?.id;
+  useEffect(() => { dg.fsy.value = 0; }, [openFolderId, dg.fsy]);
+  const onFolderScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { dg.fsy.value = e.nativeEvent.contentOffset.y; };
   const folderList = openEntry ? folderNotes(openEntry, drag) : [];
   // 從這個資料夾拿起、已經拖出去：資料夾收起（看不到、點不到），但留著，拿起的那塊磚才不會不見
   const folderHidden = !!(drag && openF && drag.src === openF.id && !drag.inF);
@@ -450,6 +469,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     dg.gx.value = T.space.l; dg.fopen.value = 0;
     const at = pageStart(pg) + k;
     setD({ id, src: null, page: pg, to: at, from: at, inF: null, fto: -1, k0: -1 });
+    dg.ready.value = 1; // 格子位置寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
   // 從打開的資料夾裡拿起（D3、D4）：一開始對準這個資料夾，框外停一下才收起
@@ -458,6 +478,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     entered.current = true;
     dg.gx.value = T.space.l; dg.fopen.value = 1;
     setD({ id: n.id, src: fid, page, to: 0, from: -1, inF: fid, fto: k, k0: k });
+    dg.ready.value = 1; // 資料夾開著、格數寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
   function unstack() {
@@ -556,22 +577,25 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   }
   useEffect(() => () => { clearTimeout(edgeT.current); clearTimeout(aimT.current); clearTimeout(leaveT.current); }, []);
   // 放手、滑到位之後才改資料：在打開的資料夾框裡＝放進那格（資料夾裡換順序也是這條）；準備疊了＝疊（D2）；
-  // 目錄＝放到讓出來那格（從資料夾來的先拿出來）。資料夾開著但在框外放手：從資料夾拿的排在資料夾後面，從目錄拿的回原位
+  // 目錄＝放到讓出來那格（從資料夾來的先拿出來）。資料夾開著但在框外放手：從資料夾拿的排在資料夾後面，從目錄拿的回原位。
+  // 還沒對準任何地方就放手（剛拿起、框還沒量好）：什麼都不改，從這個資料夾拿的資料夾照樣開著
   function drop() {
     clearTimeout(edgeT.current); clearTimeout(aimT.current); clearTimeout(leaveT.current);
     leaveT.current = undefined;
     const d = dragRef.current, now = Date.now();
-    const onto = stackRef.current ? flatOf(d ?? { id: '', src: null, page: 0, to: 0, from: 0, inF: null, fto: 0, k0: 0 }).find(e => e.id === stackRef.current) : undefined;
+    // 放手當下的整排（拖的那張排在讓出來那格）：疊的時候找底下那張、放回目錄時的新順序都看這一份
+    const flat = d ? flatOf(d) : [];
+    const onto = stackRef.current ? flat.find(e => e.id === stackRef.current) : undefined;
     let keepOpen = false;
     if (d && d.inF) {
       const fe = entriesRef.current.find(e => e.id === d.inF);
       if (dg.aim.value >= FOLDER_AIM && fe) {
         if (placeInFolder(store.s, d.id, d.inF, folderNotes(fe, d).map(n => n.id), now)) store.change();
         keepOpen = true;
-      } else if (d.src) {
+      } else if (d.src && dg.aim.value === AIM_OUT) {
         const n = store.s.notes.find(x => x.id === d.id);
         if (n) takeOut(n);
-      }
+      } else keepOpen = !!d.src;
     } else if (d && onto) {
       // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）。
       // 從資料夾拿出來的先拿出來：只剩一張的資料夾先拆掉，底下那張才站在原本那格（疊上去的就是它）
@@ -580,7 +604,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       else intoFolder(store.s, d.id, newFolder(store.s, onto.id, now).id, now);
       store.change();
     } else if (d) {
-      const ids = flatOf(d).map(x => x.id);
+      const ids = flat.map(x => x.id);
       if (d.src) { placeTop(store.s, d.id, ids, now); store.change(); }
       else if (d.to !== d.from) { reseat(store.s, ids, now); store.change(); }
     }
@@ -726,7 +750,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
           <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
           <View style={[st.folderBox, { maxHeight: panelH - padTop * 2 - T.shape.hitMin * 2, backgroundColor: c.surface }]}
             onLayout={e => { const l = e.nativeEvent.layout; dg.bx.value = l.x; dg.by.value = l.y; dg.bw.value = l.width; dg.bh.value = l.height; }}>
-            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" scrollEnabled={!editing && !drag}
+            {/* 捲完那一下也記：throttle 可能漏掉最後一筆位置 */}
+            <ScrollView key={openEntry.folder.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" scrollEnabled={!editing && !drag}
+              onScroll={onFolderScroll} onScrollEndDrag={onFolderScroll} onMomentumScrollEnd={onFolderScroll} scrollEventThrottle={T.timing.pageScroll}
               onLayout={e => { dg.svx.value = e.nativeEvent.layout.x; dg.svy.value = e.nativeEvent.layout.y; }}>
               <View style={st.grid}>
                 {folderList.map((n, k) => (
@@ -806,7 +832,7 @@ function Tile(p: TileProps) {
   // D2：被瞄著要疊的那張放大一點。減少動態：直接變大
   const grow = useSharedValue(1);
   useEffect(() => {
-    grow.value = calm ? (p.target ? GROW : 1) : withSpring(p.target ? GROW : 1, M.dragLift.spring);
+    grow.value = calm ? (p.target ? GROW : 1) : withSpring(p.target ? GROW : 1, LIFT_SPRING);
   }, [p.target, calm]); // eslint-disable-line react-hooks/exhaustive-deps
   // 動畫裡只能用拆出來的真假值：寫 p.ghost 會把整包 props（紙、資料夾物件）抓進去，被鎖住之後改資料全部失效（多米 2026-11-02 真機「一團糟」）
   const ghost = p.ghost;
@@ -898,7 +924,7 @@ function FolderTile(p: FolderTileProps) {
 // 拿起來的那張（D4 起目錄、資料夾共用）：畫在目錄最上層，從拿起那格的位置跟著手指平移，浮起一點（放大＋陰影）。不接觸控，手勢還在原本那塊上
 function DragGhost({ dg, children }: { dg: DG; children: ReactNode }) {
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: dg.x0.value + dg.dx.value }, { translateY: dg.y0.value + dg.dy.value }, { scale: 1 + dg.lift.value * (M.dragLift.scale - 1) }],
+    transform: [{ translateX: dg.x0.value + dg.dx.value }, { translateY: dg.y0.value + dg.dy.value }, { scale: 1 + dg.lift.value * (LIFT_SCALE - 1) }],
   }));
   return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
 }

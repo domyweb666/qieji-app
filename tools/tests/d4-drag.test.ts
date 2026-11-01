@@ -66,6 +66,9 @@ const ids5 = () => [note('a', 500), note('b', 400), note('c', 300), note('d', 20
   eq('資料夾不能放進資料夾', placeInFolder(s, 'G', 'F', ['a', 'G'], 2000), false);
   eq('沒有這個資料夾', placeInFolder(s, 'b', 'X', ['b'], 2000), false);
   eq('順序裡沒有這張', placeInFolder(s, 'b', 'F', ['a'], 2000), false);
+  // 先驗再動（2026-11-02 程式審查）：visible 對不上就什麼都不改，紙不能先被搬進資料夾才回 false
+  eq('混進目錄的紙', placeInFolder(s, 'b', 'F', ['a', 'b', 'd'], 2000), false);
+  eq('重複的 id', placeInFolder(s, 'b', 'F', ['a', 'b', 'b'], 2000), false);
   eq('都沒變', top(s), ['新資料夾[a]', 'b', '新資料夾[c]', 'd', 'e']);
 }
 
