@@ -561,7 +561,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     leaveT.current = undefined;
     const d = dragRef.current, now = Date.now();
     const onto = stackRef.current ? flatOf(d ?? { id: '', src: null, page: 0, to: 0, from: 0, inF: null, fto: 0, k0: 0 }).find(e => e.id === stackRef.current) : undefined;
-    let keepOpen = false, openNew: string | null = null;
+    let keepOpen = false;
     // 除錯（暫時，多米 2026-11-02 錄影：從資料夾拖出來放手又回到資料夾，找到原因就拿掉）：放手當下的狀態、改完和 0.5 秒後的排列
     const snap = () => JSON.stringify({ order: store.s.order, folders: store.s.folders?.map(f => [f.id, f.ids]) });
     if (__DEV__) console.log('[茄記除錯] 放手', JSON.stringify({ d, aim: dg.aim.value, fopen: dg.fopen.value, stackOn: stackRef.current, openF }), '放手前', snap());
@@ -575,12 +575,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         if (n) takeOut(n);
       }
     } else if (d && onto) {
+      // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）
       if (onto.folder) intoFolder(store.s, d.id, onto.id, now);
-      else {
-        const f = newFolder(store.s, onto.id, now);
-        intoFolder(store.s, d.id, f.id, now);
-        openNew = f.id;
-      }
+      else intoFolder(store.s, d.id, newFolder(store.s, onto.id, now).id, now);
       store.change();
     } else if (d) {
       const ids = flatOf(d).map(x => x.id);
@@ -594,8 +591,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     setStackOn(null); dg.stackK.value = -1; dg.fopen.value = 0;
     setD(null);
     dg.dx.value = 0; dg.dy.value = 0;
-    if (openNew) setOpenF({ id: openNew, naming: true });
-    else if (!keepOpen && d && (d.src || d.inF)) setOpenF(null);
+    if (!keepOpen && d && (d.src || d.inF)) setOpenF(null);
   }
   const shown = (i: number) => pages[i];
 
@@ -724,15 +720,16 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       )}
 
       {/* 打開的資料夾（D1）：蓋在目錄上面，點外面收起；名字點了就能改；裡面的紙點了換紙、長按跳選單、長按後拖出框外拿出來（D3）。
-          抖動中也打得開（iOS 一樣），裡面的紙跟著抖、手指一動就拿起來 */}
+          抖動中也打得開（iOS 一樣），裡面的紙跟著抖、手指一動就拿起來。
+          照 iOS 置中、名字在框上面的大字（多米 2026-11-02 看錄影選）；框的位置照樣用 onLayout 量（外層從螢幕頂端開始，量到的就是螢幕座標） */}
       {openEntry?.folder && (
-        <View style={[StyleSheet.absoluteFill, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}>
+        <View style={[StyleSheet.absoluteFill, st.folderWrap, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}
+          accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}>
           <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
             accessibilityRole="button" accessibilityLabel="收起資料夾" />
-          <View style={[st.folderBox, { top: padTop, maxHeight: panelH - padTop - T.shape.hitMin, backgroundColor: c.surface }]}
-            accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}
+          <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
+          <View style={[st.folderBox, { maxHeight: panelH - padTop * 2 - T.shape.hitMin * 2, backgroundColor: c.surface }]}
             onLayout={e => { const l = e.nativeEvent.layout; dg.bx.value = l.x; dg.by.value = l.y; dg.bw.value = l.width; dg.bh.value = l.height; }}>
-            <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
             <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" scrollEnabled={!editing && !drag}
               onLayout={e => { dg.svx.value = e.nativeEvent.layout.x; dg.svy.value = e.nativeEvent.layout.y; }}>
               <View style={st.grid}>
@@ -986,6 +983,7 @@ const st = StyleSheet.create({
   minis: { position: 'absolute', left: T.space.m, bottom: T.space.m, flexDirection: 'row', alignItems: 'center', gap: T.space.xs },
   mini: { width: T.shape.folderMini, height: T.shape.folderMini, borderRadius: T.shape.folderMiniRadius },
   more: { ...T.font.footnote },
-  folderBox: { position: 'absolute', left: T.space.l, right: T.space.l, borderRadius: T.shape.radiusPanel, padding: T.space.l, ...T.shape.shadowSoft },
-  folderName: { ...T.font.listTitle, textAlign: 'center', paddingVertical: T.space.s },
+  folderWrap: { justifyContent: 'center' },
+  folderBox: { marginHorizontal: T.space.l, borderRadius: T.shape.radiusPanel, padding: T.space.l, ...T.shape.shadowSoft },
+  folderName: { ...T.font.paperTitle, textAlign: 'center', paddingVertical: T.space.m, marginHorizontal: T.space.l },
 });
