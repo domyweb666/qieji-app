@@ -635,7 +635,7 @@ export function Paper({ n }: { n: Note }) {
 
   return (
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
-      {/* 最上面一行：清單名（點一下或 ⋯ 裡的「改名字」都會變成可以打字；開目錄在時間那行下面的把手）和 ⋯。
+      {/* 最上面一行：清單名（⋯ 裡的「改名字」才會變成可以打字，點清單名不會；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
       <GestureDetector gesture={head}>
@@ -656,14 +656,13 @@ export function Paper({ n }: { n: Note }) {
             onFocus={() => onFocus('title')} onBlur={() => { setRenaming(false); onBlur('title'); touch(); }}
             onSubmitEditing={dismissKb} />
         ) : (
-          // 點清單名＝改名（入口甲，2026-11-01 晚（二）；⌄ 拿掉）。開目錄改由下面的分段把手
-          <Pressable style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]} onPress={() => setRenaming(true)}
-            accessibilityRole="button" accessibilityLabel={name} accessibilityHint="改名字">
+          // 點清單名不改名（多米 2026-11-02：要改名從 ⋯ 選單按「改名字」，或目錄長按選單的改名字）。開目錄在下面的分段把手
+          <View style={st.titleBtn} accessible accessibilityRole="header" accessibilityLabel={name}>
             {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
             <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
               onLayout={e => setTitleH(e.nativeEvent.layout.height)}
               maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
-          </Pressable>
+          </View>
         )}
         </Animated.View>
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
