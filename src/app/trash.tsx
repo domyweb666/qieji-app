@@ -13,7 +13,6 @@ import { dropNotes, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, ty
 import { store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
-const FACE_SLEEP = require('../../assets/img/face-clay-sleep.webp');
 
 export default function Trash() {
   const s = useStore();
@@ -75,7 +74,7 @@ export default function Trash() {
             </View>
           </View>
         )}
-        {total === 0 && <Empty face={FACE_SLEEP} lines={['最近刪除是空的', `刪掉的清單和行會先放在這裡 ${TRASH_DAYS} 天，之後自動清掉`]} />}
+        {total === 0 && <Empty lines={['最近刪除是空的', `刪掉的清單和行會先放在這裡 ${TRASH_DAYS} 天，之後自動清掉`]} />}
       </ScrollView>
       {menu && <PopMenu acts={menu.acts} top={menu.top} onClose={() => setMenu(null)} />}
     </View>

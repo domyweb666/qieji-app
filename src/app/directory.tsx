@@ -14,7 +14,6 @@ import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
-const FACE_PUZZLED = require('../../assets/img/face-clay-puzzled.webp');
 
 export default function Directory() {
   const { move } = useLocalSearchParams<{ move?: string }>();
@@ -99,7 +98,7 @@ export default function Directory() {
         <View style={st.grid}>{tiles(other)}</View>
 
         {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
-        {notes.length === 0 && searching && <Empty face={FACE_PUZZLED} lines={[`找不到含「${q.trim()}」的清單`]} />}
+        {notes.length === 0 && searching && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
 
         {trashed > 0 && (
           <Pressable onPress={() => router.replace('/trash')} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
