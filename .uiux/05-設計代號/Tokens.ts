@@ -170,7 +170,7 @@ export const T = {
     longPressMs: 500,   // 長按一行多久跳選單
     longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
   },
-  timing: { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 },
+  timing: { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700, scrollThrottle: 16 }, // scrollThrottle：下拉換一張的提示逐格跟手（2026-11-01）
 } as const;
 
 /* =========================================================
