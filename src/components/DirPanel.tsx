@@ -7,7 +7,7 @@
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type AccessibilityActionEvent } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type AccessibilityActionEvent, type ScrollViewInstance } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation, LinearTransition, makeMutable, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
@@ -34,7 +34,7 @@ const TILE_MOVE = LinearTransition.duration(M.tileShift.duration);
 const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop');
 // 格子裡第 k 格的左上角（兩欄，磚高 TILE、間距 GAP），與拖到哪一格：看被拖那塊的中心落在哪一格
-const TILE = T.shape.tile, GAP = T.space.m;
+const TILE = T.shape.tile, GAP = T.space.m, PAD = T.space.l, EDGE = T.gesture.edgeZone, PRESS_DIM = T.motion.pressDim; // worklet 只抓數字，不抓整個 T（裡面有函式）
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
 function slotAt(from: number, tx: number, ty: number, w: number, count: number) {
@@ -165,11 +165,20 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   // 長按選單（C4）：哪一張、選單放多高
   const [menu, setMenu] = useState<{ id: string; top: number } | null>(null);
   const menuNote = menu ? s.notes.find(n => n.id === menu.id && !n.deleted) : undefined;
-  // 拖的那塊（C4）：哪一頁、原本第幾格、現在要放第幾格。手指位置（dx、dy）在 UI 執行緒，換格才回 JS 重排讓位
-  const [drag, setDrag] = useState<{ id: string; page: number; from: number; to: number } | null>(null);
+  // 拖的那塊（C4、C5）：從哪一頁拿起（origin）、現在在哪一頁（page）、在整排座位裡原本第幾個（from）、現在要放第幾個（to）。
+  // 手指位置（dx、dy）在 UI 執行緒；換格、翻頁才回 JS 重排讓位
+  const [drag, setDrag] = useState<{ id: string; origin: number; page: number; from: number; to: number } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
   const dx = useSharedValue(0), dy = useSharedValue(0), lift = useSharedValue(0);
+  // 手勢在 UI 執行緒要用的：拿起那格在原本那頁是第幾格（fromK）、翻頁後格子上下差多少（shift：第一頁上面多一列「新的一張」）、
+  // 現在這頁有幾格（count）、現在對到第幾格（last）、在不在邊緣（edge：−1 左、1 右、0 不在）
+  const fromK = useSharedValue(0), shift = useSharedValue(0), count = useSharedValue(0), last = useSharedValue(0), edge = useSharedValue(0);
+  const sv = { fromK, shift, count, last, edge };
+  const pagerRef = useRef<ScrollViewInstance>(null);
+  const edgeT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cap = (i: number) => (i === 0 ? (rows - 1) * 2 : rows * 2);
+  const gridTop = (i: number) => (i === 0 ? TILE : 0); // 格子在頁裡從多高開始（第一頁上面那列「新的一張」）
 
   // 搬行模式：來源是現在這張紙、要搬的那一行。行已經不在了（例如同時被刪）就當普通目錄用
   const from = move ? s.notes.find(n => n.id === store.last && !n.deleted) : undefined;
@@ -230,40 +239,60 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     reseat(store.s, ids); store.change();
   }
 
-  /* ---------- 拖換位置（C4）：長按後一拖就進抖動；抖動中直接拖 ---------- */
+  /* ---------- 拖換位置（C4）：長按後一拖就進抖動；抖動中直接拖。C5：拖到左右邊緣停一下就翻頁、放到別頁 ---------- */
   function dragStart(id: string, pg: number, k: number) {
     setMenu(null); setEditing(true);
-    setDrag({ id, page: pg, from: k, to: k });
+    setDrag({ id, origin: pg, page: pg, from: pageStart(pg) + k, to: pageStart(pg) + k });
     haptic('dragStart');
   }
-  function dragTo(to: number) { setDrag(d => (d && d.to !== to ? { ...d, to } : d)); }
-  // 落地動畫跑完才改座位表：被拖的那張從原本第幾格搬到第幾格（其他照原順序）
+  function dragTo(k: number) { setDrag(d => (d && d.to !== pageStart(d.page) + k ? { ...d, to: pageStart(d.page) + k } : d)); }
+  // 在邊緣停 edgeFlip 就翻一頁；一直停著就再翻。翻過去後格子對到哪格照手指現在的位置重算（手指不動也要算）
+  function onEdge(z: number) {
+    clearTimeout(edgeT.current);
+    if (!z) return;
+    edgeT.current = setTimeout(function flip() {
+      const d = dragRef.current;
+      const np = d ? d.page + z : -1;
+      if (!d || np < 0 || np >= pages.length || edge.value !== z) return;
+      pagerRef.current?.scrollTo({ x: np * width, animated: !calm });
+      setPage(np);
+      shift.value = gridTop(d.origin) - gridTop(np);
+      count.value = Math.max(1, Math.min(cap(np), notes.length - pageStart(np)));
+      const k = slotAt(fromK.value, dx.value, dy.value + shift.value, tileW, count.value);
+      last.value = k;
+      setDrag({ ...d, page: np, to: pageStart(np) + k });
+      haptic('dragPass');
+      edgeT.current = setTimeout(flip, T.timing.edgeFlip);
+    }, T.timing.edgeFlip);
+  }
+  useEffect(() => () => clearTimeout(edgeT.current), []);
+  // 落地動畫跑完才改座位表：被拖的那張從整排的第 from 個搬到第 to 個（其他照原順序，空出來的由後面補上）
   function drop() {
+    clearTimeout(edgeT.current);
     const d = dragRef.current;
     if (d && d.to !== d.from) {
-      const ids = seatedNotes(store.s, '').map(x => x.id), at = pageStart(d.page);
-      const [m] = ids.splice(at + d.from, 1);
-      ids.splice(at + d.to, 0, m);
+      const ids = seatedNotes(store.s, '').map(x => x.id);
+      const [m] = ids.splice(d.from, 1);
+      ids.splice(d.to, 0, m);
       reseat(store.s, ids); store.change();
     }
     setDrag(null);
-    dx.value = 0; dy.value = 0;
+    dx.value = 0; dy.value = 0; shift.value = 0;
   }
-  // 拖的時候那一頁畫出來的順序：被拖的那張先放到要放的格子（隱形佔位），其他磚讓位
-  function shown(i: number) {
-    const list = pages[i];
-    if (!drag || drag.page !== i) return list;
-    const a = [...list];
-    const [m] = a.splice(drag.from, 1);
-    a.splice(drag.to, 0, m);
-    return a;
+  // 拖的時候畫出來的分頁：被拖的那張先搬到要放的位置（隱形佔位），整排重新切頁，其他磚讓位、後面的往前補
+  const laid: Note[][] = [];
+  if (drag) {
+    const flat = notes.filter(n => n.id !== drag.id), m = notes.find(n => n.id === drag.id);
+    if (m) flat.splice(drag.to, 0, m);
+    pages.forEach((_, i) => laid.push(flat.slice(pageStart(i), pageStart(i) + cap(i))));
   }
+  const shown = (i: number) => (drag ? laid[i] : pages[i]);
 
-  const tile = (n: Note, k: number, pg: number, count: number) => (
-    <Tile key={n.id} n={n} w={tileW} k={k} cur={n.id === store.last} editing={editing} calm={calm}
-      canDrag={!searching} ghost={drag?.id === n.id} count={count} dx={dx} dy={dy} lift={lift}
+  const tile = (n: Note, k: number, pg: number, total: number) => (
+    <Tile key={n.id} n={n} w={tileW} sw={width} k={k} cur={n.id === store.last} editing={editing} calm={calm}
+      canDrag={!searching} ghost={drag?.id === n.id} count={total} dx={dx} dy={dy} lift={lift} sv={sv}
       onPick={() => pick(n)} onMenu={y => openMenu(n.id, y)}
-      onDragStart={() => dragStart(n.id, pg, k)} onDragTo={dragTo} onDrop={drop}
+      onDragStart={() => dragStart(n.id, pg, k)} onDragTo={dragTo} onEdge={onEdge} onDrop={drop}
       onA11y={name => {
         if (name === 'activate') pick(n);
         else if (name === 'rename') rename(n);
@@ -306,7 +335,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         // C3 多頁：一頁放幾列照格子區的高度算（螢幕小、字放大就少放），放不下往右一頁；整頁翻（系統分頁捲動），每次打開從第一頁。抖動中不翻（C5 才有拖到邊緣翻頁）
         <View style={{ flex: 1 }} onLayout={e => setBoxH(e.nativeEvent.layout.height)}>
           {boxH > 0 && (
-            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={pages.length > 1 && !editing}
+            <ScrollView ref={pagerRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={pages.length > 1 && !editing}
               keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => Keyboard.dismiss()}
               onScroll={e => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               scrollEventThrottle={T.timing.pageScroll}>
@@ -321,8 +350,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                   )}
                   <View style={st.grid}>
                     {shown(i).map((n, k) => tile(n, k, i, list.length))}
-                    {/* 拿起來的那張：浮在格子上跟著手指（原本的位置留隱形佔位，其他磚照佔位讓開） */}
-                    {dragged && drag?.page === i && <Ghost n={dragged} w={tileW} from={drag.from} dx={dx} dy={dy} lift={lift} />}
+                    {/* 拿起來的那張：浮在現在這頁的格子上跟著手指（要放的位置留隱形佔位，其他磚照佔位讓開）。
+                        放在拿起那格的位置再平移；翻到別頁時加上兩頁格子的高低差（shift），才會一直在手指下面 */}
+                    {dragged && drag?.page === i && (
+                      <Ghost n={dragged} w={tileW} from={drag.from - pageStart(drag.origin)} dx={dx} dy={dy} shift={shift} lift={lift} />
+                    )}
                   </View>
                 </View>
               ))}
@@ -360,10 +392,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   );
 }
 
+type DragSV = { fromK: SharedValue<number>; shift: SharedValue<number>; count: SharedValue<number>; last: SharedValue<number>; edge: SharedValue<number> };
 type TileProps = {
-  n: Note; w: number; k: number; cur: boolean; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
-  dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number>;
-  onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onDragTo: (to: number) => void; onDrop: () => void;
+  n: Note; w: number; sw: number; k: number; cur: boolean; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
+  dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number>; sv: DragSV;
+  onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onDragTo: (to: number) => void; onEdge: (z: number) => void; onDrop: () => void;
   onA11y: (name: string) => void;
 };
 
@@ -375,8 +408,9 @@ const A11Y_ACTS = [
 // 一塊磚的手勢（C4）：點＝換紙；長按（不動）＝選單；長按後一拖、或抖動中直接拖＝拿起來換位置。
 // 長按與拖同時聽（長按先成立跳選單，手指再動才拖）；點要等它們都不成立。抖動中不能點、不跳選單
 function Tile(p: TileProps) {
-  const { k, w, count, calm, dx, dy, lift, onPick, onMenu, onDragStart, onDragTo, onDrop } = p;
-  const last = useSharedValue(k);
+  const { k, w, sw, count, calm, dx, dy, lift, onPick, onMenu, onDragStart, onDragTo, onEdge, onDrop } = p;
+  // 拖的時候對到第幾格、翻頁的高低差、這頁幾格都放在目錄那邊共用（翻頁是目錄做的，這塊磚的手勢要讀得到最新的）
+  const { fromK, shift, count: pageCount, last, edge } = p.sv;
   const pressed = useSharedValue(0);
   const tap = useTapGesture({
     runOnJS: true,
@@ -399,23 +433,28 @@ function Tile(p: TileProps) {
     minDistance: G.tileDrag,
     onActivate: () => {
       'worklet';
-      dx.value = 0; dy.value = 0; last.value = k;
+      dx.value = 0; dy.value = 0; fromK.value = k; shift.value = 0; pageCount.value = count; last.value = k; edge.value = 0;
       lift.value = calm ? 1 : withSpring(1, M.dragLift.spring);
       scheduleOnRN(onDragStart);
     },
     onUpdate: e => {
       'worklet';
       dx.value = e.translationX; dy.value = e.translationY;
-      const to = slotAt(k, e.translationX, e.translationY, w, count);
+      // 磚的中心離螢幕左右邊多近（格子左邊還有頁的內距 space.l）：進出邊緣才回 JS 開始或停止計時翻頁（C5）
+      const sx = slotX(fromK.value, w) + w / 2 + e.translationX + PAD;
+      const z = sx < EDGE ? -1 : sx > sw - EDGE ? 1 : 0;
+      if (z !== edge.value) { edge.value = z; scheduleOnRN(onEdge, z); }
+      const to = slotAt(fromK.value, e.translationX, e.translationY + shift.value, w, pageCount.value);
       if (to === last.value) return;
       last.value = to;
       scheduleOnRN(onDragTo, to);
       scheduleOnRN(hapticPass);
     },
-    // 放手：滑進要放的那一格，到了才回 JS 改座位表；放手那一刻震一下。減少動態：直接到位
+    // 放手：滑進要放的那一格（翻過頁就扣掉兩頁格子的高低差），到了才回 JS 改座位表；放手那一刻震一下。減少動態：直接到位
     onDeactivate: e => {
       'worklet';
-      const to = last.value, tx = slotX(to, w) - slotX(k, w), ty = slotY(to) - slotY(k);
+      if (edge.value) { edge.value = 0; scheduleOnRN(onEdge, 0); }
+      const from = fromK.value, to = last.value, tx = slotX(to, w) - slotX(from, w), ty = slotY(to) - slotY(from) - shift.value;
       scheduleOnRN(hapticLand);
       lift.value = calm ? 0 : withSpring(0, M.dragLift.spring);
       if (calm) { dx.value = tx; dy.value = ty; scheduleOnRN(onDrop); return; }
@@ -435,7 +474,7 @@ function Tile(p: TileProps) {
   }, [p.editing, calm]); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rot.value}deg` }],
-    opacity: p.ghost ? 0 : 1 - pressed.value * (1 - T.motion.pressDim),
+    opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [p.ghost] : undefined);
 
   return (
@@ -451,9 +490,10 @@ function Tile(p: TileProps) {
 }
 
 // 拿起來的那張：放在原本那格的位置、跟著手指平移，浮起一點（放大＋陰影）。不接觸控，手勢還在原本那塊上
-function Ghost({ n, w, from, dx, dy, lift }: { n: Note; w: number; from: number; dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number> }) {
+type GhostProps = { n: Note; w: number; from: number; dx: SharedValue<number>; dy: SharedValue<number>; shift: SharedValue<number>; lift: SharedValue<number> };
+function Ghost({ n, w, from, dx, dy, shift, lift }: GhostProps) {
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: dx.value }, { translateY: dy.value }, { scale: 1 + lift.value * (M.dragLift.scale - 1) }],
+    transform: [{ translateX: dx.value }, { translateY: dy.value + shift.value }, { scale: 1 + lift.value * (M.dragLift.scale - 1) }],
   }));
   return (
     <Animated.View pointerEvents="none" style={[st.ghost, { left: slotX(from, w), top: slotY(from) }, style]}>
