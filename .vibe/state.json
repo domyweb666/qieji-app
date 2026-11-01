@@ -1,6 +1,6 @@
 {
-  "station": "ship-check",
-  "updated_at": "2026-11-01T15:20:00+08:00",
+  "station": "launch",
+  "updated_at": "2026-11-01T16:00:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
     "todo": 0,
@@ -20,18 +20,36 @@
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
-      "why": "多米 2026-11-01 選直接送審，不先上 TestFlight",
-      "since": "2026-11-01"
+      "why": "多米 2026-11-01 選直接送審，不先上 TestFlight 給別人",
+      "since": "2026-11-01",
+      "status": "認領"
     },
     {
-      "what": "D2～D5、E3～E6、F5～F6 真機未測",
-      "why": "D2 刪掉重裝、第二台裝置、刪 iCloud 資料夾；多米回報的範圍只到 U/K/D1/F1～F4/E1～E2",
-      "since": "2026-11-01"
+      "what": "D2 刪掉重裝紙會回來",
+      "why": "改在裝正式版時補測（刪開發版、從 TestFlight 裝）",
+      "since": "2026-11-01",
+      "status": "待補驗"
+    },
+    {
+      "what": "D3～D5、E3～E6、F5～F6",
+      "why": "要第二台裝置或刪 iCloud 資料夾；多米選認領",
+      "since": "2026-11-01",
+      "status": "認領"
+    },
+    {
+      "what": "全域整理（vibe-integrate）",
+      "why": "多米選第一版先上架，第二版前再做",
+      "since": "2026-11-01",
+      "status": "認領"
     }
   ],
   "decisions": [
     {
       "what": "第一版免費",
+      "since": "2026-11-01"
+    },
+    {
+      "what": "只上 iPhone，關掉 iPad 支援（supportsTablet false）",
       "since": "2026-11-01"
     }
   ],

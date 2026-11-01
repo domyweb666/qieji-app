@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FBF3E7",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "org.domyweb.qieji",
       "appleTeamId": "3ZT74P4WM2",
       "infoPlist": {
