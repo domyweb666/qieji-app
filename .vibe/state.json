@@ -1,17 +1,44 @@
 {
-  "station": "security-c",
-  "updated_at": "2026-11-01T15:00:00+08:00",
+  "station": "ship-check",
+  "updated_at": "2026-11-01T15:20:00+08:00",
   "updated_by": "vibe-traffic-control",
-  "pieces": { "todo": 0, "machine_verified": 0, "human_verified": 0 },
+  "pieces": {
+    "todo": 0,
+    "machine_verified": 0,
+    "human_verified": 0
+  },
   "chunks": [
-    { "name": "iCloud S2～S5＋控制中心", "total": 5, "machine_done": 5, "human_verified": true, "approved": true }
+    {
+      "name": "iCloud S2～S5＋控制中心",
+      "total": 5,
+      "machine_done": 5,
+      "human_verified": true,
+      "approved": true
+    }
   ],
   "pending_immediate_verify": [],
   "skipped_gates": [
-    { "what": "閘門 1、2（沒看過的人測）", "why": "多米 2026-11-01 選直接送審，不先上 TestFlight", "since": "2026-11-01" },
-    { "what": "D2～D5、E3～E6、F5～F6 真機未測", "why": "D2 刪掉重裝、第二台裝置、刪 iCloud 資料夾；多米回報的範圍只到 U/K/D1/F1～F4/E1～E2", "since": "2026-11-01" }
+    {
+      "what": "閘門 1、2（沒看過的人測）",
+      "why": "多米 2026-11-01 選直接送審，不先上 TestFlight",
+      "since": "2026-11-01"
+    },
+    {
+      "what": "D2～D5、E3～E6、F5～F6 真機未測",
+      "why": "D2 刪掉重裝、第二台裝置、刪 iCloud 資料夾；多米回報的範圍只到 U/K/D1/F1～F4/E1～E2",
+      "since": "2026-11-01"
+    }
   ],
   "decisions": [
-    { "what": "第一版免費", "since": "2026-11-01" }
-  ]
+    {
+      "what": "第一版免費",
+      "since": "2026-11-01"
+    }
+  ],
+  "security_c": {
+    "result": "pass",
+    "critical": 0,
+    "suggest": 2,
+    "report": ".vibe/安全檢查報告.md"
+  }
 }
