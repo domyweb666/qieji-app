@@ -3,7 +3,7 @@
 // 這個函式跑在小工具自己的隔離環境：不能 import、不能用 hooks、不能碰函式外的變數。
 // 所以顏色、字級、間距、每種尺寸放幾行全部由 src/lib/widget.ts 從 tokens 算好，用 props 傳進來；這裡一個裸數字都不寫。
 import { Spacer, Text, VStack } from '@expo/ui/swift-ui';
-import { containerBackground, font, foregroundStyle, lineLimit, padding, strikethrough } from '@expo/ui/swift-ui/modifiers';
+import { containerBackground, font, foregroundStyle, lineLimit, strikethrough } from '@expo/ui/swift-ui/modifiers';
 import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
 export type PaperWidgetLine = { t: string; done: boolean };
@@ -15,7 +15,6 @@ export type PaperWidgetProps = {
   dark: PaperWidgetScheme;
   titleSize: number;
   lineSize: number;
-  pad: number;
   gap: number;
   max: { small: number; medium: number; large: number; lock: number };
 };
@@ -31,8 +30,9 @@ const PaperWidget = (p: PaperWidgetProps, env: WidgetEnvironment) => {
   const titleMods = lock
     ? [font({ size: p.titleSize, weight: 'bold' }), lineLimit(1)]
     : [font({ size: p.titleSize, weight: 'bold' }), foregroundStyle(c.text), lineLimit(1)];
+  // 不自己加 padding：iOS 17 起系統已經替小工具留一圈內邊距，再疊一圈字會縮在中間、看起來比實際小（多米 2026-11-01）
   return (
-    <VStack alignment="leading" spacing={p.gap} modifiers={lock ? [] : [padding({ all: p.pad }), containerBackground(c.bg, 'widget')]}>
+    <VStack alignment="leading" spacing={p.gap} modifiers={lock ? [] : [containerBackground(c.bg, 'widget')]}>
       <Text modifiers={titleMods}>{p.title}</Text>
       {shown.map((l, i) => (
         <Text
@@ -64,7 +64,6 @@ export const EMPTY_PROPS: PaperWidgetProps = {
   dark: { bg: '#211A27', text: '#F2EAF1', strike: '#F2EAF1' },
   titleSize: 15,
   lineSize: 15,
-  pad: 16,
   gap: 4,
   max: { small: 3, medium: 4, large: 10, lock: 2 },
 };
