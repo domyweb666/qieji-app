@@ -30,6 +30,7 @@ import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Empty } from './Empty';
 import { ui } from './Overlay';
+import { togglePin } from './pin';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
@@ -295,8 +296,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n.id);
     return [
       { label: '改名字', icon: 'pencil', fn: () => rename(n) },
-      // 資料夾裡的紙沒有「移出資料夾」：照 iOS 只用拖的拿出來（多米 2026-11-02 晚：不要文字選單）；VoiceOver 的「移出資料夾」動作留著
-      { label: '放進資料夾…', icon: 'folder.badge.plus', fn: () => putIn(n), hidden: inside },
+      // 釘選跟紙的 ⋯ 同一套（多米 2026-11-02 晚：在這裡找不到釘選）。放進、移出資料夾照 iOS 只用拖的，不放文字選項（多米 2026-11-02 晚）；
+      // VoiceOver 的「放進資料夾」「移出資料夾」動作留著，給不能拖的人（HIG）
+      { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: () => togglePin(n) },
       { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
       { label: '編輯目錄', icon: 'square.grid.2x2', fn: () => setEditing(true), hidden: inside },
     ];
@@ -436,7 +438,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n!.id);
     return (
       <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 2 : 4)} onA11y={noteA11y(n!)}>
+        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 3 : 4)} onA11y={noteA11y(n!)}>
         {face(e, tileW)}
       </Tile>
     );
@@ -539,7 +541,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
               <View style={st.grid}>
                 {openEntry.notes.map((n, k) => (
                   <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={fdrag === n.id} fd={fd}
-                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 2)} onA11y={noteA11y(n)}
+                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}
                     onDragStart={() => { setMenu(null); setFdrag(n.id); haptic('dragStart'); }} onDrop={out => folderDrop(n, out)} />
                 ))}
               </View>

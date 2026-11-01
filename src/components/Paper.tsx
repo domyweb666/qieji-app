@@ -23,7 +23,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, pickLabel, PIN_MAX, pinnedNotes, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -579,17 +580,6 @@ export function Paper({ n }: { n: Note }) {
   });
   // 往下拉（開目錄）跟左右撥（換張）先成立的那個贏，另一個當場作廢
   const head = useCompetingGestures(pull, swap);
-  // 釘滿了一步跳選單問換掉哪張（審查紀錄 11/01 晚（四）甲）；換掉的那張不動 updated，目錄裡位置不跳
-  function togglePin() {
-    if (n.pinned) { n.pinned = false; touch(); ui.toast('已取消釘選'); return; }
-    const pinned = pinnedNotes(store.s);
-    if (pinned.length < PIN_MAX) { n.pinned = true; touch(); ui.toast('已釘選'); return; }
-    ui.sheet(pinned.map(o => ({ label: pickLabel(o), fn: () => swapPin(o) })), '已釘滿兩張', '要換掉哪一張？');
-  }
-  function swapPin(o: Note) {
-    o.pinned = false; n.pinned = true; touch();
-    ui.toast(`已釘選，「${pickLabel(o)}」已取消釘選`, { label: '復原', fn: () => { o.pinned = true; n.pinned = false; touch(); } });
-  }
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
     if (n.color === k) return;
@@ -613,7 +603,7 @@ export function Paper({ n }: { n: Note }) {
   const setItems = (items: Item[]) => { n.items = items; touch(); };
   const moreActs: Act[] = [
     { label: '改名字', icon: 'pencil', fn: () => setRenaming(true) },
-    { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: togglePin },
+    { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: () => togglePin(n) }, // 跟目錄長按選單同一套（pin.ts）
     { label: '分享', icon: 'square.and.arrow.up', fn: share },
     { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
     { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
