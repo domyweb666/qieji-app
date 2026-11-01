@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
+import { pushCloud } from './cloud';
 import { dropNotes, emptyState, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 
@@ -25,6 +26,8 @@ async function writeNow() {
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
     box.saveFailed = false;
     pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
+    // 存檔成功才把改過的紙傳上 iCloud（S2）；傳完要再存一次記下 sh。進背景時不等，馬上傳
+    pushCloud(box.state, () => store.save(), AppState.currentState !== 'active');
   } catch {
     // 打字中每 0.25 秒會再存一次；失敗只報一次，成功存回去之後再失敗才再報
     if (box.saveFailed) return;

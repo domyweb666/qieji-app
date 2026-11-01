@@ -426,8 +426,12 @@ export function dropNotes(s: State, pick: (n: Note) => boolean, now: number) {
   return removed;
 }
 
-// 上傳成功之後呼叫：這張紙跟 iCloud 對上了
-export function markSynced(n: Note) { n.sh = n.h; }
+// 要上傳的紙：內容跟上次傳上 iCloud 的不一樣（從沒傳過的 sh 是空的，也算）
+export function pendingUploads(s: State) { return s.notes.filter(n => n.h !== n.sh); }
+
+// 上傳成功之後呼叫：這張紙跟 iCloud 對上了。h 傳「開始上傳那一刻」的指紋——
+// 上傳途中又改了，n.h 已經是新的，記成新的就會漏傳這次改動（S2，2026-11-01）
+export function markSynced(n: Note, h = n.h) { n.sh = h; }
 
 // 墓碑比這張紙最後一次改動還新（或一樣）＝它在別台被永久拿掉之後就沒人動過，拿掉。
 // 比墓碑新＝拿掉之後還有人改（例如離線那台還在記），拿不準，留著

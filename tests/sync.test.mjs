@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseState, emptyState, fingerprint, stampMods, dropNotes, markSynced, mergeRemote, isExpiredTrash,
+  parseState, emptyState, fingerprint, stampMods, dropNotes, markSynced, pendingUploads, mergeRemote, isExpiredTrash,
 } from '../src/lib/model.ts';
 
 const NOW = new Date(2026, 10, 1, 12, 0).getTime();
@@ -198,4 +198,26 @@ test('合了一次再合同一份：結果不變（重複同步不會長出重�
   mergeRemote(s, { notes: [cloud] }, NOW + 2);
   assert.deepEqual(texts(s.notes[0]), once);
   assert.equal(new Set(s.notes[0].items.map(i => i.id)).size, s.notes[0].items.length);
+});
+
+// S2 只上傳（2026-11-01）
+test('要上傳的紙：從沒傳過的、傳過之後又改的；傳過沒改的不傳', () => {
+  const s = state(note({ id: 'a' }), note({ id: 'b' }), note({ id: 'c' }));
+  stampMods(s, NOW);
+  assert.deepEqual(pendingUploads(s).map(n => n.id), ['a', 'b', 'c']);
+  s.notes.forEach(n => markSynced(n));
+  assert.deepEqual(pendingUploads(s), []);
+  s.notes[1].items.push(it('1', '改了'));
+  stampMods(s, NOW + 1);
+  assert.deepEqual(pendingUploads(s).map(n => n.id), ['b']);
+});
+
+test('上傳途中又改了同一張：記的是開始上傳那一刻的指紋，這張下一輪還要再傳', () => {
+  const s = state(note({ id: 'a', items: [it('1', '一')] }));
+  stampMods(s, NOW);
+  const h = s.notes[0].h;                      // 開始上傳
+  s.notes[0].items.push(it('2', '上傳途中打的'));
+  stampMods(s, NOW + 1);                        // 途中又存了一次檔
+  markSynced(s.notes[0], h);                    // 這次上傳完成
+  assert.deepEqual(pendingUploads(s).map(n => n.id), ['a']);
 });
