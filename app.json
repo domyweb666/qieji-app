@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.domyweb.qieji",
+      "appleTeamId": "3ZT74P4WM2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
