@@ -3,8 +3,8 @@
   "updated_at": "2026-11-02T13:00:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
-    "todo": 7,
-    "machine_verified": 6,
+    "todo": 6,
+    "machine_verified": 7,
     "human_verified": 5
   },
   "chunks": [
@@ -25,7 +25,7 @@
     {
       "name": "C 手排目錄",
       "total": 5,
-      "machine_done": 1,
+      "machine_done": 2,
       "human_verified": false,
       "approved": true
     },

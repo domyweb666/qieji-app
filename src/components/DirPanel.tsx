@@ -121,6 +121,13 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
   const trashed = s.notes.filter(n => n.deleted).length;
   // 兩欄：整頁左右各留 16，中間留 12
   const tileW = (width - T.space.l * 2 - T.space.m) / 2;
+  // 分頁（C3）：格子區高 boxH 扣掉上緣留白，放得下幾列整磚就幾列（不切半塊）；第一頁最上面一列是「新的一張」
+  const [boxH, setBoxH] = useState(0);
+  const [page, setPage] = useState(0);
+  // 一頁 R 列＝上緣 s ＋ grid 的 marginTop m ＋ R 塊磚 ＋ (R−1) 個間距 m＝s ＋ R ×（磚＋m）；第一頁的「新的一張」那列也是一塊磚高＋m
+  const rows = Math.max(1, Math.floor((boxH - T.space.s) / (T.shape.tile + T.space.m)));
+  const pages: Note[][] = [];
+  for (let i = 0, take = (rows - 1) * 2; i < notes.length || !pages.length; i += take, take = rows * 2) pages.push(notes.slice(i, i + take));
 
   // 搬行模式：來源是現在這張紙、要搬的那一行。行已經不在了（例如同時被刪）就當普通目錄用
   const from = move ? s.notes.find(n => n.id === store.last && !n.deleted) : undefined;
@@ -142,37 +149,65 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
     store.open(n.id, true);
     dirPanel.close();
   }
+  const tile = (n: Note) => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />;
 
   return (
     <View style={{ flex: 1 }} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
         <View style={[st.search, { backgroundColor: c.page }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
-          <TextInput value={q} onChangeText={setQ} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
+          <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
             style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel="搜尋清單" />
         </View>
       </View>
 
-      <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
-        {moving && (
-          <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
-        )}
-        {!searching && (
-          <Pressable onPress={add} accessibilityRole="button" accessibilityLabel="新的一張"
-            style={({ pressed }) => [st.tile, st.add, { width: tileW, borderColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
-            <Sym name="plus" size={22} color={c.textPrimary} />
-            <Text style={[st.tileText, { color: c.textPrimary }]}>新的一張</Text>
-          </Pressable>
-        )}
+      {moving && (
+        <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
+      )}
 
-        <View style={st.grid}>
-          {notes.map(n => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />)}
+      {searching ? (
+        // 搜尋：所有頁的紙一起找，排成一整片上下捲，不分頁
+        <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
+          <View style={st.grid}>{notes.map(tile)}</View>
+          {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
+          {notes.length === 0 && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
+        </ScrollView>
+      ) : (
+        // C3 多頁：一頁放幾列照格子區的高度算（螢幕小、字放大就少放），放不下往右一頁；整頁翻（系統分頁捲動），每次打開從第一頁
+        <View style={{ flex: 1 }} onLayout={e => setBoxH(e.nativeEvent.layout.height)}>
+          {boxH > 0 && (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={pages.length > 1}
+              keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => Keyboard.dismiss()}
+              onScroll={e => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+              scrollEventThrottle={T.timing.pageScroll}>
+              {pages.map((list, i) => (
+                <View key={i} style={[st.page, { width }]} accessibilityLabel={pages.length > 1 ? `第 ${i + 1} 頁，共 ${pages.length} 頁` : undefined}>
+                  {i === 0 && (
+                    <Pressable onPress={add} accessibilityRole="button" accessibilityLabel="新的一張"
+                      style={({ pressed }) => [st.tile, st.add, { width: tileW, borderColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
+                      <Sym name="plus" size={22} color={c.textPrimary} />
+                      <Text style={[st.tileText, { color: c.textPrimary }]}>新的一張</Text>
+                    </Pressable>
+                  )}
+                  <View style={st.grid}>{list.map(tile)}</View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
+      )}
 
-        {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
-        {notes.length === 0 && searching && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
+      {/* 頁點：幾頁幾個，亮的是現在這頁；只有一頁不印 */}
+      {!searching && pages.length > 1 && (
+        <View style={st.dots} accessible accessibilityLabel={`第 ${Math.min(page, pages.length - 1) + 1} 頁，共 ${pages.length} 頁`}>
+          {pages.map((_, i) => (
+            <View key={i} style={[st.dot, { backgroundColor: c.textSecondary, opacity: i === Math.min(page, pages.length - 1) ? 1 : T.shape.handleOff }]} />
+          ))}
+        </View>
+      )}
 
-        {trashed > 0 && (
+      {/* 最近刪除固定在格子下面，每一頁都看得到 */}
+      {trashed > 0 && (
           <Pressable onPress={() => dirPanel.close(() => router.push('/trash'))} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
             style={({ pressed }) => [st.trashRow, { borderTopColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
             <Sym name="trash" size={17} color={c.textSecondary} />
@@ -182,7 +217,6 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
             <Sym name="chevron.right" size={12} color={c.textSecondary} />
           </Pressable>
         )}
-      </ScrollView>
     </View>
   );
 }
@@ -216,7 +250,10 @@ const st = StyleSheet.create({
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s, paddingBottom: T.space.l },
-  moveHead: { ...T.font.subhead, marginBottom: T.space.m, marginLeft: T.space.xs },
+  moveHead: { ...T.font.subhead, marginBottom: T.space.s, marginHorizontal: T.space.l + T.space.xs },
+  page: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: T.space.s, paddingVertical: T.space.s },
+  dot: { width: T.shape.pageDot, height: T.shape.pageDot, borderRadius: T.shape.pill(T.shape.pageDot) },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
   tile: { height: T.shape.tile, borderRadius: T.shape.radiusCard, borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   add: { borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.s },
@@ -224,7 +261,7 @@ const st = StyleSheet.create({
   tileTextPinned: { marginRight: T.space.l }, // 名字長的時候不壓到右上角的圖釘
   pin: { position: 'absolute', top: T.space.m, right: T.space.m },
   tag: { position: 'absolute', right: -T.space.m, bottom: -T.space.m, width: T.shape.tileTag, height: T.shape.tileTag, borderRadius: T.shape.pill(T.shape.tileTag) },
-  trashRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, marginTop: T.space.xl,
+  trashRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, marginHorizontal: T.space.l,
     paddingVertical: T.space.m, borderTopWidth: StyleSheet.hairlineWidth },
   trashText: { ...T.font.body },
 });
