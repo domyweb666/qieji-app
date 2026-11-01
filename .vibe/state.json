@@ -1,11 +1,11 @@
 {
-  "station": "audit",
-  "updated_at": "2026-11-02T18:00:00+08:00",
-  "updated_by": "vibe-self-review",
+  "station": "traffic-control",
+  "updated_at": "2026-11-02T18:30:00+08:00",
+  "updated_by": "vibe-audit",
   "pieces": {
     "todo": 3,
     "machine_verified": 10,
-    "human_verified": 9
+    "human_verified": 10
   },
   "chunks": [
     {
@@ -26,7 +26,7 @@
       "name": "C 手排目錄",
       "total": 5,
       "machine_done": 5,
-      "human_verified": false,
+      "human_verified": true,
       "approved": true
     },
     {
@@ -37,14 +37,7 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [
-    {
-      "piece": "C2",
-      "what": "排列同步 iCloud（layout.json 出現、刪 app 重裝排列回來）",
-      "list": ".vibe/操作清單-待驗.md",
-      "since": "2026-11-02"
-    }
-  ],
+  "pending_immediate_verify": [],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -56,7 +49,7 @@
       "what": "D2 刪掉重裝紙會回來",
       "why": "改在裝正式版時補測（刪開發版、從 TestFlight 裝）",
       "since": "2026-11-01",
-      "status": "待補驗"
+      "status": "2026-11-02 C2 待驗清單第二段（開發版刪 app 重裝）多米回 C2 ok，補驗過"
     },
     {
       "what": "D3～D5、E3～E6、F5～F6",
@@ -110,7 +103,7 @@
       "what": "C2 真實情境走查",
       "why": "多米 2026-11-02 只回同步規則選擇題「照原定」",
       "since": "2026-11-02",
-      "status": "C2 立即驗時一併確認"
+      "status": "2026-11-02 C2 ok，補確認"
     },
     {
       "what": "C2 兩台互改的同步",
