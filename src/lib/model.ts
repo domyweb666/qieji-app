@@ -433,6 +433,22 @@ export function cloudFileBuried(gone: Record<string, number>, raw: unknown) {
   return gone[r.id] !== undefined && gone[r.id] >= (validTime(r.mod) ? r.mod : r.updated || 0);
 }
 
+// S5（2026-11-01 多米選「停下來問一次」）：iCloud 看起來換了一個——這台有同步過的紙（sh 有值），
+// iCloud 資料夾裡卻一張都沒有、墓碑也沒提到任何一張。可能是換了 Apple ID，或「檔案」裡的茄記資料夾被刪掉。
+// 套件讀不到帳號是誰，只能這樣推。names 用資料夾清單（含還沒下載的檔），不用讀得到的紙，免得檔案還在下載就誤判
+export function seemsNewCloud(s: State, names: string[], gone: unknown) {
+  const synced = s.notes.filter(n => n.sh !== undefined);
+  if (!synced.length) return false;
+  const there = new Set(names);
+  const g = fixGone(gone);
+  return !synced.some(n => there.has(`${n.id}.json`) || g[n.id] !== undefined);
+}
+
+// 多米選「放進去」：忘掉跟舊 iCloud 對過的記號，每張紙都當成沒傳過，下一輪全部傳進現在這個 iCloud
+export function forgetSync(s: State) {
+  for (const n of s.notes) delete n.sh;
+}
+
 // 第一次安裝放的教學紙、一個字都沒動過（S3，2026-11-01，規劃七之一）：不上傳；iCloud 上有別的紙時，從 iCloud 下來的這種也不收、本機的拿掉。
 // 動過任何一點（改字、劃掉、換色、丟進最近刪除）就是一般的紙，照常同步
 export function isUntouchedTutorial(n: Note) {

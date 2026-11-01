@@ -12,6 +12,12 @@ import { T, useColors } from '../lib/tokens';
 // 存不進去時字還在記憶體裡，下次有改動或 app 進背景會再存一次；但這時把 app 關掉就會不見，要講清楚。
 // 第一句先答「有沒有損失」；用一顆按鈕的提示框不用 toast，因為會丟字的訊息要讓人讀完（06-首次體驗 ❓7）
 store.onSaveError(() => ui.alert('字還在，但沒存進手機', '空間可能不夠。先別關 app，清出空間後再改一下就會重存'));
+// iCloud S5（多米 2026-11-01 選）：iCloud 看起來換了一個 → 問一次；iCloud 雲碟沒開 → 提示一次。第一句先答「有沒有損失」
+store.onNewCloud((adopt, decline) => ui.ask(
+  '這個 iCloud 裡沒有你的紙',
+  '紙都還在這台手機上。可能換了 Apple ID，或「檔案」裡的茄記資料夾被刪掉了。要把這台的紙放進現在這個 iCloud 嗎？選「先不要」的話，這次只存在手機上，下次打開會再問',
+  { label: '放進去', fn: adopt }, '先不要', decline));
+store.onCloudOff(() => ui.toast('iCloud 雲碟沒開，紙只存在這台手機'));
 
 const ios = Platform.OS === 'ios';
 // iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊

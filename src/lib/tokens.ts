@@ -203,7 +203,8 @@ export const gesture = {
   longPressMs: 500,   // 長按一行多久跳選單
   longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
 };
-export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 };
+export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700,
+  cloudOffGrace: 10000 }; // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
 // 小工具跑在隔離環境、不能 import 這個檔；這裡的值由 src/lib/widget.ts 算好用 props 傳過去

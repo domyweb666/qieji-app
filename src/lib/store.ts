@@ -2,9 +2,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { cloudPulled, fetchCloud, initCloud, pushCloud } from './cloud';
-import { dropNotes, emptyState, mergeCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
+import { dropNotes, emptyState, forgetSync, mergeCloud, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
+import { T } from './tokens';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
@@ -13,12 +14,28 @@ type Box = {
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
-  pulling?: boolean; synced?: Record<string, number>; // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
+  pulling?: boolean; synced?: Record<string, number>;
+  newCloud?: 'asking' | 'declined'; onNewCloud?: (adopt: () => void, decline: () => void) => void; onCloudOff?: () => void; // S5 // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
 const emit = () => box.subs.forEach(f => f());
 const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
+const CLOUD_OFF_KEY = 'cn.cloudOffSeen'; // 「iCloud 雲碟沒開」提示過了（只跳一次，S5）
+
+// S5 多米選「提示一次」：iCloud 不能用、過 10 秒再確認還是不能用，才跳一次「紙只存在這台手機」，之後永遠不再跳
+let offT: ReturnType<typeof setTimeout> | undefined;
+function cloudOffOnce() {
+  clearTimeout(offT);
+  offT = setTimeout(async () => {
+    try {
+      if (await AsyncStorage.getItem(CLOUD_OFF_KEY)) return;
+      if (await cloudOn()) return;
+      await AsyncStorage.setItem(CLOUD_OFF_KEY, '1');
+      box.onCloudOff?.();
+    } catch { /* 下次再說 */ }
+  }, T.timing.cloudOffGrace);
+}
 
 async function writeNow() {
   clearTimeout(box.saveT);
@@ -99,11 +116,20 @@ export const store = {
   // iCloud S3：拉下來合進本機（打開 app 讀完、回到前景、iCloud 變成可用、上傳時發現別台改過）。
   // 合併規則全在 model.mergeCloud；有變才重畫，一律存一次（記下 sh、把合出來比 iCloud 新的傳上去）
   async pullCloud() {
-    if (!box.loaded || box.pulling) return;
+    // 換了 iCloud 正在問、或這次打開選了「先不要」：不拉不傳，下次打開 app 再問
+    if (!box.loaded || box.pulling || box.newCloud) return;
     box.pulling = true;
     try {
       const remote = await fetchCloud();
+      if (remote === 'off') { cloudOffOnce(); return; }
       if (!remote) return;
+      // S5：這個 iCloud 裡一張這台同步過的紙都沒有（換了 Apple ID、或資料夾被刪了）：先停下來問，不合也不傳
+      if (seemsNewCloud(box.state, remote.names, remote.gone)) {
+        box.newCloud = 'asking';
+        pauseCloud(true);
+        box.onNewCloud?.(store.adoptCloud, () => { box.newCloud = 'declined'; });
+        return;
+      }
       const r = mergeCloud(box.state, remote, Date.now());
       if (r.retyped.length) {
         const m = (box.synced ??= {});
@@ -116,6 +142,16 @@ export const store = {
       cloudPulled();
     }
   },
+  // S5 多米選「放進去」：這台的紙全部當成沒傳過，跟現在這個 iCloud 合起來（它原本有的紙也會進來）、全部傳上去
+  adoptCloud() {
+    forgetSync(box.state);
+    box.newCloud = undefined;
+    pauseCloud(false);
+    store.save();
+    store.pullCloud();
+  },
+  onNewCloud(fn: (adopt: () => void, decline: () => void) => void) { box.onNewCloud = fn; },
+  onCloudOff(fn: () => void) { box.onCloudOff = fn; },
   // 這行的字被同步改過幾次：畫面加進輸入框的 key，字被換掉時重掛才看得到新字
   syncRev(id: string) { return box.synced?.[id] ?? 0; },
   // 最近刪除 30 天自動清（2026-11-01 接上，多米定；規則在 model.ts 與 tests/trash.test.mjs，鐵則是拿不準就不刪）：

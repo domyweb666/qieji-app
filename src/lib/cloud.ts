@@ -29,6 +29,7 @@ let ready = false;   // 打開 app 後第一次拉完（或確定拉不了）才
 let dirReady = false;
 let goneSent = '';   // 上次寫進 gone.json 的本機墓碑（只記在記憶體：重開 app 會再合一次，沒關係）
 const stuck = new Map<string, number>(); // 讀到逾時的檔名 → 什麼時候逾時的
+let paused = false; // S5：iCloud 看起來換了一個、使用者還沒說要不要放進去：不上傳
 
 function load(): Cloud | null {
   if (cloud !== undefined) return cloud;
@@ -86,6 +87,19 @@ export function pushCloud(s: State, soon = false) {
   schedule(soon ? 0 : WAIT);
 }
 
+// S5：暫停／恢復上傳（換了 iCloud 等使用者回答時）
+export function pauseCloud(p: boolean) {
+  paused = p;
+  if (!p && job) schedule(0);
+}
+
+// 現在 iCloud 能不能用（S5「iCloud 沒開」提示前再確認一次）；沒有模組當成不適用，回 true 不提示
+export async function cloudOn() {
+  const c = load();
+  if (!c) return true;
+  try { return await within(c.isCloudAvailable()); } catch { return true; }
+}
+
 // store 合完一次（或確定這次拉不了）之後呼叫：從這一刻起准上傳，等著的馬上傳
 export function cloudPulled() {
   ready = true;
@@ -106,7 +120,7 @@ async function run() {
 
 async function once() {
   const c = cloud, s = job;
-  if (!c || !s || !ready) return;
+  if (!c || !s || !ready || paused) return;
   const notes = pendingUploads(s);
   const gone = s.gone ?? {};
   const goneNow = JSON.stringify(gone);
@@ -185,10 +199,11 @@ async function sweep(c: Cloud, gone: Record<string, number>) {
   }
 }
 
-// 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud）。拿不到（沒登入、雲碟關掉、資料夾還沒有、讀失敗、整次逾時）回 null。
+// 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud），加上資料夾清單 names（含還沒下載的檔，S5 判斷換帳號用）。
+// iCloud 沒登入或雲碟關掉回 'off'；其他拿不到（資料夾還沒有、讀失敗、整次逾時）回 null。
 // 某一張讀不到（還沒下載下來、逾時）就先請 iCloud 下載、這次跳過，下次拉就有了：少一張不會害到資料，本機那張留著，
 // 而且那張在上傳前也會因為「讀不到 iCloud 那份」先不傳，不會拿本機的去蓋
-export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown } | null> {
+export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown; names: string[] } | 'off' | null> {
   const c = load();
   if (!c) return null;
   try {
@@ -200,7 +215,7 @@ export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown } 
 }
 
 async function fetchAll(c: Cloud) {
-  if (!(await within(c.isCloudAvailable()))) return null;
+  if (!(await within(c.isCloudAvailable()))) return 'off' as const;
   let names: string[];
   try {
     names = await within(c.readdir(''), LIST_LIMIT);
@@ -225,5 +240,5 @@ async function fetchAll(c: Cloud) {
     if (name === GONE) gone = data;
     else notes.push(data);
   }
-  return { notes, gone };
+  return { notes, gone, names };
 }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   parseState, emptyState, fingerprint, stampMods, dropNotes, markSynced, pendingUploads, mergeRemote, isExpiredTrash,
   mergeCloud, tutorialNote, isUntouchedTutorial, remotePrint, cloudFileBuried, markDeleted, markRestored, binItem,
+  seemsNewCloud, forgetSync,
 } from '../src/lib/model.ts';
 
 const NOW = new Date(2026, 10, 1, 12, 0).getTime();
@@ -357,4 +358,31 @@ test('S4：iCloud 上的檔案比墓碑新（永久刪除後別台又改過）�
   assert.equal(cloudFileBuried({ p: NOW }, raw), false);
   assert.equal(cloudFileBuried({ p: NOW + 100 }, raw), true);
   assert.equal(cloudFileBuried({}, raw), false);
+});
+
+// S5 換 Apple ID（2026-11-01）
+test('S5：同步過的紙在 iCloud 一張都找不到、墓碑也沒有 → 看起來換了 iCloud', () => {
+  const { s } = synced({ id: 'a' });
+  assert.equal(seemsNewCloud(s, [], {}), true);
+  assert.equal(seemsNewCloud(s, ['別人的.json', 'gone.json'], {}), true);
+});
+
+test('S5：只要有一張還在（就算還沒下載下來）、或墓碑提到它，就是同一個 iCloud', () => {
+  const { s } = synced({ id: 'a' });
+  assert.equal(seemsNewCloud(s, ['a.json'], {}), false);
+  assert.equal(seemsNewCloud(s, [], { a: NOW }), false);
+});
+
+test('S5：這台從沒同步過（新手機、重裝）不算換 iCloud', () => {
+  const s = state(note({ id: 'a' }));
+  stampMods(s, NOW);
+  assert.equal(seemsNewCloud(s, [], {}), false);
+});
+
+test('S5：選「放進去」之後，每張紙都要重新上傳', () => {
+  const { s } = synced({ id: 'a' });
+  assert.deepEqual(pendingUploads(s), []);
+  forgetSync(s);
+  assert.deepEqual(pendingUploads(s).map(n => n.id), ['a']);
+  assert.equal(seemsNewCloud(s, [], {}), false);
 });
