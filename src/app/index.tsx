@@ -16,9 +16,10 @@ export default function Home() {
   useEffect(() => { if (!n) newNote(); }, [n]);
   if (!n) return <View style={{ flex: 1, backgroundColor: c.page }} />;
   // key 換了就是換紙：舊的那張卸載時自己收尾（空行拿掉、整張空的就不留）。
-  // 換紙時新的那張淡入（2026-11-01 第二輪 S2，Paper 自己帶進場動畫）；第一次打開 app 的那張跟這個包一起掛上，不播進場，交給啟動畫面
+  // 換紙時新的那張淡入（2026-11-01 第二輪 S2，Paper 自己帶進場動畫）；第一次打開 app 的那張跟這個包一起掛上，不播進場，交給啟動畫面。
+  // 左右撥換張時旁邊那張擺在螢幕外（Paper 的 PagePreview），這層把螢幕外的裁掉
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, overflow: 'hidden' }}>
       <LayoutAnimationConfig skipEntering><Paper key={n.id} n={n} /></LayoutAnimationConfig>
       <DirPanelHost />
     </View>

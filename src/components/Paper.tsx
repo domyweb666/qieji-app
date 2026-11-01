@@ -59,13 +59,15 @@ const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
 const KBF = T.motion.keyboardFollow;
 const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]);
 const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(KB_EASING);
-// 標題區左右撥換張（B4）：舊的清單名滑出去、新的從另一邊滑進來
-const NS = T.motion.noteSwap;
-const SWAP_OUT = { duration: NS.out, easing: Easing.bezier(NS.outEasing[0], NS.outEasing[1], NS.outEasing[2], NS.outEasing[3]) };
-const SWAP_IN = { duration: NS.in, easing: Easing.bezier(NS.inEasing[0], NS.inEasing[1], NS.inEasing[2], NS.inEasing[3]) };
-// 換紙＝key 換了、新的那張重新掛上，所以「新的清單名從哪邊滑進來」放模組層級交給它：1＝從右、-1＝從左、0＝不滑（從目錄換、減少動態）
-let slideFrom = 0;
-function swapTo(id: string, from: number) { slideFrom = from; store.open(id); }
+// 標題區左右撥換張（B4；多米 2026-11-02 改成整頁一起換，照 iOS 分頁捲動）：整張紙跟著手指走，旁邊那張（PagePreview）同時從另一邊滑進來，
+// 放手撥過半頁或往那邊甩就整頁滑過去，滑到定位才換紙。給 worklet 用的值先拆成數字和自己的物件（worklet 抓到的物件會被鎖住，規矩檔）
+const PAGE_TURN = { ...T.motion.pageTurn.spring }, SNAP_BACK = { ...T.motion.snapBack.spring };
+const TURN_RATIO = T.gesture.pageTurnRatio, TURN_FLICK = T.gesture.swapFlick, EDGE_FOLLOW = T.gesture.swapEdge;
+// 換紙＝key 換了、新的那張重新掛上。整頁撥過來的：旁邊那張的預覽已經滑到定位，新的那張直接接手、不淡入（pagedIn 放模組層級交給它）
+let pagedIn = false;
+const openNote = (id: string) => store.open(id); // 減少動態：直接換，新的那張照常淡入
+const NOOP = () => {};
+const NO_ACTIONS: { name: string; label: string }[] = [];
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -79,6 +81,9 @@ export function Paper({ n }: { n: Note }) {
   const { fontScale: fs, height: winH, width: winW } = useWindowDimensions();
   const c = useColors();
   const nc = useNoteColors(n.color);
+  // 整頁撥過來的這張（B4）：不淡入、裡面的東西也不跑進場動畫，接手的那一刻才跟旁邊那張的預覽一模一樣
+  const [paged] = useState(() => pagedIn);
+  useEffect(() => { pagedIn = false; }, []);
   const closed = useRef(false);
   const mounted = useRef(true);
   const scrollRef = useRef<any>(null);
@@ -550,32 +555,40 @@ export function Paper({ n }: { n: Note }) {
       scheduleOnRN(dirSettle, open, e.velocityY / dirH.value);
     },
   });
-  // B4：標題區左右撥＝在把手那幾張（swipeSet）之間換，手指往左＝換到右邊那張。清單名和時間那兩行跟著手指走，到頭只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
-  // 撥夠了舊的滑出去、滑完才換紙，新的那張從另一邊滑進來（slideFrom）。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
+  // B4：標題區左右撥＝在把手那幾張（swipeSet）之間換，手指往左＝換到右邊那張。整張紙跟著手指走（多米 2026-11-02：像 iOS 分頁一樣整頁一起換，只從標題區撥），
+  // 旁邊那張的預覽（PagePreview）同時從另一邊滑進來；到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
+  // 撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙（turnTo）；不夠就彈回。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
   const swapSet = swipeSet(store.s, n), at = swapSet.indexOf(n);
-  const prevId = swapSet[at - 1]?.id ?? '', nextId = swapSet[at + 1]?.id ?? '';
-  const hx = useSharedValue(slideFrom * winW);
-  useEffect(() => {
-    if (hx.value !== 0) hx.value = withTiming(0, SWAP_IN);
-    slideFrom = 0;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: hx.value }] }));
+  const prevN = swapSet[at - 1], nextN = swapSet[at + 1];
+  const prevId = prevN?.id ?? '', nextId = nextN?.id ?? ''; // worklet 只抓 id 字串，不抓紙物件
+  const hx = useSharedValue(0);
+  const turning = useSharedValue(0); // 已經決定換頁、正在滑過去：這段不再接手指
+  const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: hx.value }] }));
+  // 滑到定位：換成那張（新的那張不淡入）。那張剛好被別台刪掉了就彈回這張
+  function turnTo(id: string) {
+    if (!store.s.notes.some(x => x.id === id && !x.deleted)) { turning.value = 0; hx.value = withSpring(0, SNAP_BACK); return; }
+    pagedIn = true;
+    store.open(id);
+  }
   const swap = usePanGesture({
     enabled: !renaming,
     activeOffsetX: [-PG.pullFailX, PG.pullFailX],
     failOffsetY: [-PG.swapFailY, PG.swapFailY],
     onUpdate: e => {
       'worklet';
+      if (turning.value) return;
       const x = e.translationX, end = x < 0 ? !nextId : !prevId;
-      hx.value = end ? x * PG.swapEdge : x;
+      hx.value = end ? x * EDGE_FOLLOW : x;
     },
     onDeactivate: e => {
       'worklet';
+      if (turning.value) return;
       const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
-      const go = !e.canceled && !!id && (Math.abs(e.translationX) > PG.swapDist || -d * e.velocityX > PG.swapFlick);
-      if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...T.motion.snapBack.spring }); return; }
-      if (calm) { scheduleOnRN(swapTo, id, 0); return; }
-      hx.value = withTiming(-d * winW, SWAP_OUT, done => { if (done) scheduleOnRN(swapTo, id, d); });
+      const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
+      if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
+      if (calm) { scheduleOnRN(openNote, id); return; }
+      turning.value = 1;
+      hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(turnTo, id); });
     },
   });
   // 往下拉（開目錄）跟左右撥（換張）先成立的那個贏，另一個當場作廢
@@ -624,15 +637,16 @@ export function Paper({ n }: { n: Note }) {
   // 紙底下那行手勢提示（點一下改字 · 右滑劃掉 · 左滑刪除 · 按住更多）2026-11-01 拿掉：第一次安裝放的教學紙（model.ts TUTORIAL）取代它
 
   return (
-    <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
+    // 左右撥換張（B4）時整張紙一起跟著手指走（pageStyle）；整頁撥過來的這張不淡入、裡面也不跑進場動畫（paged）
+    <Animated.View style={[{ flex: 1, backgroundColor: nc.bg }, pageStyle]} collapsable={false} entering={paged ? undefined : ROW_IN}>
+      <LayoutAnimationConfig skipEntering={paged}>
       {/* 最上面一行：清單名（⋯ 裡的「改名字」才會變成可以打字，點清單名不會；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
       <GestureDetector gesture={head}>
       <View collapsable={false}>
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
-        {/* 左右撥換張時跟著手指走的是清單名和下面時間那行；⋯ 和把手不動（B4） */}
-        <Animated.View style={[st.titleSlide, slideStyle]}>
+        <View style={st.titleSlide}>
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
           // 紙上每一行用的多行輸入框畫中文從沒切過。貼上帶換行的字時換行換成空格，清單名只有一行
@@ -654,7 +668,7 @@ export function Paper({ n }: { n: Note }) {
               maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
           </View>
         )}
-        </Animated.View>
+        </View>
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
         <Animated.View layout={calm ? undefined : KB_SLIDE}>
           <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
@@ -666,10 +680,10 @@ export function Paper({ n }: { n: Note }) {
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
       <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
-        <Animated.View style={[st.timeRow, slideStyle]}>
+        <View style={st.timeRow}>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
-        </Animated.View>
+        </View>
         <SegHandle notes={swapSet} cur={n} color={c.textSecondary} onPress={openDir} />
       </View>
       </View>
@@ -743,9 +757,77 @@ export function Paper({ n }: { n: Note }) {
           header={<Swatches current={n.color} onPick={pickColor} />} />
       )}
       {rowMenu && <PopMenu acts={rowActs(rowMenu.id)} top={rowMenu.top} onClose={() => setRowMenu(null)} />}
+
+      {/* 左右撥換張時旁邊那張（B4 整頁）：擺在螢幕外左右各一張，跟著整張紙一起滑進來 */}
+      {prevN && <PagePreview n={prevN} side={-1} />}
+      {nextN && <PagePreview n={nextN} side={1} />}
+      </LayoutAnimationConfig>
     </Animated.View>
   );
 }
+
+// 左右撥換張時旁邊那張（B4，多米 2026-11-02「整個頁面一起換」）：跟真的紙同一套版面和樣式（標題列、時間列、把手、一行一行、右下 ＋），
+// 但不能點、不能打字、VoiceOver 不讀。擺在螢幕外左邊（side −1）或右邊（1），跟著整張紙一起滑進來；滑到定位後換成真的那張（turnTo），
+// 兩張要長得一模一樣才不會閃。滑進來只看得到最上面那段，行只畫到一個螢幕放得下的數量。自己聽 store：那張被改了（同步、目錄改色）才重畫
+const PagePreview = memo(function PagePreview({ n, side }: { n: Note; side: -1 | 1 }) {
+  useStore();
+  const insets = useSafeAreaInsets();
+  const c = useColors();
+  const nc = useNoteColors(n.color);
+  const { fontScale: fs, height: winH, width: winW } = useWindowDimensions();
+  const fit = Math.ceil(winH / ROW_MIN); // 一行最矮 ROW_MIN，畫這麼多行一定蓋滿一個螢幕
+  return (
+    <View style={[StyleSheet.absoluteFill, { left: side * winW, right: -side * winW, backgroundColor: nc.bg }]} pointerEvents="none"
+      accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
+        <View style={st.titleSlide}>
+          <View style={st.titleBtn}>
+            {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
+            <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
+              maxFontSizeMultiplier={T.font.listTitleMaxScale}>{n.title.trim() || '未命名'}</Text>
+          </View>
+        </View>
+        <GlassBtn icon="ellipsis" label="選單" onPress={NOOP} />
+      </View>
+      <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
+        <View style={st.timeRow}>
+          <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
+          <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
+        </View>
+        <SegHandle notes={swipeSet(store.s, n)} cur={n} color={c.textSecondary} onPress={NOOP} />
+      </View>
+      <View style={st.previewBody}>
+        {n.items.length === 0 ? (
+          <View style={st.empty}>
+            <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
+            <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
+          </View>
+        ) : n.items.slice(0, fit).map(it => (
+          <RowFace key={it.id} t={it.t} done={it.done} bg={nc.bg} rule={nc.rule} colors={c} fs={fs} />
+        ))}
+      </View>
+      <Fab onPress={NOOP} label="新增一行" />
+    </View>
+  );
+});
+
+// 預覽頁的一行：跟紙上的一行（LineRow）同一套樣式、同一個 Field，只是沒有手勢、不能打字。字變了就重掛 Field（它的字是不受控的）
+const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: string; done: boolean; bg: string; rule: string; colors: Colors; fs: number }) {
+  return (
+    // 陰影平常是 0（紙上那行由 shift 只在拿起時亮起來），這裡也明寫 0，不然網頁會畫出預設的陰影
+    <View style={[st.ci, st.ciFlat, { backgroundColor: bg, borderBottomColor: rule }]}>
+      <View style={[st.cin, { backgroundColor: bg }]}>
+        <View style={st.field}>
+          <Field key={t} text={t} done={done} fs={fs} colors={colors} refInput={NOOP} actions={NO_ACTIONS} onAction={NOOP}
+            onLines={NOOP} onChange={NOOP} onKey={NOOP} onSubmit={NOOP} onFocus={NOOP} onBlur={NOOP} />
+        </View>
+        <View style={st.grip}>
+          <Sym name="line.3.horizontal" size={18} color={colors.textSecondary} />
+        </View>
+      </View>
+    </View>
+  );
+});
 
 // ⋯ 選單最上面一排九個色塊（Swatches.tsx，目錄的篩選也用它）：點了紙直接換色，選單不關（看得到後面換了）
 
@@ -1074,6 +1156,8 @@ const st = StyleSheet.create({
   seg: { width: T.shape.handleSeg, height: T.shape.handleH, borderRadius: T.shape.pill(T.shape.handleH) },
   timeText: { ...T.font.footnote },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
+  previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）
+  ciFlat: { shadowOpacity: 0 }, // 預覽頁的行沒有陰影（紙上那行平常也是 0）；只用一次
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去

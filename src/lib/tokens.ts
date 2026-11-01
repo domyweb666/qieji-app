@@ -159,6 +159,7 @@ export const shape = {
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
   folderMini: 16, // 資料夾磚下面那排小方塊（D1）：裡面每張紙一個，顏色是那張紙的色點，最多四個（folderMinis），更多的寫 +N
   folderMinis: 4,
+  minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
   folderMiniRadius: 4,
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
@@ -186,9 +187,9 @@ export const motion = {
   sheetSlide:    { in: 220, out: 180 },
   // 目錄面板（B3）從上面垂下來／收上去：放手後帶著手指速度彈到底，不過頭（原型 340ms）。減少動態：不滑，淡入淡出
   dirPanel:      { spring: { duration: 340, dampingRatio: 1, overshootClamping: true }, reducedFade: 200 },
-  // 標題區左右撥換張（B4）：舊的清單名滑出去（out，越來越快），新的那張的清單名從另一邊滑進來（in，越來越慢）（原型 160ms／300ms）。
-  // 沒撥夠放手彈回用 snapBack。減少動態：撥的當下照樣跟手，放手不滑出滑進，交給換紙本來就有的整張淡入
-  noteSwap:      { out: 160, in: 300, outEasing: [0.42, 0, 1, 1] as const, inEasing: [0.2, 0.85, 0.25, 1] as const },
+  // 標題區左右撥換張（B4；多米 2026-11-02 改成整頁一起換，照 iOS 分頁捲動）：放手後整頁帶著手指的速度滑到下一張，不過頭（跟目錄面板同一組，原型 340ms）。
+  // 沒撥夠放手彈回用 snapBack。減少動態：撥的當下照樣跟手，放手不滑過去，交給換紙本來就有的整張淡入
+  pageTurn:      { spring: { duration: 340, dampingRatio: 1, overshootClamping: true } },
   // 目錄編輯（C4，抖動）：每塊磚左右轉 deg 度來回（單程 half 毫秒），相鄰兩塊方向相反才像 iOS 主畫面。減少動態：不抖
   jiggle:        { deg: 1.2, half: 120 },
   // 目錄拖磚時其他磚讓位滑過去（C4）。減少動態：直接到位
@@ -222,8 +223,9 @@ export const gesture = {
   // 拉過面板高度的 pullOpenRatio、或往下甩超過 flick（點／秒）放手就打開；面板底部把手往上推超過 pushCloseRatio 或往上甩就收起（多米原型）
   pullActivate: 10, pullFailX: 14, pullOpenRatio: 0.2, pushCloseRatio: 0.15, flick: 550,
   // 標題區左右撥換張（B4）：左右動超過 pullFailX 才算撥（跟上面往下拉同一個門檻，先動哪個方向就是哪個）；先上下動超過 swapFailY 就不算。
-  // 撥過 swapDist 點或往同一邊甩超過 swapFlick（點／秒）放手就換；到頭（沒有下一張）標題只跟手指的 swapEdge 倍（多米原型）
-  swapFailY: 12, swapDist: 60, swapFlick: 500, swapEdge: 0.3,
+  // 整頁跟著手指走（多米 2026-11-02）：撥過半頁（pageTurnRatio × 螢幕寬）或往同一邊甩超過 swapFlick（點／秒）放手就換，跟 iOS 分頁一樣；
+  // 到頭（沒有下一張）整頁只跟手指的 swapEdge 倍（多米原型）
+  swapFailY: 12, pageTurnRatio: 0.5, swapFlick: 500, swapEdge: 0.3,
   tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
   stackZone: 0.3, // D2：拖著那塊的中心離底下那格中心，左右不到磚寬、上下不到磚高的這個比例＝在正中間（停著就疊，不讓位）

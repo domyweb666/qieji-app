@@ -17,12 +17,12 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
-  type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
+  type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, {
-  cancelAnimation, LinearTransition, makeMutable, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
-  type SharedValue,
+  cancelAnimation, LinearTransition, makeMutable, scrollTo, useAnimatedRef, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  type AnimatedRef, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -53,6 +53,8 @@ const ZONE = T.gesture.stackZone, GROW = T.motion.stackTarget.scale;
 // 彈簧設定抄一份自己的：被抓進 worklet 的物件會被鎖住，不讓 tokens 裡的 M、G 被鎖（規矩檔 2026-11-02）
 const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring }, LIFT_SCALE = M.dragLift.scale;
 const PUSH_CLOSE = G.pushCloseRatio, FLICK = G.flick;
+// 抖動中在空白處撥翻頁（PageBack）：跟清單左右撥換張同一組門檻（撥過半頁或甩一下就翻、到頭只跟三成）
+const TURN_RATIO = G.pageTurnRatio, TURN_FLICK = G.swapFlick, EDGE_FOLLOW = G.swapEdge;
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
 // 一個點（相對格子左上角）落在第幾格：兩欄、磚高 TILE、間距 GAP（D4 起拖曳都用螢幕座標算）
@@ -356,7 +358,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const aimT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const leaveT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const entered = useRef(false); // 打開的資料夾手指進去過了沒（剛彈開時手指常在框外，進去過一次之後離開才收起）
-  const pagerRef = useRef<ScrollViewInstance>(null);
+  const pagerRef = useAnimatedRef<Animated.ScrollView>(); // 抖動中在空白處撥翻頁時，手勢在 UI 執行緒直接捲它（scrollTo）
   const edgeT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 換拖曳狀態一律走這裡：同時把手勢要讀的格子位置、格數、讓出來那格寫進 shared value（不等重畫）
@@ -420,6 +422,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     if (empty) dropNotes(store.s, x => x === n, Date.now());
     store.change();
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); store.change(); } });
+  }
+  // 抖動中點紙磚左上角的「−」（照 iOS 主畫面移除 App，多米 2026-11-02 選跳確認框）：按「刪除」才刪，刪法跟長按選單的刪除一樣（進最近刪除、toast 復原）
+  function askDel(n: Note) {
+    ui.confirm(`要刪除「${label(n)}」嗎？`, () => del(n), '刪除');
   }
   // 放進資料夾（D1，2026-11-02 晚起只剩 VoiceOver 動作）：還沒有看得到的資料夾就直接在這張的位置開一個新的、打開讓你取名；有就問放進哪一個
   function putIn(n: Note) {
@@ -652,7 +658,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n!.id);
     return (
       <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 3 : 4)} onA11y={noteA11y(n!)}>
+        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 3 : 4)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
         {face(e, tileW)}
       </Tile>
     );
@@ -690,16 +696,18 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
           {notes.length === 0 && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
         </ScrollView>
       ) : (
-        // C3 多頁：一頁放幾列照格子區的高度算（螢幕小、字放大就少放），放不下往右一頁；整頁翻（系統分頁捲動），每次打開從第一頁。抖動中不翻（C5 才有拖到邊緣翻頁）
+        // C3 多頁：一頁放幾列照格子區的高度算（螢幕小、字放大就少放），放不下往右一頁；整頁翻（系統分頁捲動），每次打開從第一頁。
+        // 抖動中系統捲動關掉（手指在磚上一動就是拿起來），改由空白處的撥動帶著整頁走（PageBack，照 iOS 主畫面晃動中也能翻頁）；拖著磚到邊緣停一下也會翻（C5）
         <View style={{ flex: 1 }} onLayout={e => { setBoxH(e.nativeEvent.layout.height); pagerY.current = e.nativeEvent.layout.y; }}>
           {boxH > 0 && (
-            <ScrollView ref={pagerRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={pages.length > 1 && !editing}
+            <Animated.ScrollView ref={pagerRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={pages.length > 1 && !editing}
               keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => Keyboard.dismiss()}
               onScroll={e => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               scrollEventThrottle={T.timing.pageScroll}>
               {pages.map((_, i) => (
                 <View key={i} style={[st.page, { width }]} pointerEvents="box-none" accessibilityLabel={pages.length > 1 ? `第 ${i + 1} 頁，共 ${pages.length} 頁` : undefined}>
-                  <PageBack editing={editing} onHold={() => { setMenu(null); haptic('menu'); setEditing(true); }} onTap={() => setEditing(false)} />
+                  <PageBack editing={editing} calm={calm} pg={i} count={pages.length} width={width} pager={pagerRef}
+                    onHold={() => { setMenu(null); haptic('menu'); setEditing(true); }} onTap={() => setEditing(false)} />
                   {i === 0 && (
                     <Pressable onPress={editing ? undefined : add} accessibilityRole="button" accessibilityLabel="新的一張"
                       style={({ pressed }) => [st.tile, st.add, { width: tileW, borderColor: c.separator }, pressed && !editing && { opacity: T.motion.pressDim }]}>
@@ -713,7 +721,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                   </View>
                 </View>
               ))}
-            </ScrollView>
+            </Animated.ScrollView>
           )}
         </View>
       )}
@@ -758,7 +766,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                 {folderList.map((n, k) => (
                   <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={drag?.id === n.id}
                     dg={dg} screenW={width} gw={tileW}
-                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}
+                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
                     onDragStart={() => dragStartFolder(n, openEntry.id, k)} onAim={onAim} onEdge={onEdge} onDrop={drop} />
                 ))}
               </View>
@@ -783,6 +791,7 @@ type TileProps = {
   w: number; sw: number; fw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; dg: DG;
   label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
   tapInEdit?: boolean; // 抖動中點一下也算（資料夾磚：iOS 抖動中點檔案夾會打開）
+  onMinus?: () => void; // 抖動中左上角的「−」（只有紙磚；資料夾磚沒有，照 iOS）
   onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
   onA11y: (name: string) => void;
 };
@@ -848,17 +857,40 @@ function Tile(p: TileProps) {
         accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
         {p.children}
+        {p.editing && p.onMinus && <Minus onPress={p.onMinus} />}
       </Animated.View>
     </GestureDetector>
   );
 }
 
 // 目錄一頁的空白處（多米 2026-11-02 晚，照 iOS 使用手冊「按住主畫面背景直到項目開始晃動」「完成後點一下背景」）：
-// 墊在磚的下面，磚、新的一張蓋在上面，點到磚不會到這裡（頁和格子都設 box-none，空白處才點得到它）。按住＝進抖動；抖動中點一下＝結束
-function PageBack({ editing, onHold, onTap }: { editing: boolean; onHold: () => void; onTap: () => void }) {
+// 墊在磚的下面，磚、新的一張蓋在上面，點到磚不會到這裡（頁和格子都設 box-none，空白處才點得到它）。按住＝進抖動；抖動中點一下＝結束。
+// 抖動中左右撥＝翻頁（多米 2026-11-02：目錄翻頁要像主畫面整頁一起換；iOS 晃動中也能翻）：整頁跟著手指走，撥過半頁或甩一下就翻過去，不夠就回來，到頭只跟三成
+type PageBackProps = {
+  editing: boolean; calm: boolean; pg: number; count: number; width: number; pager: AnimatedRef<Animated.ScrollView>;
+  onHold: () => void; onTap: () => void;
+};
+function PageBack({ editing, calm, pg, count, width, pager, onHold, onTap }: PageBackProps) {
   const hold = useLongPressGesture({ runOnJS: true, enabled: !editing, minDuration: G.longPressMs, maxDistance: G.longPressMove, onActivate: () => onHold() });
   const tap = useTapGesture({ runOnJS: true, enabled: editing, maxDistance: G.longPressMove, onActivate: () => onTap() });
-  const gesture = useExclusiveGestures(hold, tap);
+  const max = (count - 1) * width, base = pg * width;
+  const turn = usePanGesture({
+    enabled: editing && count > 1,
+    activeOffsetX: [-G.pullFailX, G.pullFailX],
+    failOffsetY: [-G.swapFailY, G.swapFailY],
+    onUpdate: e => {
+      'worklet';
+      const x = base - e.translationX;
+      scrollTo(pager, x < 0 ? x * EDGE_FOLLOW : x > max ? max + (x - max) * EDGE_FOLLOW : x, 0, false);
+    },
+    onDeactivate: e => {
+      'worklet';
+      const d = e.translationX < 0 ? 1 : -1;
+      const go = !e.canceled && (Math.abs(e.translationX) > width * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
+      scrollTo(pager, Math.min(max, Math.max(0, base + (go ? d * width : 0))), 0, !calm);
+    },
+  });
+  const gesture = useExclusiveGestures(turn, hold, tap);
   return (
     <GestureDetector gesture={gesture}>
       <View style={StyleSheet.absoluteFill} />
@@ -866,11 +898,23 @@ function PageBack({ editing, onHold, onTap }: { editing: boolean; onHold: () => 
   );
 }
 
+// 抖動中紙磚左上角的「−」（多米 2026-11-02：照 iOS 主畫面晃動時 App 左上角的移除鈕；資料夾磚沒有）。點了由上層跳確認框。
+// 圓點小，熱區用 hitSlop 補到 44 以上；VoiceOver 走磚上的「刪除」動作，這顆不另外讀
+function Minus({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} hitSlop={T.space.m} accessible={false}
+      style={({ pressed }) => [st.minus, { backgroundColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
+      <Sym name="minus" size={12} color={c.textPrimary} weight="semibold" />
+    </Pressable>
+  );
+}
+
 // 資料夾裡的一張（D3、D4）：點＝換紙；長按（不動）＝選單；長按後一拖（抖動中直接拖）＝拿起來：框裡換順序，拖出框停一下資料夾收起、放到目錄任一格。
 // 跟目錄的磚分開寫是因為長相、點的規則不同；拖跟目錄共用 useDragPan
 type FolderTileProps = {
   n: Note; k: number; w: number; calm: boolean; editing: boolean; cur: boolean; ghost: boolean; dg: DG; screenW: number; gw: number; label: string;
-  onPick: () => void; onMenu: (y: number) => void; onA11y: (name: string) => void;
+  onPick: () => void; onMenu: (y: number) => void; onA11y: (name: string) => void; onMinus: () => void;
   onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function FolderTile(p: FolderTileProps) {
@@ -917,6 +961,7 @@ function FolderTile(p: FolderTileProps) {
         accessibilityState={{ selected: p.cur }} accessibilityActions={NOTE_IN_A11Y}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
         <TileFace n={p.n} w={p.w} cur={p.cur} />
+        {p.editing && <Minus onPress={p.onMinus} />}
       </Animated.View>
     </GestureDetector>
   );
@@ -1010,6 +1055,9 @@ const st = StyleSheet.create({
   mini: { width: T.shape.folderMini, height: T.shape.folderMini, borderRadius: T.shape.folderMiniRadius },
   more: { ...T.font.footnote },
   folderWrap: { justifyContent: 'center' },
+  // 「−」壓在磚的左上角、一半露在外面（像 iOS）
+  minus: { position: 'absolute', top: -T.space.s, left: -T.space.s, width: T.shape.minusBadge, height: T.shape.minusBadge,
+    borderRadius: T.shape.pill(T.shape.minusBadge), alignItems: 'center', justifyContent: 'center' },
   folderBox: { marginHorizontal: T.space.l, borderRadius: T.shape.radiusPanel, padding: T.space.l, ...T.shape.shadowSoft },
   folderName: { ...T.font.paperTitle, textAlign: 'center', paddingVertical: T.space.m, marginHorizontal: T.space.l },
 });

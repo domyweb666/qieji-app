@@ -11,7 +11,7 @@ const Icon: typeof IconComponent | null = Platform.OS === 'ios' ? null : require
 const FALLBACK: Partial<Record<string, Parameters<typeof IconComponent>[0]['name']>> = {
   'chevron.left': 'back', checkmark: 'check', ellipsis: 'dots', plus: 'plus', magnifyingglass: 'search',
   trash: 'trash', xmark: 'close', 'arrow.uturn.backward': 'undo', 'arrow.uturn.forward': 'redo',
-  'line.3.horizontal': 'menu', 'chevron.down': 'down', 'chevron.up': 'upchev', 'chevron.right': 'right', 'arrow.up': 'up',
+  'line.3.horizontal': 'menu', 'chevron.down': 'down', 'chevron.up': 'upchev', 'chevron.right': 'right', 'arrow.up': 'up', minus: 'minus',
 };
 
 export function Sym({ name, size = 20, color, weight }: { name: SFSymbol; size?: number; color: ColorValue; weight?: 'regular' | 'medium' | 'semibold' }) {
