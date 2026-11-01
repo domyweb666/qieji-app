@@ -36,7 +36,9 @@ export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } 
 // gone＝墓碑：永久拿掉的紙 id → 拿掉的時間（S0，2026-11-01 加）。沒有它，另一台還留著的那張會被同步回來，刪掉的紙復活
 // order＝目錄座位表（C1，2026-11-02 加）：每張紙的 id 照目錄裡的先後排，舊存檔沒有。sort 從此不用，但照鐵則留著
 // orderMod＝座位表最後一次親手排（拖、往前移／往後移）的時間，或從 iCloud 照抄來那份的時間；orderSent＝上次跟 iCloud 對上的 orderMod（C2，2026-11-02 加）
-export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[]; orderMod?: number; orderSent?: number };
+// folders＝目錄裡的資料夾（D1，2026-11-02 加）：名字＋裡面的紙照順序。資料夾在座位表裡佔一格，裡面的紙不佔
+export type Folder = { id: string; name: string; ids: string[] };
+export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[]; orderMod?: number; orderSent?: number; folders?: Folder[] };
 
 // name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
 // 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
@@ -216,17 +218,38 @@ const firstSeats = (s: State) => [
   ...s.notes.filter(n => n.deleted).sort((a, b) => b.updated - a.updated),
 ].map(n => n.id);
 
+// 資料夾（D1）：格式不對的丟掉；裡面不存在的紙、重複的、已經在前一個資料夾裡的拿掉；一張都不剩的資料夾拿掉（多米 2026-11-02：空了就消失）。
+// 在最近刪除裡的紙留在資料夾裡（還原回去）。存檔裡、iCloud 上讀來的都可能是壞的，一律走這裡
+export const FOLDER_NAME = '新資料夾';
+function fixFolders(raw: unknown, ids: Set<string>): Folder[] {
+  const used = new Set<string>(), fids = new Set<string>();
+  const out: Folder[] = [];
+  for (const f of (Array.isArray(raw) ? raw : []) as Partial<Folder>[]) {
+    if (!f || typeof f.id !== 'string' || ids.has(f.id) || fids.has(f.id) || !Array.isArray(f.ids)) continue;
+    const inner = f.ids.filter(id => typeof id === 'string' && ids.has(id) && !used.has(id) && !!used.add(id));
+    if (!inner.length) continue;
+    fids.add(f.id);
+    out.push({ id: f.id, name: typeof f.name === 'string' && f.name.trim() ? f.name : FOLDER_NAME, ids: inner });
+  }
+  return out;
+}
+
 // 存檔前對一次座位表：表裡有、紙沒有的座位丟掉（永久拿掉的紙），重複的只留第一個；紙有、表裡沒有的補在最後（新的一張、
-// 這台沒見過的、匯入的；好幾張時最近改過的在前）。有改才寫回，回傳有沒有改
+// 這台沒見過的、匯入的；好幾張時最近改過的在前）。D1：資料夾佔一格（沒座位的補最後），在資料夾裡的紙不佔格。有改才寫回，回傳有沒有改
 export function fixOrder(s: State) {
   const ids = new Set(s.notes.map(n => n.id));
+  const folders = fixFolders(s.folders, ids);
+  const inFolder = new Set(folders.flatMap(f => f.ids)), fids = new Set(folders.map(f => f.id));
   const seen = new Set<string>();
   const order = (Array.isArray(s.order) ? s.order : firstSeats(s))
-    .filter(id => typeof id === 'string' && ids.has(id) && !seen.has(id) && !!seen.add(id));
-  for (const n of s.notes.filter(n => !seen.has(n.id)).sort((a, b) => b.updated - a.updated)) order.push(n.id);
+    .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id)) && !seen.has(id) && !!seen.add(id));
+  for (const f of folders) if (!seen.has(f.id)) { order.push(f.id); seen.add(f.id); }
+  for (const n of s.notes.filter(n => !seen.has(n.id) && !inFolder.has(n.id)).sort((a, b) => b.updated - a.updated)) order.push(n.id);
   const old = s.order;
-  if (Array.isArray(old) && old.length === order.length && old.every((id, i) => id === order[i])) return false;
+  const sameFolders = JSON.stringify(folders) === JSON.stringify(s.folders ?? []);
+  if (Array.isArray(old) && old.length === order.length && old.every((id, i) => id === order[i]) && sameFolders) return false;
   s.order = order;
+  if (!sameFolders) s.folders = folders;
   return true;
 }
 
@@ -241,26 +264,111 @@ export function reseat(s: State, visible: string[], now = Date.now()) {
   if (s.order.some((id, i) => id !== old[i])) s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1);
 }
 
+// 座位攤平：資料夾那一格換成它裡面的紙（D1，搜尋時資料夾裡的紙就排在資料夾的位置）
+const okFolders = (s: State) => (Array.isArray(s.folders) ? s.folders : []).filter(f => f && typeof f.id === 'string' && Array.isArray(f.ids));
+function flatSeats(s: State) {
+  if (!Array.isArray(s.order)) return firstSeats(s);
+  const fs = new Map(okFolders(s).map(f => [f.id, f.ids] as const));
+  return s.order.flatMap(id => fs.get(id) ?? [id]);
+}
+
 // 目錄裡的紙（不含最近刪除），照座位排；搜尋也照座位。純函式不改 state：還沒寫進座位表的（剛開的新的一張）先排在最後，存檔時 fixOrder 補上
 export function seatedNotes(s: State, q: string) {
-  const seat = new Map((Array.isArray(s.order) ? s.order : firstSeats(s)).map((id, i) => [id, i] as const));
+  const seat = new Map(flatSeats(s).map((id, i) => [id, i] as const));
   const k = q.trim().toLowerCase();
   const end = seat.size;
   return s.notes.filter(n => !n.deleted && hit(n, k))
     .sort((a, b) => (seat.get(a.id) ?? end) - (seat.get(b.id) ?? end) || b.updated - a.updated);
 }
 
+/* ---------------- 資料夾（D1） ---------------- */
+// 目錄最上層的一格：一張紙，或一個資料夾（notes＝裡面看得到的紙，照資料夾裡的順序）。一張都看不到的資料夾（全在最近刪除）不出現
+export type Entry = { id: string; note?: Note; folder?: Folder; notes: Note[] };
+export function seatedEntries(s: State): Entry[] {
+  const owner = new Map<string, Folder>();
+  for (const f of okFolders(s)) for (const id of f.ids) if (!owner.has(id)) owner.set(id, f);
+  const out: Entry[] = [], open = new Map<string, Entry>();
+  for (const n of seatedNotes(s, '')) {
+    const f = owner.get(n.id);
+    if (!f) { out.push({ id: n.id, note: n, notes: [n] }); continue; }
+    const e = open.get(f.id);
+    if (e) { e.notes.push(n); continue; }
+    const ne = { id: f.id, folder: f, notes: [n] };
+    open.set(f.id, ne);
+    out.push(ne);
+  }
+  return out;
+}
+export const folderOf = (s: State, noteId: string) => okFolders(s).find(f => f.ids.includes(noteId));
+
+// 建資料夾、放進、移出、改名都算親手排（C2：同步時後排的那台為準）
+const touchLayout = (s: State, now: number) => { s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1); };
+
+// 長按選單「放進資料夾…」→ 新資料夾：在那張紙的位置開一個資料夾，裡面只有它
+export function newFolder(s: State, noteId: string, now: number, id = 'f' + uid()): Folder {
+  fixOrder(s);
+  const f: Folder = { id, name: FOLDER_NAME, ids: [noteId] };
+  const from = folderOf(s, noteId);
+  if (from) from.ids = from.ids.filter(x => x !== noteId);
+  const at = s.order!.indexOf(noteId);
+  if (at >= 0) s.order![at] = id; else s.order!.push(id);
+  s.folders = [...(s.folders ?? []), f];
+  touchLayout(s, now);
+  fixOrder(s);
+  return f;
+}
+// 放進現有的資料夾：排在裡面最後一張
+export function intoFolder(s: State, noteId: string, folderId: string, now: number) {
+  fixOrder(s);
+  const f = s.folders?.find(x => x.id === folderId);
+  if (!f || f.ids.includes(noteId)) return false;
+  const from = folderOf(s, noteId);
+  if (from) from.ids = from.ids.filter(x => x !== noteId);
+  s.order = s.order!.filter(x => x !== noteId);
+  f.ids.push(noteId);
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+// 移出資料夾：排在資料夾後面一格；是最後一張就資料夾拿掉、紙站在資料夾原本的位置
+export function outOfFolder(s: State, noteId: string, now: number) {
+  fixOrder(s);
+  const f = folderOf(s, noteId);
+  if (!f) return false;
+  f.ids = f.ids.filter(x => x !== noteId);
+  const at = s.order!.indexOf(f.id);
+  if (f.ids.length) s.order!.splice(at + 1, 0, noteId);
+  else { s.order![at] = noteId; s.folders = s.folders!.filter(x => x !== f); }
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+// 改資料夾名：清空或沒變就不改（維持原名）
+export function renameFolder(s: State, folderId: string, name: string, now: number) {
+  const f = s.folders?.find(x => x.id === folderId);
+  if (!f || !name.trim() || name === f.name) return false;
+  f.name = name;
+  touchLayout(s, now);
+  return true;
+}
+
 /* ---------------- 目錄排列同步（C2） ---------------- */
 // iCloud 茄記資料夾裡的 layout.json：{ order, mod }。故意沒有 id 欄位：還沒更新的舊版把它當紙讀進來時，mergeCloud 會濾掉。
 // 多米 2026-11-02 定：只有親手排才算改排列（新的一張補最後、永久拿掉不算）；兩台都排過，後排的那台為準；對不上的紙補在最後
-export type Layout = { order: string[]; mod: number };
+// D1：資料夾一起放在這裡（多米 2026-11-02 選「跟排列一起」），同一條規則
+export type Layout = { order: string[]; mod: number; folders: Folder[] };
 
 // 外面讀進來的 layout.json 先驗：格式不對回 null（當成 iCloud 上沒有）
 export function readLayout(raw: unknown): Layout | null {
-  const r = raw as { order?: unknown; mod?: unknown } | null;
+  const r = raw as { order?: unknown; mod?: unknown; folders?: unknown } | null;
   if (!r || typeof r !== 'object' || !Array.isArray(r.order)) return null;
   if (typeof r.mod !== 'number' || !Number.isFinite(r.mod) || r.mod < 0) return null;
-  return { order: r.order.filter((id): id is string => typeof id === 'string'), mod: r.mod };
+  const folders = (Array.isArray(r.folders) ? r.folders : []) as Partial<Folder>[];
+  return {
+    order: r.order.filter((id): id is string => typeof id === 'string'), mod: r.mod,
+    folders: folders.filter(f => f && typeof f.id === 'string' && Array.isArray(f.ids))
+      .map(f => ({ id: f.id!, name: typeof f.name === 'string' ? f.name : FOLDER_NAME, ids: f.ids!.filter((id): id is string => typeof id === 'string') })),
+  };
 }
 
 // 這台有自己的排列（升級上來的、已經有真的紙）：iCloud 上沒有 layout.json 時拿這台的當第一份，mod 從 0 起算（誰親手排過都比它新）。
@@ -272,7 +380,7 @@ export function ownLayout(s: State) {
 // 要傳上 iCloud 的排列：這台的排列跟上次對上 iCloud 的不一樣才傳
 export function layoutToSend(s: State): Layout | null {
   if (!Array.isArray(s.order) || s.orderMod === undefined || s.orderMod === s.orderSent) return null;
-  return { order: s.order.slice(), mod: s.orderMod };
+  return { order: s.order.slice(), mod: s.orderMod, folders: (s.folders ?? []).map(f => ({ ...f, ids: f.ids.slice() })) };
 }
 export function markLayoutSent(s: State, mod: number) { s.orderSent = mod; }
 
@@ -289,11 +397,12 @@ export function mergeLayout(s: State, raw: unknown): boolean {
   }
   const mine = s.orderMod;
   if (mine !== undefined && mine !== s.orderSent && mine > r.mod) return false;
-  const before = (s.order ?? []).join('\n');
+  const before = JSON.stringify([s.order ?? [], s.folders ?? []]);
   s.order = r.order;
+  s.folders = r.folders;
   s.orderMod = s.orderSent = r.mod;
   fixOrder(s);
-  return s.order.join('\n') !== before;
+  return JSON.stringify([s.order, s.folders]) !== before;
 }
 
 /* ---------------- backup ---------------- */

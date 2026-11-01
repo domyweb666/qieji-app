@@ -157,6 +157,9 @@ export const shape = {
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
   tileTag: 40,   // 色磚右下角露出的色圓
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
+  folderMini: 16, // 資料夾磚下面那排小方塊（D1）：裡面每張紙一個，顏色是那張紙的色點，最多四個（folderMinis），更多的寫 +N
+  folderMinis: 4,
+  folderMiniRadius: 4,
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋

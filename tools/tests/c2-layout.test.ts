@@ -24,10 +24,10 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
   ownLayout(s);
   eq('升級上來的這台有自己的排列（mod 0）', s.orderMod, 0);
   eq('iCloud 沒有 layout.json：目錄不變', mergeLayout(s, undefined), false);
-  eq('要傳的就是這台現在的排列', layoutToSend(s), { order: ['c', 'a', 'b'], mod: 0 });
+  eq('要傳的就是這台現在的排列', layoutToSend(s), { order: ['c', 'a', 'b'], mod: 0, folders: [] });
   markLayoutSent(s, 0);
   eq('傳完就不再傳', layoutToSend(s), null);
-  eq('之後 iCloud 那份被刪掉（檔案 app 裡刪）→ 再傳一次', (mergeLayout(s, undefined), layoutToSend(s)), { order: ['c', 'a', 'b'], mod: 0 });
+  eq('之後 iCloud 那份被刪掉（檔案 app 裡刪）→ 再傳一次', (mergeLayout(s, undefined), layoutToSend(s)), { order: ['c', 'a', 'b'], mod: 0, folders: [] });
 }
 
 // 2. 剛裝好、只有教學紙（或重裝、資料夾清單還沒列出 layout.json）：不傳第一份，免得蓋掉 iCloud 上原本的排列
@@ -72,7 +72,7 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
   const s = saved([note('a', 500), note('b', 400), note('c', 300)], ['a', 'b', 'c'], { orderMod: 100, orderSent: 100 });
   reseat(s, ['b', 'a', 'c'], 300);
   eq('這台拖過：記下親手排的時間', s.orderMod, 300);
-  eq('拖完要傳', layoutToSend(s), { order: ['b', 'a', 'c'], mod: 300 });
+  eq('拖完要傳', layoutToSend(s), { order: ['b', 'a', 'c'], mod: 300, folders: [] });
   eq('iCloud 那份比較舊（200）：留著這台的', mergeLayout(s, { order: ['c', 'b', 'a'], mod: 200 }), false);
   eq('留著的還是要傳', layoutToSend(s)?.order, ['b', 'a', 'c']);
   eq('iCloud 那份比較新（400）：照它排', mergeLayout(s, { order: ['c', 'b', 'a'], mod: 400 }), true);
@@ -104,9 +104,9 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
   eq('讀不到（null）：照這台的、不傳', [mergeLayout(s, null), s.order, layoutToSend(s)], [false, ['a', 'b'], null]);
   eq('格式不對當成沒有', readLayout({ order: 'abc', mod: 1 }), null);
   eq('沒有時間當成沒有', readLayout({ order: ['a'] }), null);
-  eq('座位裡混了不是字的丟掉', readLayout({ order: ['a', 3, null, 'b'], mod: 2 }), { order: ['a', 'b'], mod: 2 });
+  eq('座位裡混了不是字的丟掉', readLayout({ order: ['a', 3, null, 'b'], mod: 2 }), { order: ['a', 'b'], mod: 2, folders: [] });
   mergeLayout(s, { order: 'abc', mod: 1 });
-  eq('壞掉的 layout.json 會被這台的蓋掉', layoutToSend(s), { order: ['a', 'b'], mod: 100 });
+  eq('壞掉的 layout.json 會被這台的蓋掉', layoutToSend(s), { order: ['a', 'b'], mod: 100, folders: [] });
 }
 
 // 9. 還沒更新的舊版把 layout.json 當紙讀進來：沒有 id，被濾掉
@@ -124,7 +124,7 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
   const lay = layoutToSend(s)!;
   reseat(s, ['c', 'a', 'b'], 600);
   markLayoutSent(s, lay.mod);
-  eq('傳途中的改動不漏', layoutToSend(s), { order: ['c', 'a', 'b'], mod: 600 });
+  eq('傳途中的改動不漏', layoutToSend(s), { order: ['c', 'a', 'b'], mod: 600, folders: [] });
 }
 
 // 11. 最近刪除的紙座位跟著 layout 走，還原回原位
@@ -153,7 +153,7 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
 {
   const s = saved([note('a', 500)], ['a'], { orderMod: 100, orderSent: 100 });
   forgetSync(s);
-  eq('放進去之後排列重傳', layoutToSend(s), { order: ['a'], mod: 100 });
+  eq('放進去之後排列重傳', layoutToSend(s), { order: ['a'], mod: 100, folders: [] });
 }
 
 console.log(fail ? `\n${fail} 條沒過` : '\n全部通過');

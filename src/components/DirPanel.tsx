@@ -5,8 +5,10 @@
 // C3：放不下往右一頁、頁點。C4：長按一塊磚跳選單（顏色、改名字、刪除、編輯目錄），長按後一拖就進抖動、同一頁裡拖換位置；
 // 抖動時面板不收（往上推、點露出的紙只會結束抖動），點磚不換紙、不能搜尋、不能翻頁。
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
+// D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
+// 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type AccessibilityActionEvent, type ScrollViewInstance } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -15,7 +17,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { col, dropNotes, isEmpty, label, markDeleted, markRestored, moveItem, reseat, seatedNotes, type ColorKey, type Note } from '../lib/model';
+import {
+  col, dropNotes, folderOf, intoFolder, isEmpty, label, markDeleted, markRestored, moveItem, newFolder, outOfFolder, renameFolder, reseat, seatedEntries, seatedNotes,
+  type ColorKey, type Entry, type Folder, type Note,
+} from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -30,6 +35,7 @@ const M = T.motion, G = T.gesture;
 const WEB_DEPS = Platform.OS === 'web';
 // 拖磚時其他磚讓位滑過去（C4）
 const TILE_MOVE = LinearTransition.duration(M.tileShift.duration);
+const noop = () => {};
 // 給手勢（UI 執行緒）呼叫的放模組層級（規矩檔：worklet 裡不准直接叫 tokens 的函式）
 const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop');
@@ -150,6 +156,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
 
   // 多米 2026-11-01：排序選項與顏色篩選拿掉（太雜）；C1 起照座位表排，搜尋也照座位（審查紀錄 2026-11-01 晚、晚（三））
   const notes = seatedNotes(s, q);
+  // D1：不搜尋時目錄最上層一格一格是紙或資料夾；搜尋時直接列紙（資料夾裡的也列）
+  const entries: Entry[] = searching ? notes.map(n => ({ id: n.id, note: n, notes: [n] })) : seatedEntries(s);
   const trashed = s.notes.filter(n => n.deleted).length;
   // 兩欄：整頁左右各留 16，中間留 12
   const tileW = (width - T.space.l * 2 - T.space.m) / 2;
@@ -158,13 +166,20 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const [page, setPage] = useState(0);
   // 一頁 R 列＝上緣 s ＋ grid 的 marginTop m ＋ R 塊磚 ＋ (R−1) 個間距 m＝s ＋ R ×（磚＋m）；第一頁的「新的一張」那列也是一塊磚高＋m
   const rows = Math.max(1, Math.floor((boxH - T.space.s) / (T.shape.tile + T.space.m)));
-  const pages: Note[][] = [];
-  for (let i = 0, take = (rows - 1) * 2; i < notes.length || !pages.length; i += take, take = rows * 2) pages.push(notes.slice(i, i + take));
+  const pages: Entry[][] = [];
+  for (let i = 0, take = (rows - 1) * 2; i < entries.length || !pages.length; i += take, take = rows * 2) pages.push(entries.slice(i, i + take));
   const pageStart = (i: number) => (i === 0 ? 0 : (rows - 1) * 2 + (i - 1) * rows * 2);
 
-  // 長按選單（C4）：哪一張、選單放多高
+  // 長按選單（C4）：哪一張（或哪個資料夾，D1）、選單放多高
   const [menu, setMenu] = useState<{ id: string; top: number } | null>(null);
   const menuNote = menu ? s.notes.find(n => n.id === menu.id && !n.deleted) : undefined;
+  const menuFolder = menu && !menuNote ? s.folders?.find(f => f.id === menu.id) : undefined;
+  // 打開的資料夾（D1）：哪一個、名字是不是正在打（新資料夾、選單的改名字一打開就能打）。裡面一張都看不到了就自己收起
+  const [openF, setOpenF] = useState<{ id: string; naming: boolean } | null>(null);
+  const openEntry = openF ? seatedEntries(s).find(e => e.id === openF.id && e.folder) : undefined;
+  useEffect(() => { if (openF && !openEntry) setOpenF(null); }, [openF, openEntry]);
+  // 打開的資料夾裡兩欄：框左右各留 l、框裡再留 l
+  const innerW = (width - T.space.l * 4 - T.space.m) / 2;
   // 拖的那塊（C4、C5）：從哪一頁拿起（origin）、現在在哪一頁（page）、在整排座位裡原本第幾個（from）、現在要放第幾個（to）。
   // 手指位置（dx、dy）在 UI 執行緒；換格、翻頁才回 JS 重排讓位
   const [drag, setDrag] = useState<{ id: string; origin: number; page: number; from: number; to: number } | null>(null);
@@ -201,11 +216,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     dirPanel.close();
   }
 
-  /* ---------- 長按選單（C4）：顏色、改名字、刪除、編輯目錄 ---------- */
-  function openMenu(id: string, y: number) {
+  /* ---------- 長按選單（C4）：顏色、改名字、刪除、編輯目錄。D1：紙多「放進資料夾…」或「移出資料夾」；資料夾只有改名字、編輯目錄 ---------- */
+  function openMenu(id: string, y: number, swatches = true, rowCount = 4) {
     Keyboard.dismiss();
     haptic('menu');
-    const h = T.shape.swatchDot + T.space.l * 2 + T.shape.menuRow * 3 + T.space.xs * 2 + T.space.s * 2; // 一排色塊＋三個項目（PopMenu 的藥丸版）
+    const h = (swatches ? T.shape.swatchDot + T.space.l * 2 : 0) + T.shape.menuRow * rowCount + T.space.xs * 2 + T.space.s * 2; // 一排色塊＋幾個項目（PopMenu 的藥丸版）
     setMenu({ id, top: Math.max(padTop, Math.min(y + T.space.s, panelH - h - T.space.l)) });
   }
   function recolor(n: Note, k: ColorKey) {
@@ -226,14 +241,40 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     store.change();
     if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); store.change(); } });
   }
-  const tileActs = (n: Note): Act[] => [
-    { label: '改名字', icon: 'pencil', fn: () => rename(n) },
-    { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
+  // 放進資料夾（D1）：還沒有看得到的資料夾就直接在這張的位置開一個新的、打開讓你取名；有就問放進哪一個
+  function putIn(n: Note) {
+    const made = () => {
+      const f = newFolder(store.s, n.id, Date.now());
+      store.change();
+      setOpenF({ id: f.id, naming: true });
+    };
+    const shownFolders = seatedEntries(store.s).flatMap(e => (e.folder ? [e.folder] : []));
+    if (!shownFolders.length) { made(); return; }
+    ui.sheet([
+      ...shownFolders.map(f => ({ label: f.name, fn: () => { if (intoFolder(store.s, n.id, f.id, Date.now())) store.change(); } })),
+      { label: '新資料夾', fn: made },
+    ], '放進資料夾');
+  }
+  // 移出資料夾：排在資料夾後面一格；最後一張移出，資料夾不見（打開的框跟著收起）
+  function takeOut(n: Note) {
+    if (outOfFolder(store.s, n.id, Date.now())) store.change();
+  }
+  const tileActs = (n: Note): Act[] => {
+    const inside = !!folderOf(s, n.id);
+    return [
+      { label: '改名字', icon: 'pencil', fn: () => rename(n) },
+      inside ? { label: '移出資料夾', icon: 'folder.badge.minus', fn: () => takeOut(n) } : { label: '放進資料夾…', icon: 'folder.badge.plus', fn: () => putIn(n) },
+      { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
+      { label: '編輯目錄', icon: 'square.grid.2x2', fn: () => setEditing(true), hidden: inside },
+    ];
+  };
+  const folderActs = (f: Folder): Act[] => [
+    { label: '改名字', icon: 'pencil', fn: () => setOpenF({ id: f.id, naming: true }) },
     { label: '編輯目錄', icon: 'square.grid.2x2', fn: () => setEditing(true) },
   ];
-  // VoiceOver 的「往前移／往後移」：拖不了時的替代路徑（行的排順序也這樣做）
-  function moveBy(n: Note, d: -1 | 1) {
-    const ids = seatedNotes(store.s, '').map(x => x.id), i = ids.indexOf(n.id), to = i + d;
+  // VoiceOver 的「往前移／往後移」：拖不了時的替代路徑（行的排順序也這樣做）。D1：資料夾磚也算一格
+  function moveBy(n: { id: string }, d: -1 | 1) {
+    const ids = seatedEntries(store.s).map(x => x.id), i = ids.indexOf(n.id), to = i + d;
     if (i < 0 || to < 0 || to >= ids.length) return;
     [ids[i], ids[to]] = [ids[to], ids[i]];
     reseat(store.s, ids); store.change();
@@ -257,7 +298,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       pagerRef.current?.scrollTo({ x: np * width, animated: !calm });
       setPage(np);
       shift.value = gridTop(d.origin) - gridTop(np);
-      count.value = Math.max(1, Math.min(cap(np), notes.length - pageStart(np)));
+      count.value = Math.max(1, Math.min(cap(np), entries.length - pageStart(np)));
       const k = slotAt(fromK.value, dx.value, dy.value + shift.value, tileW, count.value);
       last.value = k;
       setDrag({ ...d, page: np, to: pageStart(np) + k });
@@ -271,7 +312,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     clearTimeout(edgeT.current);
     const d = dragRef.current;
     if (d && d.to !== d.from) {
-      const ids = seatedNotes(store.s, '').map(x => x.id);
+      const ids = seatedEntries(store.s).map(x => x.id);
       const [m] = ids.splice(d.from, 1);
       ids.splice(d.to, 0, m);
       reseat(store.s, ids); store.change();
@@ -280,28 +321,57 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     dx.value = 0; dy.value = 0; shift.value = 0;
   }
   // 拖的時候畫出來的分頁：被拖的那張先搬到要放的位置（隱形佔位），整排重新切頁，其他磚讓位、後面的往前補
-  const laid: Note[][] = [];
+  const laid: Entry[][] = [];
   if (drag) {
-    const flat = notes.filter(n => n.id !== drag.id), m = notes.find(n => n.id === drag.id);
+    const flat = entries.filter(n => n.id !== drag.id), m = entries.find(n => n.id === drag.id);
     if (m) flat.splice(drag.to, 0, m);
     pages.forEach((_, i) => laid.push(flat.slice(pageStart(i), pageStart(i) + cap(i))));
   }
   const shown = (i: number) => (drag ? laid[i] : pages[i]);
 
-  const tile = (n: Note, k: number, pg: number, total: number) => (
-    <Tile key={n.id} n={n} w={tileW} sw={width} k={k} cur={n.id === store.last} editing={editing} calm={calm}
-      canDrag={!searching} ghost={drag?.id === n.id} count={total} dx={dx} dy={dy} lift={lift} sv={sv}
-      onPick={() => pick(n)} onMenu={y => openMenu(n.id, y)}
-      onDragStart={() => dragStart(n.id, pg, k)} onDragTo={dragTo} onEdge={onEdge} onDrop={drop}
-      onA11y={name => {
-        if (name === 'activate') pick(n);
-        else if (name === 'rename') rename(n);
-        else if (name === 'delete') del(n);
-        else if (name === 'forward') moveBy(n, -1);
-        else if (name === 'backward') moveBy(n, 1);
-      }} />
-  );
-  const dragged = drag ? notes.find(n => n.id === drag.id) : undefined;
+  const noteA11y = (n: Note) => (name: string) => {
+    if (name === 'activate') pick(n);
+    else if (name === 'rename') rename(n);
+    else if (name === 'delete') del(n);
+    else if (name === 'folder') putIn(n);
+    else if (name === 'out') takeOut(n);
+    else if (name === 'forward') moveBy(n, -1);
+    else if (name === 'backward') moveBy(n, 1);
+  };
+  const noteLabel = (n: Note) => `${label(n)}，${col(n.color).hue}${n.pinned ? '，已釘選' : ''}`;
+  // 磚的樣子：紙磚，或資料夾磚（正在看的紙在裡面就框起來）
+  const face = (e: Entry, w: number) => (e.folder
+    ? <FolderFace f={e.folder} notes={e.notes} w={w} cur={e.notes.some(n => n.id === store.last)} />
+    : <TileFace n={e.note!} w={w} cur={e.id === store.last} />);
+  const tile = (e: Entry, k: number, pg: number, total: number) => {
+    const f = e.folder, n = e.note;
+    const common = {
+      w: tileW, sw: width, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, count: total, dx, dy, lift, sv,
+      onDragStart: () => dragStart(e.id, pg, k), onDragTo: dragTo, onEdge, onDrop: drop,
+    };
+    if (f) {
+      return (
+        <Tile key={e.id} {...common} label={`資料夾，${f.name}，${e.notes.length} 張`} selected={e.notes.some(x => x.id === store.last)} acts={FOLDER_A11Y}
+          onPick={() => setOpenF({ id: f.id, naming: false })} onMenu={y => openMenu(f.id, y, false, 2)}
+          onA11y={name => {
+            if (name === 'activate') setOpenF({ id: f.id, naming: false });
+            else if (name === 'rename') setOpenF({ id: f.id, naming: true });
+            else if (name === 'forward') moveBy(f, -1);
+            else if (name === 'backward') moveBy(f, 1);
+          }}>
+          {face(e, tileW)}
+        </Tile>
+      );
+    }
+    const inside = !!folderOf(s, n!.id);
+    return (
+      <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
+        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 3 : 4)} onA11y={noteA11y(n!)}>
+        {face(e, tileW)}
+      </Tile>
+    );
+  };
+  const dragged = drag ? entries.find(n => n.id === drag.id) : undefined;
 
   return (
     <View style={{ flex: 1 }} collapsable={false}>
@@ -327,7 +397,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       {searching ? (
         // 搜尋：所有頁的紙一起找，排成一整片上下捲，不分頁（不能拖：搜到的只是一部分）
         <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
-          <View style={st.grid}>{notes.map((n, k) => tile(n, k, 0, notes.length))}</View>
+          <View style={st.grid}>{entries.map((e, k) => tile(e, k, 0, entries.length))}</View>
           {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
           {notes.length === 0 && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
         </ScrollView>
@@ -353,7 +423,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                     {/* 拿起來的那張：浮在現在這頁的格子上跟著手指（要放的位置留隱形佔位，其他磚照佔位讓開）。
                         放在拿起那格的位置再平移；翻到別頁時加上兩頁格子的高低差（shift），才會一直在手指下面 */}
                     {dragged && drag?.page === i && (
-                      <Ghost n={dragged} w={tileW} from={drag.from - pageStart(drag.origin)} dx={dx} dy={dy} shift={shift} lift={lift} />
+                      <Ghost w={tileW} from={drag.from - pageStart(drag.origin)} dx={dx} dy={dy} shift={shift} lift={lift}>{face(dragged, tileW)}</Ghost>
                     )}
                   </View>
                 </View>
@@ -384,26 +454,55 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         </Pressable>
       )}
 
+      {/* 打開的資料夾（D1）：蓋在目錄上面，點外面收起；名字點了就能改；裡面的紙點了換紙、長按跳選單（不能拖） */}
+      {openEntry?.folder && (
+        <View style={StyleSheet.absoluteFill}>
+          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
+            accessibilityRole="button" accessibilityLabel="收起資料夾" />
+          <View style={[st.folderBox, { top: padTop, maxHeight: panelH - padTop - T.shape.hitMin, backgroundColor: c.surface }]} accessibilityViewIsModal
+            onAccessibilityEscape={() => setOpenF(null)}>
+            <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
+            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+              <View style={st.grid}>
+                {openEntry.notes.map((n, k) => (
+                  <Tile key={n.id} w={innerW} sw={width} k={k} editing={false} calm={calm} canDrag={false} ghost={false} count={openEntry.notes.length}
+                    dx={dx} dy={dy} lift={lift} sv={sv} onDragStart={noop} onDragTo={noop} onEdge={noop} onDrop={noop}
+                    label={noteLabel(n)} selected={n.id === store.last} acts={NOTE_IN_A11Y}
+                    onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}>
+                    <TileFace n={n} w={innerW} cur={n.id === store.last} />
+                  </Tile>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
       {menu && menuNote && (
         <PopMenu acts={tileActs(menuNote)} top={menu.top} onClose={() => setMenu(null)}
           header={<Swatches current={menuNote.color} onPick={k => recolor(menuNote, k)} />} />
       )}
+      {menu && menuFolder && <PopMenu acts={folderActs(menuFolder)} top={menu.top} onClose={() => setMenu(null)} />}
     </View>
   );
 }
 
 type DragSV = { fromK: SharedValue<number>; shift: SharedValue<number>; count: SharedValue<number>; last: SharedValue<number>; edge: SharedValue<number> };
 type TileProps = {
-  n: Note; w: number; sw: number; k: number; cur: boolean; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
+  w: number; sw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
   dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number>; sv: DragSV;
+  label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
   onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onDragTo: (to: number) => void; onEdge: (z: number) => void; onDrop: () => void;
   onA11y: (name: string) => void;
 };
 
-const A11Y_ACTS = [
-  { name: 'activate' }, { name: 'rename', label: '改名字' }, { name: 'delete', label: '刪除' },
+// VoiceOver 的動作：目錄裡的紙、資料夾裡的紙（不能往前往後移，D3 才有資料夾裡的排序）、資料夾
+const NOTE_A11Y = [
+  { name: 'activate' }, { name: 'rename', label: '改名字' }, { name: 'folder', label: '放進資料夾' }, { name: 'delete', label: '刪除' },
   { name: 'forward', label: '往前移' }, { name: 'backward', label: '往後移' },
 ];
+const NOTE_IN_A11Y = [{ name: 'activate' }, { name: 'rename', label: '改名字' }, { name: 'out', label: '移出資料夾' }, { name: 'delete', label: '刪除' }];
+const FOLDER_A11Y = [{ name: 'activate' }, { name: 'rename', label: '改名字' }, { name: 'forward', label: '往前移' }, { name: 'backward', label: '往後移' }];
 
 // 一塊磚的手勢（C4）：點＝換紙；長按（不動）＝選單；長按後一拖、或抖動中直接拖＝拿起來換位置。
 // 長按與拖同時聽（長按先成立跳選單，手指再動才拖）；點要等它們都不成立。抖動中不能點、不跳選單
@@ -480,24 +579,24 @@ function Tile(p: TileProps) {
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={style} layout={calm ? undefined : TILE_MOVE}
-        accessible accessibilityRole="button" accessibilityLabel={`${label(p.n)}，${col(p.n.color).hue}${p.n.pinned ? '，已釘選' : ''}`}
-        accessibilityState={{ selected: p.cur }} accessibilityActions={A11Y_ACTS}
+        accessible accessibilityRole="button" accessibilityLabel={p.label}
+        accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
-        <TileFace n={p.n} w={w} cur={p.cur} />
+        {p.children}
       </Animated.View>
     </GestureDetector>
   );
 }
 
 // 拿起來的那張：放在原本那格的位置、跟著手指平移，浮起一點（放大＋陰影）。不接觸控，手勢還在原本那塊上
-type GhostProps = { n: Note; w: number; from: number; dx: SharedValue<number>; dy: SharedValue<number>; shift: SharedValue<number>; lift: SharedValue<number> };
-function Ghost({ n, w, from, dx, dy, shift, lift }: GhostProps) {
+type GhostProps = { w: number; from: number; dx: SharedValue<number>; dy: SharedValue<number>; shift: SharedValue<number>; lift: SharedValue<number>; children: ReactNode };
+function Ghost({ w, from, dx, dy, shift, lift, children }: GhostProps) {
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: dx.value }, { translateY: dy.value + shift.value }, { scale: 1 + lift.value * (M.dragLift.scale - 1) }],
   }));
   return (
     <Animated.View pointerEvents="none" style={[st.ghost, { left: slotX(from, w), top: slotY(from) }, style]}>
-      <TileFace n={n} w={w} cur={false} />
+      {children}
     </Animated.View>
   );
 }
@@ -514,6 +613,38 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
       <View style={[st.tag, { backgroundColor: nc.hd }]} />
       {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={14} color={c.textSecondary} /></View> : null}
     </View>
+  );
+}
+
+// 資料夾磚（D1，多米 2026-11-02 選）：跟紙磚一樣大，上面資料夾名，下面一排小方塊＝裡面紙的色點（最多四個，更多的寫 +N）。
+// 底用整頁底色、框用分隔線色，跟紙磚的紙色分得開；正在看的紙在裡面就用 accent 框
+function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number; cur: boolean }) {
+  const c = useColors();
+  const more = notes.length - T.shape.folderMinis;
+  return (
+    <View style={[st.tile, { width: w, backgroundColor: c.page, borderColor: cur ? c.accent : c.separator, borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
+      <Text style={[st.tileText, { color: c.textPrimary }]} numberOfLines={1}>{f.name}</Text>
+      <View style={st.minis}>
+        {notes.slice(0, T.shape.folderMinis).map(n => <Mini key={n.id} color={n.color} />)}
+        {more > 0 && <Text style={[st.more, { color: c.textSecondary }]}>+{more}</Text>}
+      </View>
+    </View>
+  );
+}
+function Mini({ color }: { color: ColorKey }) {
+  const nc = useNoteColors(color);
+  return <View style={[st.mini, { backgroundColor: nc.hd }]} />;
+}
+
+// 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名
+function FolderName({ f, focus }: { f: Folder; focus: boolean }) {
+  const c = useColors();
+  const [draft, setDraft] = useState(f.name);
+  return (
+    <TextInput value={draft} autoFocus={focus} selectTextOnFocus={focus} returnKeyType="done" accessibilityLabel="資料夾名字"
+      onChangeText={v => { setDraft(v); if (renameFolder(store.s, f.id, v, Date.now())) store.change(); }}
+      onBlur={() => { if (!draft.trim()) setDraft(f.name); }}
+      style={[st.folderName, { color: c.textPrimary }]} />
   );
 }
 
@@ -545,4 +676,9 @@ const st = StyleSheet.create({
   trashRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, marginHorizontal: T.space.l,
     paddingVertical: T.space.m, borderTopWidth: StyleSheet.hairlineWidth },
   trashText: { ...T.font.body },
+  minis: { position: 'absolute', left: T.space.m, bottom: T.space.m, flexDirection: 'row', alignItems: 'center', gap: T.space.xs },
+  mini: { width: T.shape.folderMini, height: T.shape.folderMini, borderRadius: T.shape.folderMiniRadius },
+  more: { ...T.font.footnote },
+  folderBox: { position: 'absolute', left: T.space.l, right: T.space.l, borderRadius: T.shape.radiusPanel, padding: T.space.l, ...T.shape.shadowSoft },
+  folderName: { ...T.font.listTitle, textAlign: 'center', paddingVertical: T.space.s },
 });
