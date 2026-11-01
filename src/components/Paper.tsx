@@ -60,7 +60,8 @@ const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
 const KEEP_POS = { minIndexForVisible: 0, autoscrollToTopThreshold: T.shape.rowMin };
 // 右上 ⋯ 讓位給 ✓ 時用鍵盤的時鐘滑過去（2-4 連續：之前瞬間跳一格）
 const KBF = T.motion.keyboardFollow;
-const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]));
+const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]);
+const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(KB_EASING);
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -372,6 +373,12 @@ export function Paper({ n }: { n: Note }) {
   // 已經開回來了：過場把落地的行再滑一次；頂端附近 maintainVisibleContentPosition 會跟著最上面那行挪捲動位置（所以只有靠近頂端會閃）。
   // 改成：end() 只換順序並記一次 dropTick；那次重畫真的畫完（useLayoutEffect）之後的下一格，才歸零位移、關 dragging
   const [dropTick, setDropTick] = useState(0);
+  // 輸入框開著時紙淡一點（見 render 的 paperDim）
+  const dim = useSharedValue(1);
+  useEffect(() => {
+    dim.value = withTiming(composing ? T.motion.composerDim : 1, { duration: KBF.duration, easing: KB_EASING });
+  }, [composing]); // eslint-disable-line react-hooks/exhaustive-deps
+  const paperDim = useAnimatedStyle(() => ({ opacity: dim.value }));
   // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算與放下的落地動畫在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
@@ -541,6 +548,9 @@ export function Paper({ n }: { n: Note }) {
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
+        {/* 輸入框開著時紙淡一點（多米 2026-11-01 選乙試試，審查紀錄同日「打字時背景要不要變暗」）：只有清單這塊、只是透明度，
+            手指照樣點得到行（點一行＝草稿送出、焦點進那一行，第四版乙不變）。跟鍵盤同一個時鐘進出，一個事件一個時鐘 */}
+        <Animated.View style={[{ flex: 1 }, paperDim]}>
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           // 拖著排順序時關掉（多米 2026-11-01：靠近頂端拖會怪、會閃）：放下那一刻順序換了，它會把捲動位置跟著最上面那行挪一下，
@@ -584,6 +594,7 @@ export function Paper({ n }: { n: Note }) {
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + insets.bottom }} />
         </ScrollView>
+        </Animated.View>
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
