@@ -1,38 +1,119 @@
-// 目錄：從紙最上面的清單名拉起來的面板（重新設計分支「紙是家」，首頁降級成這張面板）。
-// 搜尋、色磚（只有顏色和名字，沒有時間、沒有預覽、沒有數字）、「＋ 新的一張」、最近刪除。
-// 右上 ⋯ 2026-11-01 拿掉：裡面的排序、顏色篩選、匯出、匯入多米同日一項一項定拿掉，空了就整顆不畫（資料搬家交給之後的 iCloud 同步）。
-// 點一塊就換紙、面板收起來。帶 move 參數進來（紙上長按 →「搬到…」）就變成「把這行搬到哪張」：點一塊就搬過去。
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+// 目錄面板（B3，多米 2026-11-01 晚（二）定）：自己做的、從螢幕上面垂下來的面板，取代系統 formSheet。
+// 開：紙的標題區往下拉（跟著手指）、點標題下的把手、行的「搬到…」。收：點下面露出的那截紙、把面板底部把手往上推、點一塊磚。
+// 裡面的東西照舊（搜尋、新的一張、已釘選／其他、色磚、最近刪除、搬行模式）：原本 src/app/directory.tsx 整段搬過來，這片只換容器。
+// 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { makeMutable, useAnimatedStyle, useReducedMotion, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Empty } from '../components/Empty';
-import { ui } from '../components/Overlay';
-import { Sym } from '../components/Sym';
-import { native } from '../components/WebBars';
+import { scheduleOnRN } from 'react-native-worklets';
 import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
+import { Empty } from './Empty';
+import { ui } from './Overlay';
+import { Sym } from './Sym';
 
+const M = T.motion, G = T.gesture;
 
-export default function Directory() {
-  const { move } = useLocalSearchParams<{ move?: string }>();
-  const s = useStore();
+let host: { begin: (move?: string) => void; settle: (open: boolean, velocity?: number, then?: () => void) => void } | null = null;
+export const dirPanel = {
+  p: makeMutable(0), // 0＝收起、1＝全開。紙的標題區往下拉時在 UI 執行緒逐格寫
+  h: makeMutable(1), // 面板高度（螢幕高 − dirPeek），拉的距離除以它就是 p
+  calm: makeMutable(false), // 減少動態：面板不滑，改淡入淡出（紙那邊放手時要知道）
+  // 準備打開：掛上內容、收鍵盤、告訴 store 面板開著（控制中心「記一行」、新的一張的輸入框都等它收完）
+  begin: (move?: string) => host?.begin(move),
+  // 放手或點了之後：彈到全開或收起。velocity 是手指放開的速度換成 p 的單位
+  settle: (open: boolean, velocity?: number, then?: () => void) => host?.settle(open, velocity, then),
+  open: (move?: string) => { host?.begin(move); host?.settle(true); },
+  close: (then?: () => void) => host?.settle(false, 0, then),
+};
+
+export function DirPanelHost() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const calm = useReducedMotion();
+  const [shown, setShown] = useState(false);
+  const [move, setMove] = useState<string | undefined>();
+  const [open, setOpen] = useState(false); // 停在全開（點露出的那截才收得起來；拉到一半不算）
+  const H = height - T.shape.dirPeek;
+  const { p } = dirPanel;
+
+  useEffect(() => { dirPanel.h.value = H; }, [H]);
+  useEffect(() => { dirPanel.calm.value = calm; }, [calm]);
+
+  useEffect(() => {
+    host = {
+      begin: m => {
+        Keyboard.dismiss();
+        setMove(m);
+        setShown(true);
+        store.panelOpened();
+      },
+      settle: (toOpen, velocity = 0, then) => {
+        if (!toOpen) { Keyboard.dismiss(); setOpen(false); }
+        const done = () => {
+          if (toOpen) { setOpen(true); return; }
+          setShown(false); setMove(undefined);
+          if (store.panelOpen) store.panelClosed();
+          then?.();
+        };
+        const target = toOpen ? 1 : 0;
+        p.value = calm ? withTiming(target, { duration: M.dirPanel.reducedFade }, f => { if (f) scheduleOnRN(done); })
+          : withSpring(target, { velocity, ...M.dirPanel.spring }, f => { if (f) scheduleOnRN(done); });
+      },
+    };
+    return () => { host = null; };
+  }, [calm, p]);
+
+  // 面板底部把手往上推：跟著手指收上去，推過一段或往上甩就收起，不然彈回全開
+  const { h } = dirPanel;
+  const settle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
+  const push = usePanGesture({
+    activeOffsetY: [-G.pullActivate, G.pullActivate],
+    onUpdate: e => { 'worklet'; p.value = Math.min(1, Math.max(0, 1 + e.translationY / h.value)); },
+    onDeactivate: e => {
+      'worklet';
+      const shut = e.translationY < -h.value * G.pushCloseRatio || e.velocityY < -G.flick;
+      scheduleOnRN(settle, !shut, e.velocityY / h.value);
+    },
+  });
+
+  const sheet = useAnimatedStyle(() => (calm
+    ? { opacity: p.value, transform: [{ translateY: 0 }] }
+    : { opacity: 1, transform: [{ translateY: -H * (1 - p.value) }] }));
+  const dim = useAnimatedStyle(() => ({ opacity: p.value }));
+
+  if (!shown) return null;
+  return (
+    // 停在全開之前（正在拉、正在彈）整層不接觸控：手指還在紙的標題區上拉，不能被蓋上來的暗幕或面板搶走
+    <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }, dim]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => dirPanel.close()}
+          accessibilityRole="button" accessibilityLabel="收起目錄" />
+      </Animated.View>
+      <Animated.View style={[st.sheet, { height: H, backgroundColor: c.surface }, sheet]}
+        accessibilityViewIsModal onAccessibilityEscape={() => dirPanel.close()}>
+        <Directory move={move} padTop={insets.top + T.space.s} />
+        <GestureDetector gesture={push}>
+          <Pressable style={st.grabBox} onPress={() => dirPanel.close()} accessibilityRole="button" accessibilityLabel="收起目錄">
+            <View style={[st.grab, { backgroundColor: c.textSecondary }]} />
+          </Pressable>
+        </GestureDetector>
+      </Animated.View>
+    </View>
+  );
+}
+
+function Directory({ move, padTop }: { move?: string; padTop: number }) {
+  const s = useStore();
+  const c = useColors();
   const { width } = useWindowDimensions();
   const [q, setQ] = useState('');
   const searching = !!q.trim();
-
-  // K6（2026-11-01 第三輪）：面板收完那一刻（原生堆疊對這個畫面發 transitionEnd、closing＝true，在卸載之前）通知 store，
-  // 紙上「新的一張」的輸入框就能馬上升起，不用等 700ms 的保險。事件名與 closing 旗標對過 expo-router 的 NativeStackView；網頁沒這個事件
-  const navigation = useNavigation();
-  useEffect(() => {
-    const nav = navigation as unknown as { addListener: (ev: 'transitionEnd', cb: (e: { data?: { closing?: boolean } }) => void) => () => void };
-    store.panelOpened(); // 控制中心「記一行」要知道面板開著，等它收完才叫鍵盤（C1）
-    const off = nav.addListener('transitionEnd', e => { if (e.data?.closing) store.panelClosed(); });
-    return () => { off(); if (store.panelOpen) store.panelClosed(); }; // 沒收到收完事件就卸載（網頁、被路由直接拿掉）也要放掉
-  }, [navigation]);
 
   // 多米 2026-11-01：目錄的排序選項與顏色篩選拿掉（太雜）。排序固定用 s.sort 現值（預設最近改過的在前），顏色篩選不再有；
   // 清單多了要不要分組／資料夾，照 2-5 寫成方案等他選（審查紀錄 2026-11-01 最後一段）
@@ -49,27 +130,24 @@ export default function Directory() {
     if (from && moving) {
       const name = label(n);
       if (moveItem(from, n, moving.id)) { n.updated = from.updated = Date.now(); store.change(); ui.toast(`已搬到「${name}」`); }
-      router.back();
+      dirPanel.close();
       return;
     }
     store.open(n.id);
-    router.back();
+    dirPanel.close();
   }
   // 新的一張：黃色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
   function add() {
     const n = newNote('yellow', 'check');
     if (from && moving) { pick(n); return; }
     store.open(n.id, true);
-    router.back();
+    dirPanel.close();
   }
-
-  // 面板是系統表單（上面有把手），iOS 不用再留狀態列的高度；網頁預覽是整頁，要留
-  const padTop = native ? T.space.l : insets.top + T.space.s;
 
   const tiles = (list: Note[]) => list.map(n => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />);
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.surface }} collapsable={false}>
+    <View style={{ flex: 1 }} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
         <View style={[st.search, { backgroundColor: c.page }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
@@ -78,8 +156,7 @@ export default function Directory() {
         </View>
       </View>
 
-      <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[st.body, { paddingBottom: insets.bottom + T.space.xxl }]}>
+      <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
         {moving && (
           <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
         )}
@@ -101,7 +178,7 @@ export default function Directory() {
         {notes.length === 0 && searching && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
 
         {trashed > 0 && (
-          <Pressable onPress={() => router.replace('/trash')} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
+          <Pressable onPress={() => dirPanel.close(() => router.push('/trash'))} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
             style={({ pressed }) => [st.trashRow, { borderTopColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
             <Sym name="trash" size={17} color={c.textSecondary} />
             <Text style={[st.trashText, { color: c.textSecondary }]}>最近刪除</Text>
@@ -132,12 +209,16 @@ function Tile({ n, w, cur, onPress }: { n: Note; w: number; cur: boolean; onPres
 }
 
 const st = StyleSheet.create({
+  sheet: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden',
+    borderBottomLeftRadius: T.shape.radiusPanel, borderBottomRightRadius: T.shape.radiusPanel, ...T.shape.shadowSoft },
+  grabBox: { height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
+  grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
   top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
   search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.radiusCard, flexDirection: 'row', alignItems: 'center', gap: T.space.s,
     paddingHorizontal: T.space.m },
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
-  body: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
+  body: { paddingHorizontal: T.space.l, paddingTop: T.space.s, paddingBottom: T.space.l },
   head: { ...T.font.sectionHead, marginTop: T.space.l, marginBottom: T.space.s, marginLeft: T.space.xs },
   moveHead: { ...T.font.subhead, marginBottom: T.space.m, marginLeft: T.space.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },

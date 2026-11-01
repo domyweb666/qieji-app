@@ -61,11 +61,7 @@ export default function RootLayout() {
             }}>
               {/* 根畫面就是一張紙（重新設計分支「紙是家」）：不用系統標題列，自己畫一條：清單名和 ⋯ 在同一行 */}
               <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
-              {/* 目錄：從紙最上面的清單名拉起來的面板，佔九成高。0.9 只用一次 */}
-              <Stack.Screen name="directory" options={{
-                presentation: 'formSheet', sheetAllowedDetents: [0.9], sheetGrabberVisible: true, sheetCornerRadius: T.shape.radiusPanel,
-                headerShown: false, contentStyle: { backgroundColor: c.surface },
-              }} />
+              {/* 目錄不是路由了：B3 起是紙畫面裡自己做的面板（components/DirPanel），從上面垂下來 */}
               <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
             </Stack>
           </View>

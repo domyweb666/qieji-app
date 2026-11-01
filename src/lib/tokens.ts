@@ -153,6 +153,8 @@ export const shape = {
   // 把手點擊範圍往外撐：往上蓋過時間那行（不能點）、往下只到分隔線（＝時間區下緣內距 space.s），不吃到第一行
   handleSlop: { top: 30, bottom: 8, left: 16, right: 16 },
   tile: 84,      // 目錄的色磚高度
+  dirPeek: 92,   // 目錄面板垂下來時，螢幕底下留一截看得到後面的紙（點那截收起；多米原型）
+  dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
   tileTag: 40,   // 色磚右下角露出的色圓
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
@@ -177,6 +179,8 @@ export const motion = {
   fade:          150, // toast、確認框、減少動態時所有滑入／放大的替代
   splashFade:    300, // 啟動畫面收起時淡出（expo-splash-screen setOptions，只有 iOS 有；系統預設 400）：奶油底融進紙，不是硬切（2026-11-01 第四輪 S1，收 06 的 ❓12；初值待多米真機調）
   sheetSlide:    { in: 220, out: 180 },
+  // 目錄面板（B3）從上面垂下來／收上去：放手後帶著手指速度彈到底，不過頭（原型 340ms）。減少動態：不滑，淡入淡出
+  dirPanel:      { spring: { duration: 340, dampingRatio: 1, overshootClamping: true }, reducedFade: 200 },
   sheetBackdrop: { in: 180, out: 180 },
   menuPop:       { in: 170, out: 120 },
   menuBackdrop:  { in: 160, out: 140 },
@@ -202,6 +206,9 @@ export function haptic(event: keyof typeof HAPTIC) { HAPTIC[event]().catch(() =>
 // 只放純數字：滑動手勢在 UI 執行緒（worklet）裡算，從那裡呼叫一般 JS 函式會讓 app 直接崩潰（真機才會，網頁預覽看不出來）
 export const gesture = {
   swipeActivate: 14, swipeFailY: 12,
+  // 標題區往下拉開目錄（B3）：往下動超過 pullActivate 才算拉；先左右動超過 pullFailX 就不算（留給 B4 左右滑換張）。
+  // 拉過面板高度的 pullOpenRatio、或往下甩超過 flick（點／秒）放手就打開；面板底部把手往上推超過 pushCloseRatio 或往上甩就收起（多米原型）
+  pullActivate: 10, pullFailX: 14, pullOpenRatio: 0.2, pushCloseRatio: 0.15, flick: 550,
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起

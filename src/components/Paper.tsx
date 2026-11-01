@@ -10,7 +10,6 @@
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
 import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
   AppState, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
@@ -30,6 +29,7 @@ import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens'
 import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { Composer } from './Composer';
+import { dirPanel } from './DirPanel';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
@@ -153,7 +153,7 @@ export function Paper({ n }: { n: Note }) {
     if (!it) return [];
     return [
       { label: it.done ? '恢復' : '劃掉', icon: it.done ? 'arrow.uturn.backward' : 'strikethrough', hidden: !it.t.trim(), fn: () => strike(id) },
-      { label: '搬到…', icon: 'arrow.turn.up.right', hidden: !it.t.trim(), fn: () => router.push({ pathname: '/directory', params: { move: id } }) },
+      { label: '搬到…', icon: 'arrow.turn.up.right', hidden: !it.t.trim(), fn: () => { Keyboard.dismiss(); dirPanel.open(id); } },
       { label: '複製', icon: 'doc.on.doc', hidden: !it.t.trim(), fn: () => { Clipboard.setStringAsync(it.t).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
       { label: '刪除', icon: 'trash', destructive: true, fn: () => remove(id) },
     ];
@@ -517,7 +517,25 @@ export function Paper({ n }: { n: Note }) {
   const name = n.title.trim() || '未命名'; // 多米 2026-11-01 定（原本「沒有名字的一張」）
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
-  function openDir() { Keyboard.dismiss(); router.push('/directory'); }
+  function openDir() { Keyboard.dismiss(); dirPanel.open(); }
+  // B3：標題區（清單名、時間那行，停在分隔線）往下拉＝目錄跟著手指從上面垂下來。先左右動就不算（留給 B4 左右滑換張）；改名時關掉
+  const dirP = dirPanel.p, dirH = dirPanel.h;
+  const dirBegin = () => dirPanel.begin();
+  const dirSettle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
+  const PG = T.gesture;
+  const pull = usePanGesture({
+    enabled: !renaming,
+    activeOffsetY: PG.pullActivate,
+    failOffsetX: [-PG.pullFailX, PG.pullFailX],
+    onActivate: () => { 'worklet'; scheduleOnRN(dirBegin); },
+    // 手勢要往下動 pullActivate 才成立，扣掉它，面板才從 0 開始跟，不會先跳一格
+    onUpdate: e => { 'worklet'; dirP.value = Math.min(1, Math.max(0, (e.translationY - PG.pullActivate) / dirH.value)); },
+    onDeactivate: e => {
+      'worklet';
+      const open = !e.canceled && (e.translationY > dirH.value * PG.pullOpenRatio || e.velocityY > PG.flick);
+      scheduleOnRN(dirSettle, open, e.velocityY / dirH.value);
+    },
+  });
   // 釘滿了一步跳選單問換掉哪張（審查紀錄 11/01 晚（四）甲）；換掉的那張不動 updated，目錄裡位置不跳
   function togglePin() {
     if (n.pinned) { n.pinned = false; touch(); ui.toast('已取消釘選'); return; }
@@ -576,6 +594,9 @@ export function Paper({ n }: { n: Note }) {
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
       {/* 最上面一行：清單名（點一下或 ⋯ 裡的「改名字」都會變成可以打字；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
+      {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
+      <GestureDetector gesture={pull}>
+      <View collapsable={false}>
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
@@ -616,6 +637,8 @@ export function Paper({ n }: { n: Note }) {
         </View>
         <SegHandle notes={swipeSet(store.s, n)} cur={n} color={c.textSecondary} onPress={openDir} />
       </View>
+      </View>
+      </GestureDetector>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
