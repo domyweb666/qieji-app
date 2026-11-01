@@ -1,10 +1,10 @@
 {
-  "station": "spec-standards",
-  "updated_at": "2026-11-02T10:00:00+08:00",
+  "station": "audit-batch",
+  "updated_at": "2026-11-02T11:00:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
-    "todo": 9,
-    "machine_verified": 4,
+    "todo": 8,
+    "machine_verified": 5,
     "human_verified": 3
   },
   "chunks": [
@@ -18,7 +18,7 @@
     {
       "name": "B 標題區換紙與開目錄",
       "total": 4,
-      "machine_done": 3,
+      "machine_done": 4,
       "human_verified": false,
       "approved": true
     },
@@ -74,6 +74,12 @@
       "why": "多米 2026-11-02「直接做 B3」",
       "since": "2026-11-02",
       "status": "真機立即驗過，補確認"
+    },
+    {
+      "what": "B4 真實情境走查",
+      "why": "多米 2026-11-02 只回「對，開工」",
+      "since": "2026-11-02",
+      "status": "組塊 B 批次驗時補確認"
     }
   ],
   "decisions": [

@@ -15,7 +15,7 @@ import {
   AppState, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
-import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
+import { GestureDetector, ScrollView, useCompetingGestures, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
@@ -58,6 +58,13 @@ const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
 const KBF = T.motion.keyboardFollow;
 const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]);
 const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(KB_EASING);
+// 標題區左右撥換張（B4）：舊的清單名滑出去、新的從另一邊滑進來
+const NS = T.motion.noteSwap;
+const SWAP_OUT = { duration: NS.out, easing: Easing.bezier(NS.outEasing[0], NS.outEasing[1], NS.outEasing[2], NS.outEasing[3]) };
+const SWAP_IN = { duration: NS.in, easing: Easing.bezier(NS.inEasing[0], NS.inEasing[1], NS.inEasing[2], NS.inEasing[3]) };
+// 換紙＝key 換了、新的那張重新掛上，所以「新的清單名從哪邊滑進來」放模組層級交給它：1＝從右、-1＝從左、0＝不滑（從目錄換、減少動態）
+let slideFrom = 0;
+function swapTo(id: string, from: number) { slideFrom = from; store.open(id); }
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -68,7 +75,7 @@ export function Paper({ n }: { n: Note }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const insets = useSafeAreaInsets();
   const calm = useReducedMotion();
-  const { fontScale: fs, height: winH } = useWindowDimensions();
+  const { fontScale: fs, height: winH, width: winW } = useWindowDimensions();
   const c = useColors();
   const nc = useNoteColors(n.color);
   const closed = useRef(false);
@@ -518,7 +525,7 @@ export function Paper({ n }: { n: Note }) {
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); dirPanel.open(); }
-  // B3：標題區（清單名、時間那行，停在分隔線）往下拉＝目錄跟著手指從上面垂下來。先左右動就不算（留給 B4 左右滑換張）；改名時關掉
+  // B3：標題區（清單名、時間那行，停在分隔線）往下拉＝目錄跟著手指從上面垂下來。先左右動就不算（交給下面 B4 左右撥換張）；改名時關掉
   const dirP = dirPanel.p, dirH = dirPanel.h;
   const dirBegin = () => dirPanel.begin();
   const dirSettle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
@@ -536,6 +543,36 @@ export function Paper({ n }: { n: Note }) {
       scheduleOnRN(dirSettle, open, e.velocityY / dirH.value);
     },
   });
+  // B4：標題區左右撥＝在把手那幾張（swipeSet）之間換，手指往左＝換到右邊那張。清單名和時間那兩行跟著手指走，到頭只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
+  // 撥夠了舊的滑出去、滑完才換紙，新的那張從另一邊滑進來（slideFrom）。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
+  const swapSet = swipeSet(store.s, n), at = swapSet.indexOf(n);
+  const prevId = swapSet[at - 1]?.id ?? '', nextId = swapSet[at + 1]?.id ?? '';
+  const hx = useSharedValue(slideFrom * winW);
+  useEffect(() => {
+    if (hx.value !== 0) hx.value = withTiming(0, SWAP_IN);
+    slideFrom = 0;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: hx.value }] }));
+  const swap = usePanGesture({
+    enabled: !renaming,
+    activeOffsetX: [-PG.pullFailX, PG.pullFailX],
+    failOffsetY: [-PG.swapFailY, PG.swapFailY],
+    onUpdate: e => {
+      'worklet';
+      const x = e.translationX, end = x < 0 ? !nextId : !prevId;
+      hx.value = end ? x * PG.swapEdge : x;
+    },
+    onDeactivate: e => {
+      'worklet';
+      const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
+      const go = !e.canceled && !!id && (Math.abs(e.translationX) > PG.swapDist || -d * e.velocityX > PG.swapFlick);
+      if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...T.motion.snapBack.spring }); return; }
+      if (calm) { scheduleOnRN(swapTo, id, 0); return; }
+      hx.value = withTiming(-d * winW, SWAP_OUT, done => { if (done) scheduleOnRN(swapTo, id, d); });
+    },
+  });
+  // 往下拉（開目錄）跟左右撥（換張）先成立的那個贏，另一個當場作廢
+  const head = useCompetingGestures(pull, swap);
   // 釘滿了一步跳選單問換掉哪張（審查紀錄 11/01 晚（四）甲）；換掉的那張不動 updated，目錄裡位置不跳
   function togglePin() {
     if (n.pinned) { n.pinned = false; touch(); ui.toast('已取消釘選'); return; }
@@ -594,10 +631,12 @@ export function Paper({ n }: { n: Note }) {
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
       {/* 最上面一行：清單名（點一下或 ⋯ 裡的「改名字」都會變成可以打字；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
-      {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
-      <GestureDetector gesture={pull}>
+      {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
+      <GestureDetector gesture={head}>
       <View collapsable={false}>
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
+        {/* 左右撥換張時跟著手指走的是清單名和下面時間那行；⋯ 和把手不動（B4） */}
+        <Animated.View style={[st.titleSlide, slideStyle]}>
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
           // 紙上每一行用的多行輸入框畫中文從沒切過。貼上帶換行的字時換行換成空格，清單名只有一行
@@ -620,6 +659,7 @@ export function Paper({ n }: { n: Note }) {
               maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
           </Pressable>
         )}
+        </Animated.View>
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
         <Animated.View layout={calm ? undefined : KB_SLIDE}>
           <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
@@ -631,11 +671,11 @@ export function Paper({ n }: { n: Note }) {
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
       <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
-        <View style={st.timeRow}>
+        <Animated.View style={[st.timeRow, slideStyle]}>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
-        </View>
-        <SegHandle notes={swipeSet(store.s, n)} cur={n} color={c.textSecondary} onPress={openDir} />
+        </Animated.View>
+        <SegHandle notes={swapSet} cur={n} color={c.textSecondary} onPress={openDir} />
       </View>
       </View>
       </GestureDetector>
@@ -1014,6 +1054,7 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onLines
 
 const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.m, paddingBottom: T.space.s },
+  titleSlide: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
   titleBtn: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.xs },
   title: { flexShrink: 1, minWidth: 0, ...T.font.paperTitle },
   titleInput: { flex: 1, minWidth: 0, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
