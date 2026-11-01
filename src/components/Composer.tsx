@@ -22,6 +22,9 @@ const CHROME = T.space.s * 2;
 // 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
 const KB = T.motion.keyboardFollow;
 const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
+// 【暫時】輸入框高度量測（2026-11-01 第五批之後多米說「還是沒修好」）：開發版才印，印在電腦的 Metro 視窗，
+// 看選字中的字、原生量到的內容高、輸入框與外層實際的高是在哪一步沒跟上。查完就整段拿掉
+const probe = (what: string, v: unknown) => { if (__DEV__) console.log(`[輸入框] ${what}`, JSON.stringify(v)); };
 
 export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
   calm: boolean;
@@ -69,7 +72,9 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
       placeholder="記一行" placeholderTextColor={c.textMuted}
       style={[s.input, extra, { color: c.textPrimary }]}
       accessibilityLabel="輸入框"
-      onChangeText={v => { setTxt(v); onChange(v); }}
+      onChangeText={v => { setTxt(v); onChange(v); probe('字', { 長度: v.length, 尾巴: v.slice(-6) }); }}
+      onContentSizeChange={e => probe('原生內容高', Math.round(e.nativeEvent.contentSize.height))}
+      onLayout={e => probe('輸入框高', Math.round(e.nativeEvent.layout.height))}
       onSelectionChange={e => { caretAtEnd.current = e.nativeEvent.selection.end >= txtRef.current.length; }}
       onSubmitEditing={submit}
       onBlur={() => { if (!sending.current) onBlur(); }} />
@@ -96,6 +101,7 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
           </View>
         ) : (
           <ScrollView ref={scroller} style={[s.scroll, { maxHeight: maxInput }]} keyboardShouldPersistTaps="always"
+            onLayout={e => probe('外層高', { 高: Math.round(e.nativeEvent.layout.height), 上限: Math.round(maxInput) })}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => { if (caretAtEnd.current) scroller.current?.scrollToEnd({ animated: false }); }}>
             {field(null)}

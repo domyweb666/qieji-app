@@ -5,7 +5,7 @@
 // 一行點一下就進編輯（多米 2026-10-31 第二輪試驗：之前是點兩下，因為輸入框自己收觸控時捲動會誤觸；現在輸入框上有蓋板、
 // 點擊走手勢系統，手指一移動手勢就作廢，理論上捲動不會再誤觸。真機還會誤觸就改回 numberOfTaps: 2）；往右滑＝劃掉（留在原位，只加刪除線）；
 // 往左滑＝刪除（進這張紙的最近刪除）；長按＝劃掉／搬到／複製／刪除的選單；
-// 每行右邊常駐一個把手，拖了就排順序（多米 2026-11-01 定；之前要先 ⋯ →「排順序」進模式，推翻重新設計第二輪 #127）。紙頂端再往下拉放手＝開目錄。
+// 每行右邊常駐一個把手，拖了就排順序（多米 2026-11-01 定；之前要先 ⋯ →「排順序」進模式，推翻重新設計第二輪 #127）。開目錄只有點清單名（紙頂端往下拉 2026-11-01 拿掉）。
 // 從 app/note/[id].tsx 搬過來的滑動與拖曳手勢（worklet），2026-11-01 手感第一輪改了放手那段：滑回、彈回、滑出、讓位、落地都是接手指速度的彈簧，
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
@@ -21,7 +21,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
+  useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -49,11 +49,6 @@ function placeCaret(inp: TextInputInstance, at: number) {
 const hapticArm = () => haptic('swipeArm');
 const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop'); // 排順序放手那一刻
-// 紙的捲動區包成 Reanimated 元件：下拉換一張的提示要在 UI 執行緒逐格讀拉了多少（2-4 延遲），不經過 JS
-const PaperScroll = Animated.createAnimatedComponent(ScrollView);
-// 下拉提示：拉到門檻的幾成開始淡進、幾成全亮；過門檻箭頭轉幾度。只用一次
-const PULL_FADE = [0.35, 0.8] as const;
-const PULL_FLIP = 180;
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告
 const WEB_DEPS = Platform.OS === 'web';
 // 行的過場（2026-11-01 第二輪 K4）：長出來淡入、拿掉淡出，其他行滑到新位置。拖曳中（拿起到放下）與減少動態時不滑（直接到位，不然會跟落地動畫打架），淡入淡出照舊；
@@ -264,40 +259,7 @@ export function Paper({ n }: { n: Note }) {
     scrollRef.current?.scrollTo({ y: view.current.y, animated });
   }
   const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y; };
-  // 下拉換一張的提示（多米 2026-11-01 選甲，審查紀錄同日「開目錄要不要改成往下拉」）：紙在頂端再往下拉時，第一行上面露出來的空隙裡
-  // 長出一個箭頭＋「下拉換一張」，跟著拉的距離淡進；拉過門檻那一刻箭頭翻過來、字換成「放開換一張」、輕震一下（同一個事件，2-4 做法 6），
-  // 縮回門檻內再翻回去、不震。跟 iOS 下拉更新同一個慣例。門檻與放手開目錄的 dragEnd 是同一個數（gesture.pullOpen）
-  const pull = useSharedValue(0);     // 頂端往下拉了多少（正數）
-  const pullArmed = useSharedValue(0); // 1＝已過門檻，放手就開
-  const onScrollUI = useAnimatedScrollHandler({
-    onScroll: e => {
-      'worklet';
-      const p = Math.max(0, -e.contentOffset.y);
-      pull.value = p;
-      const armed = p > T.gesture.pullOpen ? 1 : 0;
-      if (armed === pullArmed.value) return;
-      pullArmed.value = armed;
-      if (armed) scheduleOnRN(hapticArm);
-    },
-  });
-  // 提示放在空隙正中；拉到門檻三四成才開始淡進，免得一般捲動回彈時閃一下
-  const pullHint = useAnimatedStyle(() => ({
-    opacity: interpolate(pull.value, [T.gesture.pullOpen * PULL_FADE[0], T.gesture.pullOpen * PULL_FADE[1]], [0, 1], Extrapolation.CLAMP),
-    transform: [{ translateY: (pull.value - T.shape.hitMin) / 2 }],
-  }));
-  // 箭頭翻面：過門檻轉 180 度（朝上＝放開），減少動態直接翻
-  const pullDeg = useDerivedValue(() => {
-    const deg = pullArmed.value ? PULL_FLIP : 0;
-    return calm ? deg : withTiming(deg, { duration: T.motion.fade });
-  }, WEB_DEPS ? [calm] : undefined);
-  const pullArrow = useAnimatedStyle(() => ({ transform: [{ rotate: `${pullDeg.value}deg` }] }));
-  const pullIdle = useAnimatedStyle(() => ({ opacity: pullArmed.value ? 0 : 1 }));
-  const pullGo = useAnimatedStyle(() => ({ opacity: pullArmed.value ? 1 : 0 }));
-  // 紙頂端再往下拉（iOS 的回彈）放手＝開目錄，跟點清單名同一件事。網頁沒有回彈，測不到
-  const dragEnd = (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-    scrolled(e);
-    if (e.nativeEvent.contentOffset.y < -T.gesture.pullOpen) openDir();
-  };
+  // 紙頂端再往下拉放手＝開目錄，2026-11-01 多米定拿掉：會跟拖曳排順序搞混。開目錄只剩點清單名
   // 鍵盤頂在哪、要不要捲（ensureVisible）仍在 JS 這邊算，只是事件改聽套件的（跟系統一樣 will／did 兩對）：
   // 它給的是鍵盤高度（從視窗底算），鍵盤頂＝視窗高 − 高度；位置動畫本身已交給上面的 kbH，這裡不再推
   useEffect(() => {
@@ -564,21 +526,12 @@ export function Paper({ n }: { n: Note }) {
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
-        {/* 下拉換一張的提示：墊在捲動區底下，平常被第一行蓋住；往下拉時從露出來的空隙裡看得到 */}
-        <Animated.View style={[st.pull, pullHint]} pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
-          <Animated.View style={pullArrow}><Sym name="chevron.down" size={14} color={c.textSecondary} weight="semibold" /></Animated.View>
-          <View>
-            <Animated.Text style={[st.pullText, { color: c.textSecondary }, pullIdle]}>下拉換一張</Animated.Text>
-            <Animated.Text style={[st.pullText, st.pullTextOver, { color: c.textSecondary }, pullGo]}>放開換一張</Animated.Text>
-          </View>
-        </Animated.View>
-        <PaperScroll ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           // 拖著排順序時關掉（多米 2026-11-01：靠近頂端拖會怪、會閃）：放下那一刻順序換了，它會把捲動位置跟著最上面那行挪一下，
           // 落地的行又被整頁的位移推一次。dragging 到位移歸零那一格才關（dragApi.end），順序換的那一次重畫它是關的
           maintainVisibleContentPosition={dragging ? undefined : KEEP_POS}
-          onScroll={onScrollUI} scrollEventThrottle={T.timing.scrollThrottle}
-          onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
+          onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}
           {n.items.length === 0 && (
@@ -615,7 +568,7 @@ export function Paper({ n }: { n: Note }) {
           )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + insets.bottom }} />
-        </PaperScroll>
+        </ScrollView>
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
@@ -947,9 +900,5 @@ const st = StyleSheet.create({
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去
-  // 下拉換一張的提示：鋪滿寬、一個點擊高，置中；由 pullHint 推到空隙正中
-  pull: { position: 'absolute', top: 0, left: 0, right: 0, height: T.shape.hitMin, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.xs },
-  pullText: { ...T.font.footnote },
-  pullTextOver: { position: 'absolute', left: 0, top: 0 },
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
 });

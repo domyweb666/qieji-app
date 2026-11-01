@@ -196,13 +196,10 @@ export const gesture = {
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
   dragFailX: 10,      // 把手上「左右」動超過這麼多就不算拿起，讓給整行的滑動（把手常駐之後要分工，2026-11-01；比 swipeActivate 14 小，兩個手勢才不會同一點打架）
-  pullOpen: 70,       // 紙頂端再往下拉超過這麼多放手＝開目錄（重新設計分支）
   longPressMs: 500,   // 長按一行多久跳選單
   longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
 };
-export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700,
-  scrollThrottle: 16, // 紙的捲動事件多久送一次（毫秒，約每格一次）：下拉換一張的提示要逐格跟手（2026-11-01）
-};
+export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700 };
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
 // 小工具跑在隔離環境、不能 import 這個檔；這裡的值由 src/lib/widget.ts 算好用 props 傳過去
