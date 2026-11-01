@@ -22,9 +22,6 @@ const CHROME = T.space.s * 2;
 // 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
 const KB = T.motion.keyboardFollow;
 const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
-// 【暫時】輸入框高度量測（2026-11-01 第五批之後多米說「還是沒修好」）：開發版才印，印在電腦的 Metro 視窗，
-// 看選字中的字、原生量到的內容高、輸入框與外層實際的高是在哪一步沒跟上。查完就整段拿掉
-const probe = (what: string, v: unknown) => { if (__DEV__) console.log(`[輸入框] ${what}`, JSON.stringify(v)); };
 
 export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
   calm: boolean;
@@ -42,7 +39,7 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
   // 輸入框已經換行、框還是一行，打的字跑到看不見的第二行。
   // 五、照抄紙上每一行讓輸入框自己長：真機量測（開發版印在 Metro）一開始量一次高 23，之後打了 47 個字（含注音）一次都沒再量——
   // 在多米手機上輸入框根本不會自己長。
-  // 第六版：兩邊（iOS、網頁）都由隱形鏡像撐高（onChangeText 每打一個注音都會到，這一點真機量測確認了），輸入框鋪滿；
+  // 第六版（多米 2026-11-01 真機確認「打字部分你搞定了」）：兩邊（iOS、網頁）都由隱形鏡像撐高（onChangeText 每打一個注音都會到，這一點真機量測確認了），輸入框鋪滿；
   // 鏡像與輸入框同字級、同明寫行高（INPUT_FONT），右邊多留一點點給游標；輸入框開著自己的捲動，萬一換行還是差一個字，
   // 游標所在那行也會被它自己捲出來，不會跑到看不見的地方
   const [txt, setTxt] = useState('');
@@ -77,16 +74,14 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
       style={[s.card, { backgroundColor: c.surface }]}>
       {/* grow 至少 44 高、把字那塊上下置中（一行時字跟 ✓ 在同一條中線）；字那塊由鏡像撐高、最高 maxInput，輸入框鋪滿在上面 */}
       <View style={s.grow}>
-        <View style={{ maxHeight: maxInput }} onLayout={e => probe('框高', { 高: Math.round(e.nativeEvent.layout.height), 上限: Math.round(maxInput) })}>
-          <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants"
-            onTextLayout={e => probe('鏡像行數', e.nativeEvent.lines.length)}>{txt + '​'}</Text>
+        <View style={{ maxHeight: maxInput }}>
+          <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
           <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint="next"
             {...(WEB ? { blurOnSubmit: true } : null)}
             placeholder="記一行" placeholderTextColor={c.textMuted}
             style={[s.input, s.fill, { color: c.textPrimary }]}
             accessibilityLabel="輸入框"
-            onChangeText={v => { setTxt(v); onChange(v); probe('字', { 長度: v.length, 尾巴: v.slice(-6) }); }}
-            onContentSizeChange={e => probe('輸入框內容高', Math.round(e.nativeEvent.contentSize.height))}
+            onChangeText={v => { setTxt(v); onChange(v); }}
             onSubmitEditing={submit}
             onBlur={() => { if (!sending.current) onBlur(); }} />
         </View>

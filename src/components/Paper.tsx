@@ -79,6 +79,9 @@ export function Paper({ n }: { n: Note }) {
   const scrollRef = useRef<any>(null);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // 改名字時輸入框的高度＝平常那行清單名量到的高（多米 2026-11-01：改名字時大字的上緣被切掉）。iOS 單行輸入框只會照它量到的高畫字，
+  // 量出來比 28 點粗體（再跟著系統字級放大）的實際字高矮，字頂就被切；拿同一行字、同字級的 Text 量到的高最準
+  const [titleH, setTitleH] = useState(0);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
   // 底部輸入框（多米 2026-11-01）：按 ＋ 升起、在裡面打；draft＝框裡現在的字（不受控輸入框，送出或收起時才拿）
   const [composing, setComposing] = useState(false);
@@ -364,6 +367,11 @@ export function Paper({ n }: { n: Note }) {
   const dragLift = useSharedValue(0); // 0＝沒拿起，1＝浮起（被拖的行放大一點、有陰影）
   const drag = useRef<{ idx: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  // 放下之後收尾分兩次重畫（多米 2026-11-01 第六批：靠近頂端拖完「又再執行一次動畫、閃一下」）：之前在 rAF 裡 setDragging(false)，
+  // 但換順序那次重畫常常還沒送出，兩個更新被 React 併成同一次——順序剛換的那一刻，行的 layout 過場和 maintainVisibleContentPosition
+  // 已經開回來了：過場把落地的行再滑一次；頂端附近 maintainVisibleContentPosition 會跟著最上面那行挪捲動位置（所以只有靠近頂端會閃）。
+  // 改成：end() 只換順序並記一次 dropTick；那次重畫真的畫完（useLayoutEffect）之後的下一格，才歸零位移、關 dragging
+  const [dropTick, setDropTick] = useState(0);
   // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算與放下的落地動畫在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
@@ -388,11 +396,17 @@ export function Paper({ n }: { n: Note }) {
       drag.current = null;
       const to = dragTo.value;
       if (d.idx !== to) { const [m] = n.items.splice(d.idx, 1); n.items.splice(to, 0, m); touch(); }
-      // dragging 要等新順序畫完、位移歸零的那一格才關：跟改資料同一次重畫就關掉，行的 layout 過場（ROW_MOVE）會在「順序剛換」那一刻
-      // 醒過來，把已經落地的行再從舊位置滑到新位置一次（多米 2026-11-01 真機：「換好位置了又重新換一次」）
-      requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; setDragging(false); });
+      // dragging 要等新順序畫完、位移歸零的那一格才關（見上面 dropTick）。跟改資料同一次重畫就關掉，行的 layout 過場（ROW_MOVE）會在
+      // 「順序剛換」那一刻醒過來，把已經落地的行再從舊位置滑到新位置一次（多米 2026-11-01 真機兩次回報）
+      setDropTick(t => t + 1);
     },
   };
+
+  useLayoutEffect(() => {
+    if (!dropTick) return;
+    const r = requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; setDragging(false); });
+    return () => cancelAnimationFrame(r);
+  }, [dropTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- open / close ---------- */
   // 換到別張紙（這個元件卸載）時收尾：空行拿掉，整張是空的就不留
@@ -492,7 +506,7 @@ export function Paper({ n }: { n: Note }) {
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         {renaming ? (
           <TextInput autoFocus defaultValue={n.title} placeholder="這張叫什麼" maxFontSizeMultiplier={T.font.listTitleMaxScale}
-            placeholderTextColor={c.textMuted} style={[st.titleInput, { color: c.textPrimary }]} returnKeyType="done"
+            placeholderTextColor={c.textMuted} style={[st.titleInput, { minHeight: Math.max(T.shape.hitMin, titleH), color: c.textPrimary }]} returnKeyType="done"
             accessibilityLabel="清單名"
             onChangeText={v => { n.title = v; touch(true); }}
             onFocus={() => onFocus('title')} onBlur={() => { setRenaming(false); onBlur('title'); touch(); }}
@@ -502,6 +516,7 @@ export function Paper({ n }: { n: Note }) {
             accessibilityRole="button" accessibilityLabel={`${name}，換一張清單`} accessibilityHint="打開目錄">
             {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
             <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
+              onLayout={e => setTitleH(e.nativeEvent.layout.height)}
               maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
             <View style={[st.chev, { backgroundColor: c.surface }]}>
               <Sym name="chevron.down" size={12} color={c.textPrimary} weight="semibold" />
@@ -873,7 +888,7 @@ const st = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.m, paddingBottom: T.space.s },
   titleBtn: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.xs },
   title: { flexShrink: 1, minWidth: 0, ...T.font.paperTitle },
-  titleInput: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
+  titleInput: { flex: 1, minWidth: 0, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
   chev: { width: T.shape.chev, height: T.shape.chev, borderRadius: T.shape.pill(T.shape.chev), alignItems: 'center', justifyContent: 'center', ...T.shape.shadowSoft },
   // 一行就是紙上的一行：沒有卡片，底下一條淡格線，左右貼齊整頁
   // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
