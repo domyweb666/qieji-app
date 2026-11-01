@@ -491,7 +491,6 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       dg.bw.value = 0;
     }
     setD({ ...d, inF: null, to });
-    if (__DEV__) console.log('[茄記除錯] 資料夾收起', JSON.stringify({ d: dragRef.current }));
     haptic('dragPass');
     // 手指不動也先對一次目錄的格子
     const cx = dg.x0.value + dg.dx.value + dg.sw.value / 2, cy = dg.y0.value + dg.dy.value + TILE / 2;
@@ -564,9 +563,6 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const d = dragRef.current, now = Date.now();
     const onto = stackRef.current ? flatOf(d ?? { id: '', src: null, page: 0, to: 0, from: 0, inF: null, fto: 0, k0: 0 }).find(e => e.id === stackRef.current) : undefined;
     let keepOpen = false;
-    // 除錯（暫時，多米 2026-11-02 錄影：從資料夾拖出來放手又回到資料夾，找到原因就拿掉）：放手當下的狀態、改完和 0.5 秒後的排列
-    const snap = () => JSON.stringify({ order: store.s.order, folders: store.s.folders?.map(f => [f.id, f.ids]) });
-    if (__DEV__) console.log('[茄記除錯] 放手', JSON.stringify({ d, aim: dg.aim.value, fopen: dg.fopen.value, stackOn: stackRef.current, openF }), '放手前', snap());
     if (d && d.inF) {
       const fe = entriesRef.current.find(e => e.id === d.inF);
       if (dg.aim.value >= FOLDER_AIM && fe) {
@@ -587,10 +583,6 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       const ids = flatOf(d).map(x => x.id);
       if (d.src) { placeTop(store.s, d.id, ids, now); store.change(); }
       else if (d.to !== d.from) { reseat(store.s, ids, now); store.change(); }
-    }
-    if (__DEV__) {
-      console.log('[茄記除錯] 改完', snap());
-      setTimeout(() => console.log('[茄記除錯] 0.5 秒後', snap()), 500);
     }
     setStackOn(null); dg.stackK.value = -1; dg.fopen.value = 0;
     setD(null);
@@ -816,10 +808,12 @@ function Tile(p: TileProps) {
   useEffect(() => {
     grow.value = calm ? (p.target ? GROW : 1) : withSpring(p.target ? GROW : 1, M.dragLift.spring);
   }, [p.target, calm]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 動畫裡只能用拆出來的真假值：寫 p.ghost 會把整包 props（紙、資料夾物件）抓進去，被鎖住之後改資料全部失效（多米 2026-11-02 真機「一團糟」）
+  const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rot.value}deg` }, { scale: grow.value }],
-    opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
-  }), WEB_DEPS ? [p.ghost] : undefined);
+    opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
+  }), WEB_DEPS ? [ghost] : undefined);
 
   return (
     <GestureDetector gesture={gesture}>
@@ -885,10 +879,12 @@ function FolderTile(p: FolderTileProps) {
     rot.value = withRepeat(withSequence(withTiming(a, { duration: M.jiggle.half }), withTiming(-a, { duration: M.jiggle.half })), -1, true);
     return () => cancelAnimation(rot);
   }, [p.editing, calm]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 同 Tile：動畫裡不准碰 p（p.n 是紙物件）
+  const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rot.value}deg` }],
-    opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
-  }), WEB_DEPS ? [p.ghost] : undefined);
+    opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
+  }), WEB_DEPS ? [ghost] : undefined);
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={style} accessible accessibilityRole="button" accessibilityLabel={p.label}

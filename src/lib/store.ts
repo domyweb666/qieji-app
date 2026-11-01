@@ -150,8 +150,6 @@ export const store = {
       const r = mergeCloud(box.state, remote, Date.now());
       // C2：紙合完再合排列（座位表要對得上合完的紙）；原始存檔沒另存成功的這次不碰座位表
       const moved = !box.noSeat && mergeLayout(box.state, remote.layout);
-      // 除錯（暫時，多米 2026-11-02 錄影：拖出資料夾放手又回去，看是不是 iCloud 的排列蓋過來；找到原因就拿掉）
-      if (__DEV__ && moved) console.log('[茄記除錯] iCloud 排列蓋過來', JSON.stringify({ order: box.state.order, folders: box.state.folders }));
       if (r.retyped.length) {
         const m = (box.synced ??= {});
         for (const id of r.retyped) m[id] = (m[id] ?? 0) + 1;
