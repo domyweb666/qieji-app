@@ -21,7 +21,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
+  useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -180,17 +180,29 @@ export function Paper({ n }: { n: Note }) {
   function addLine() { if (composing) return; haptic('add'); openComposer(); }
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
-  // 輸入框送出的字變成紙最上面的一行。畫面留在原地不捲（多米 2026-11-01 定：捲到下面想到一個點子、按 ＋ 記完，視線不要被拉回頂端）；
-  // 在頂端附近（一行高以內）時新行直接露出來；捲得深時，新行量好高度的那一刻往下補捲同樣的高，畫面原地不動
-  // （核心迴圈第 4 格「看到才敢忘」在頂端附近才成立）。
-  // 之前用 ScrollView 的 maintainVisibleContentPosition 做這件事，但它會記住「最上面那行」：拖曳排順序動到最上面幾行時，
-  // 它把捲動位置跟著那行挪、再自己捲回頂端，就是多米三次回報的「交換好之後又往上抬一下、只有靠近上方會」（2026-11-01 第七批拿掉）
-  const keepFor = useRef<string | null>(null);
+  // 輸入框送出的字變成紙最上面的一行，畫面捲回頂端讓你看到它（多米 2026-11-01 第八批改定：捲在下面記完畫面沒動，別人會以為壞了；
+  // 推翻同日早上的「留在原地」）。動畫照 2-4：
+  //   同一刻——新行出現那一刻就開始捲（不等、不分兩段）；用 iOS 自己的捲動動畫（跟點狀態列回頂端同一種，手指可以中途接住）；
+  //   到了怎麼認——新行亮一下（跟正在編輯那行同一種底色）再慢慢淡掉，回答「我剛剛記的去哪了」；不加震動（每記一行都震會被習慣掉）；
+  //   減少動態——不捲動畫、直接到頂，只留淡掉。
+  // 例外：從輸入框「點一行」離開（第四版乙：草稿送出、焦點進那一行）時不捲，你點的是那一行，跳走就打斷你；這時新行量好高度的那一刻
+  // 往下補捲同樣的高，畫面原地不動。拖曳開始時（手指已在把手上）也一樣不捲。
+  // 決定在新行量好高度的那一刻做（onLayoutRow）：那時點了哪一行（editing）已經知道。
+  // （不用 ScrollView 的 maintainVisibleContentPosition：它會記住最上面那行，拖曳動到頂端幾行時自己挪捲動又捲回頂端，2026-11-01 第七批拿掉）
+  const newRow = useRef<string | null>(null);
+  const [freshId, setFreshId] = useState<string | null>(null);
   function addFromDraft(t: string) {
     const id = uid();
-    if (view.current.y > T.shape.rowMin) keepFor.current = id;
+    newRow.current = id;
     n.items.unshift({ id, t, done: false, b: false });
     touch();
+  }
+  function placeNewRow(id: string, h: number) {
+    newRow.current = null;
+    const stay = drag.current || (editingRef.current !== null && editingRef.current !== id);
+    if (stay) { if (view.current.y > T.shape.rowMin) scrollTo(view.current.y + h, false); return; }
+    scrollTo(0, !calm); // 已經在頂端時不會動；不看 view.y（它只在手指放開時更新，可能是舊的）
+    setFreshId(id);
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
@@ -574,10 +586,11 @@ export function Paper({ n }: { n: Note }) {
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
+                fresh={freshId === it.id} onFreshDone={() => setFreshId(f => (f === it.id ? null : f))}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
-                  if (keepFor.current === it.id) { keepFor.current = null; scrollTo(view.current.y + h, false); } // 捲得深時記一行：畫面原地不動
+                  if (newRow.current === it.id) placeNewRow(it.id, h); // 輸入框剛送出的那行：捲回頂端亮一下，或原地不動（見 addFromDraft）
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
@@ -638,6 +651,7 @@ type Sel = { start: number; end: number };
 type LineProps = {
   it: Item; index: number; done: boolean; bg: string; rule: string; colors: Colors; count: number; calm: boolean; fs: number;
   dragging: boolean; editing: boolean; rev: number; // dragging＝紙上有一行正被拖著（拿起到放下），那段關掉行的 layout 過場
+  fresh: boolean; onFreshDone: () => void; // fresh＝輸入框剛送出、捲回頂端的那行：亮一下再淡掉
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   dragMids: SharedValue<number[]>; dragTops: SharedValue<number[]>; dragHs: SharedValue<number[]>; dragLift: SharedValue<number>;
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
@@ -652,7 +666,7 @@ type LineProps = {
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
 const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
   && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
-  && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev);
+  && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev && a.fresh === b.fresh);
 
 function LineRow(p: LineProps) {
   const tx = useSharedValue(0);
@@ -768,6 +782,18 @@ function LineRow(p: LineProps) {
   });
 
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }], opacity: op.value }));
+  // 剛記的那行亮一下：捲回頂端的那段時間（freshGlow.delay）亮著，之後 freshGlow.duration 淡掉，淡完通知上層收起
+  const glow = useSharedValue(0);
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+  const { fresh, onFreshDone } = p;
+  useEffect(() => {
+    if (!fresh) return;
+    const G2 = T.motion.freshGlow;
+    glow.value = 1;
+    glow.value = withDelay(calm ? 0 : G2.delay, withTiming(0, { duration: G2.duration }));
+    const t = setTimeout(onFreshDone, (calm ? 0 : G2.delay) + G2.duration);
+    return () => clearTimeout(t);
+  }, [fresh]); // eslint-disable-line react-hooks/exhaustive-deps
   const under = useAnimatedStyle(() => ({ backgroundColor: tx.value > 0 ? swipeStrikeBg : tx.value < 0 ? swipeDeleteBg : 'transparent' }));
   // 露出的字：越線前跟著行的位移從淡到亮，到門檻剛好全亮；越線後鎖在全亮；放手回位時再淡回去。
   // 行的位移比手指少 A（起步那段扣掉了），所以「到門檻」對行來說是門檻 − A
@@ -838,6 +864,8 @@ function LineRow(p: LineProps) {
               正在打字的那行一被關，輸入框就被迫放掉焦點、鍵盤收起（∧ ∨ 切行時鍵盤收了再開就是這個） */}
           {/* 正在編輯的那一行：整行提亮一點（網頁版有，多米 2026-10-31 第一輪補回來）。墊在字底下，不擋觸控 */}
           {p.editing && <View style={[StyleSheet.absoluteFill, { backgroundColor: p.colors.rowEditingFill }]} />}
+          {/* 輸入框剛送出的這行：捲到頂端那段時間後亮著，再慢慢淡掉（見 Paper 的 addFromDraft） */}
+          {p.fresh && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: p.colors.rowEditingFill }, glowStyle]} pointerEvents="none" />}
           <View style={st.field}>
             {/* key 跟著 rev：程式改了這行的字（Return 切行）就重掛輸入框，defaultValue 才會是新的字 */}
             <Field key={p.rev} text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}

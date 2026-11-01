@@ -165,6 +165,7 @@ export const motion = {
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
   swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
+  freshGlow:     { delay: 300, duration: 600 }, // 輸入框送出的那行捲回頂端後亮一下再淡掉：delay≈iOS 捲動動畫的時間（亮著等它到），duration＝淡掉（2026-11-01 第八批）
   rowShift:      { duration: 180 }, // 行長出來、拿掉時其他行滑到新位置（2026-11-01 第二輪）；行本身淡入淡出用 fade。減少動態：直接到位、淡入淡出照舊
   keyboardFollow: { duration: 250, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 系統鍵盤的時長與曲線。輸入框與它的暗幕進出用這組（2026-11-01 第三版：跟鍵盤同一個時鐘）。膠囊與輸入框的「位置」從第四輪 K7 起不再用它推，改由 react-native-keyboard-controller 逐格給鍵盤高度（含手指拖曳收鍵盤）
   fade:          150, // toast、確認框、減少動態時所有滑入／放大的替代
