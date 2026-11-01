@@ -188,3 +188,17 @@ test('K1 游標落點：用 y 找行、行內用比例，夾在 0～max；沒有
   assert.equal(caretAt(lines, 999, 999, 12), 12);    // 夾在 max（隱形字多一個零寬空白）
   assert.equal(caretAt(lines, -50, 10, 15), 0);      // 點在左邊外面
 });
+
+test('第一次安裝的教學紙：一張有標題、六行都沒劃掉的黃色清單，每行 id 不重複', async () => {
+  const { tutorialNote, TUTORIAL, isEmpty } = await import('../src/lib/model.ts');
+  const n = tutorialNote(1000);
+  assert.equal(n.title, TUTORIAL.title);
+  assert.equal(n.type, 'check');
+  assert.equal(n.color, 'yellow');
+  assert.equal(n.deleted, false);
+  assert.deepEqual(n.items.map(i => i.t), TUTORIAL.lines);
+  assert.ok(n.items.every(i => !i.done));
+  assert.equal(new Set(n.items.map(i => i.id)).size, n.items.length);
+  assert.equal(isEmpty(n), false); // 關掉紙時不會被當成空紙收掉
+  assert.ok(TUTORIAL.lines.some(t => t.includes('往右滑劃掉')) && TUTORIAL.lines.some(t => t.includes('往左滑刪掉')));
+});

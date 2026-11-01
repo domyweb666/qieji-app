@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { dropNotes, emptyState, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
@@ -66,9 +66,18 @@ export const store = {
     box.state = parseState(raw);
     box.hintSeen = hint === '1';
     box.last = last;
+    // 第一次安裝（手機上根本沒有這個存檔，raw 是 null）：放一張教學紙當第一張（多米 2026-11-01）。
+    // 讀到壞掉的存檔不算第一次（raw 不是 null），不放，免得蓋在使用者的資料上
+    const first = raw === null;
+    if (first) {
+      const t = tutorialNote(Date.now());
+      box.state.notes.push(t);
+      box.last = t.id;
+    }
     box.loaded = true;
     box.version++;
     emit();
+    if (first) writeNow();
     store.purgeTrash();
   },
   // 最近刪除 30 天自動清（2026-11-01 接上，多米定；規則在 model.ts 與 tests/trash.test.mjs，鐵則是拿不準就不刪）：

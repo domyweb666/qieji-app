@@ -538,8 +538,7 @@ export function Paper({ n }: { n: Note }) {
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
-  // 提示字永遠留著（多米 2026-10-31），有字才印
-  const showHint = n.items.some(i => i.t.trim());
+  // 紙底下那行手勢提示（點一下改字 · 右滑劃掉 · 左滑刪除 · 按住更多）2026-11-01 拿掉：第一次安裝放的教學紙（model.ts TUTORIAL）取代它
 
   return (
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
@@ -622,12 +621,6 @@ export function Paper({ n }: { n: Note }) {
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </LayoutAnimationConfig>
-          {/* 提示：四個短詞各自一個 Text，放不下就整個詞換行，不會斷在詞中間、也沒有點點。行在滑的時候它跟著滑 */}
-          {showHint && (
-            <Animated.View style={st.hint} layout={calm ? undefined : ROW_MOVE}>
-              {['點一下改字', '右滑劃掉', '左滑刪除', '按住更多'].map(t => <Text key={t} style={[st.hintText, { color: c.textMuted }]}>{t}</Text>)}
-            </Animated.View>
-          )}
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + insets.bottom }} />
         </ScrollView>
@@ -974,9 +967,6 @@ const st = StyleSheet.create({
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
   timeText: { ...T.font.footnote },
-  // 提示字縮小（多米 2026-10-31）
-  hint: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: T.space.l, rowGap: T.space.xs, padding: T.space.m },
-  hintText: { ...T.font.caption },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   emptyFace: { width: T.shape.emptyFace, height: T.shape.emptyFace, marginBottom: T.space.m },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },

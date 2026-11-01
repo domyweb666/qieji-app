@@ -91,6 +91,26 @@ export function fixGarden(s: any) {
   };
 }
 
+// 第一次安裝時放的教學紙（多米 2026-11-01 定，取代紙底下那行「點一下改字 · 右滑劃掉…」）：每一行就是叫你做的那個動作，
+// 照做這行就被劃掉、刪掉或改掉，做完一輪紙也清空了（2-7 怎麼做 3：讓內容自己當提示）。只在手機上完全沒有茄記資料時放（store.load）。
+// 第 1 行順便說「劃掉」在茄記的意思：想完了、放下了，不是做完了
+export const TUTORIAL = {
+  title: '從這裡開始',
+  lines: [
+    '想完的事，往右滑劃掉',
+    '不要的，往左滑刪掉（刪了在最近刪除找得回來）',
+    '點一下這行，就能改字',
+    '按住這行，看還能做什麼',
+    '按住右邊三條線上下拖，換順序',
+    '右下角 ＋，記下你現在想到的事',
+  ],
+};
+export function tutorialNote(now: number): Note {
+  return { id: uid(), type: 'check', title: TUTORIAL.title, body: '', bin: [], color: 'yellow',
+    items: TUTORIAL.lines.map(t => ({ id: uid(), t, done: false, b: false })),
+    pinned: false, deleted: false, created: now, updated: now, b: false };
+}
+
 export const emptyState = (): State => ({ notes: [], sort: 'updated', garden: { days: {}, tot: { f: 0, e: 0 } }, gone: {} });
 
 // 讀進存檔字串（可能是 null、壞掉的 JSON、或任何舊版格式）
