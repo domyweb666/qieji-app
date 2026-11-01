@@ -99,7 +99,8 @@ function useDragPan(o: DragOpts) {
   return usePanGesture({
     enabled: o.enabled,
     activateAfterLongPress: o.editing ? 0 : G.longPressMs,
-    minDistance: G.tileDrag,
+    // 抖動中不用等長按，門檻跟「點一下」的容許一樣（多米 2026-11-02 錄影：門檻 6 點時，抖動中點資料夾手指一晃就被當成拖，打不開）
+    minDistance: o.editing ? G.longPressMove : G.tileDrag,
     onActivate: e => {
       'worklet';
       dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
@@ -374,6 +375,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
 
   /* ---------- 長按選單（C4）：顏色、改名字、釘選、刪除、編輯目錄；資料夾只有改名字、編輯目錄 ---------- */
   function openMenu(id: string, y: number, swatches = true, rowCount = 4) {
+    // 長按跳選單和長按後拖都在按住 longPressMs 時成立，手指按著晃一下兩個會一起來：已經拿起來了就不開選單（iOS 一拖選單就收掉；多米 2026-11-02 錄影）
+    if (dragRef.current) return;
     Keyboard.dismiss();
     haptic('menu');
     const h = (swatches ? T.shape.swatchDot + T.space.l * 2 : 0) + T.shape.menuRow * rowCount + T.space.xs * 2 + T.space.s * 2; // 一排色塊＋幾個項目（PopMenu 的藥丸版）
@@ -486,6 +489,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       dg.bw.value = 0;
     }
     setD({ ...d, inF: null, to });
+    if (__DEV__) console.log('[茄記除錯] 資料夾收起', JSON.stringify({ d: dragRef.current }));
     haptic('dragPass');
     // 手指不動也先對一次目錄的格子
     const cx = dg.x0.value + dg.dx.value + dg.sw.value / 2, cy = dg.y0.value + dg.dy.value + TILE / 2;
@@ -558,6 +562,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const d = dragRef.current, now = Date.now();
     const onto = stackRef.current ? flatOf(d ?? { id: '', src: null, page: 0, to: 0, from: 0, inF: null, fto: 0, k0: 0 }).find(e => e.id === stackRef.current) : undefined;
     let keepOpen = false, openNew: string | null = null;
+    // 除錯（暫時，多米 2026-11-02 錄影：從資料夾拖出來放手又回到資料夾，找到原因就拿掉）：放手當下的狀態、改完和 0.5 秒後的排列
+    const snap = () => JSON.stringify({ order: store.s.order, folders: store.s.folders?.map(f => [f.id, f.ids]) });
+    if (__DEV__) console.log('[茄記除錯] 放手', JSON.stringify({ d, aim: dg.aim.value, fopen: dg.fopen.value, stackOn: stackRef.current, openF }), '放手前', snap());
     if (d && d.inF) {
       const fe = entriesRef.current.find(e => e.id === d.inF);
       if (dg.aim.value >= FOLDER_AIM && fe) {
@@ -579,6 +586,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       const ids = flatOf(d).map(x => x.id);
       if (d.src) { placeTop(store.s, d.id, ids, now); store.change(); }
       else if (d.to !== d.from) { reseat(store.s, ids, now); store.change(); }
+    }
+    if (__DEV__) {
+      console.log('[茄記除錯] 改完', snap());
+      setTimeout(() => console.log('[茄記除錯] 0.5 秒後', snap()), 500);
     }
     setStackOn(null); dg.stackK.value = -1; dg.fopen.value = 0;
     setD(null);
