@@ -1,10 +1,10 @@
 {
-  "station": "spec-standards",
-  "updated_at": "2026-11-02T16:00:00+08:00",
-  "updated_by": "vibe-traffic-control",
+  "station": "audit",
+  "updated_at": "2026-11-02T18:00:00+08:00",
+  "updated_by": "vibe-self-review",
   "pieces": {
-    "todo": 4,
-    "machine_verified": 9,
+    "todo": 3,
+    "machine_verified": 10,
     "human_verified": 9
   },
   "chunks": [
@@ -25,7 +25,7 @@
     {
       "name": "C 手排目錄",
       "total": 5,
-      "machine_done": 4,
+      "machine_done": 5,
       "human_verified": false,
       "approved": true
     },
@@ -37,7 +37,14 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [],
+  "pending_immediate_verify": [
+    {
+      "piece": "C2",
+      "what": "排列同步 iCloud（layout.json 出現、刪 app 重裝排列回來）",
+      "list": ".vibe/操作清單-待驗.md",
+      "since": "2026-11-02"
+    }
+  ],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -98,6 +105,18 @@
       "why": "多米 2026-11-02「全做完再說」",
       "since": "2026-11-02",
       "status": "2026-11-02 組塊 C 真機都 ok，補確認"
+    },
+    {
+      "what": "C2 真實情境走查",
+      "why": "多米 2026-11-02 只回同步規則選擇題「照原定」",
+      "since": "2026-11-02",
+      "status": "C2 立即驗時一併確認"
+    },
+    {
+      "what": "C2 兩台互改的同步",
+      "why": "沒有第二台；只有純函式測試",
+      "since": "2026-11-02",
+      "status": "認不認領待問"
     }
   ],
   "decisions": [

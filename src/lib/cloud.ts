@@ -3,17 +3,19 @@
 // 靜靜做：iCloud 沒登入、雲碟關掉、讀寫失敗都不跳提示，下次存檔、回到前景或 iCloud 變成可用時再試（規劃第八節）。
 // 只有 iOS 的開發版／正式版有原生模組：網頁、Android 不做；Expo Go 沒有模組，第一次載入失敗之後就不再試。
 // S4：永久刪除的紙，墓碑寫進 gone.json 之後把 iCloud 上那張的檔案也拿掉（墓碑之後別台又改過的留著）。
+// C2：目錄排列（座位表）是同一層的 layout.json，規則在 model.mergeLayout。
 // S5：每個原生呼叫都有逾時。讀一個還沒下載到這台的檔案時，原生那邊會等 iCloud 下載完（套件註解也這樣寫）；
 // 離線時會一直等，「拉完才准上傳」的閘門就永遠不開。逾時就當這次拿不到：請 iCloud 下載、5 分鐘內不再讀那個檔，下次再試
 import { Platform } from 'react-native';
 import type { CloudStorage as CloudStorageClass } from 'react-native-cloud-storage';
-import { cloudFileBuried, markSynced, pendingUploads, remotePrint, type State } from './model';
+import { cloudFileBuried, layoutToSend, markLayoutSent, markSynced, pendingUploads, readLayout, remotePrint, type State } from './model';
 
 type Cloud = InstanceType<typeof CloudStorageClass>;
 let cloud: Cloud | null | undefined;
 
 const WAIT = 2000; // 最後一次存檔之後等這麼久才傳（打字中每 0.25 秒存一次，不必每次都傳）
 const GONE = 'gone.json';
+const LAYOUT = 'layout.json';
 const NOT_FOUND = 'ERR_FILE_NOT_FOUND';
 const OP_LIMIT = 10_000;      // 一次讀寫最多等這麼久
 const LIST_LIMIT = 35_000;    // 列資料夾：原生那邊自己最多等 30 秒，多給一點
@@ -125,7 +127,8 @@ async function once() {
   const gone = s.gone ?? {};
   const goneNow = JSON.stringify(gone);
   const goneDirty = goneNow !== goneSent && Object.keys(gone).length > 0;
-  if (!notes.length && !goneDirty) return;
+  const lay = layoutToSend(s);
+  if (!notes.length && !goneDirty && !lay) return;
   if (!(await within(c.isCloudAvailable()))) return; // 沒登入或雲碟關掉：等可用的通知
 
   if (!dirReady) { await within(c.mkdir('')); dirReady = true; } // 容器裡的 Documents 第一次不一定存在
@@ -153,6 +156,27 @@ async function once() {
     await within(c.writeFile(path, JSON.stringify(paper)));
     markSynced(n, h);
     synced++;
+  }
+
+  // C2：排列。蓋之前先看 iCloud 上那份：比這台新＝別台後來排過、還沒拉下來，不蓋、改成先拉。
+  // 讀不到（還沒下載下來、逾時）這輪先不傳；檔案不存在或壞掉才直接寫
+  if (lay && !isStuck(LAYOUT)) {
+    try {
+      let theirs: ReturnType<typeof readLayout> = null;
+      try {
+        theirs = readLayout(JSON.parse(await read(c, LAYOUT)));
+      } catch (e) {
+        if (!(e instanceof SyntaxError) && code(e) !== NOT_FOUND) throw e;
+      }
+      if (theirs && theirs.mod > lay.mod) conflict = true;
+      else {
+        await within(c.writeFile(LAYOUT, JSON.stringify(lay)));
+        markLayoutSent(s, lay.mod);
+        synced++;
+      }
+    } catch (e) {
+      warn('排列', e);
+    }
   }
 
   if (synced) hooks?.synced(); // 先記下傳上去的紙：後面墓碑那段失敗也不影響
@@ -190,7 +214,7 @@ async function sweep(c: Cloud, gone: Record<string, number>) {
   try { names = await within(c.readdir(''), LIST_LIMIT); } catch (e) { warn('列資料夾', e); return; }
   for (const name of names) {
     const id = name.endsWith('.json') ? name.slice(0, -'.json'.length) : '';
-    if (!id || name === GONE || gone[id] === undefined || isStuck(name)) continue;
+    if (!id || name === GONE || name === LAYOUT || gone[id] === undefined || isStuck(name)) continue;
     try {
       if (cloudFileBuried(gone, JSON.parse(await read(c, name)))) await within(c.unlink(name));
     } catch (e) {
@@ -199,11 +223,11 @@ async function sweep(c: Cloud, gone: Record<string, number>) {
   }
 }
 
-// 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud），加上資料夾清單 names（含還沒下載的檔，S5 判斷換帳號用）。
+// 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud），layout.json（C2，規則交給 model.mergeLayout；null＝有但讀不到、undefined＝沒有），加上資料夾清單 names（含還沒下載的檔，S5 判斷換帳號用）。
 // iCloud 沒登入或雲碟關掉回 'off'；其他拿不到（資料夾還沒有、讀失敗、整次逾時）回 null。
 // 某一張讀不到（還沒下載下來、逾時）就先請 iCloud 下載、這次跳過，下次拉就有了：少一張不會害到資料，本機那張留著，
 // 而且那張在上傳前也會因為「讀不到 iCloud 那份」先不傳，不會拿本機的去蓋
-export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown; names: string[] } | 'off' | null> {
+export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown; layout: unknown; names: string[] } | 'off' | null> {
   const c = load();
   if (!c) return null;
   try {
@@ -225,6 +249,7 @@ async function fetchAll(c: Cloud) {
   }
   const notes: unknown[] = [];
   let gone: unknown = {};
+  let layout: unknown = names.includes(LAYOUT) ? null : undefined;
   for (const name of names) {
     if (!name.endsWith('.json') || name.startsWith('.') || isStuck(name)) continue;
     let text: string;
@@ -236,9 +261,10 @@ async function fetchAll(c: Cloud) {
       continue;
     }
     let data: unknown;
-    try { data = JSON.parse(text); } catch { continue; } // 壞掉的檔案（或別的東西）不理
+    try { data = JSON.parse(text); } catch { if (name === LAYOUT) layout = undefined; continue; } // 壞掉的檔案（或別的東西）不理；壞掉的排列當成沒有，會被這台的蓋掉
     if (name === GONE) gone = data;
+    else if (name === LAYOUT) layout = data;
     else notes.push(data);
   }
-  return { notes, gone, names };
+  return { notes, gone, layout, names };
 }

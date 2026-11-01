@@ -35,7 +35,8 @@ export type Day = { f: number; e: number; g: number };
 export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } };
 // gone＝墓碑：永久拿掉的紙 id → 拿掉的時間（S0，2026-11-01 加）。沒有它，另一台還留著的那張會被同步回來，刪掉的紙復活
 // order＝目錄座位表（C1，2026-11-02 加）：每張紙的 id 照目錄裡的先後排，舊存檔沒有。sort 從此不用，但照鐵則留著
-export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[] };
+// orderMod＝座位表最後一次親手排（拖、往前移／往後移）的時間，或從 iCloud 照抄來那份的時間；orderSent＝上次跟 iCloud 對上的 orderMod（C2，2026-11-02 加）
+export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[]; orderMod?: number; orderSent?: number };
 
 // name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
 // 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
@@ -230,12 +231,14 @@ export function fixOrder(s: State) {
 }
 
 // 拖完換座位（C4）：visible＝目錄裡看得到的紙排好的新順序。座位表裡「看得到的紙」那些位子依序換成新順序，
-// 看不到的（最近刪除）留在原位，還原時照樣回到附近
-export function reseat(s: State, visible: string[]) {
+// 看不到的（最近刪除）留在原位，還原時照樣回到附近。C2：有換到位置就記下親手排的時間（比照抄來的那份新，同步時才贏）
+export function reseat(s: State, visible: string[], now = Date.now()) {
   fixOrder(s);
   const set = new Set(visible);
   let k = 0;
-  s.order = s.order!.map(id => (set.has(id) ? visible[k++] : id));
+  const old = s.order!;
+  s.order = old.map(id => (set.has(id) ? visible[k++] : id));
+  if (s.order.some((id, i) => id !== old[i])) s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1);
 }
 
 // 目錄裡的紙（不含最近刪除），照座位排；搜尋也照座位。純函式不改 state：還沒寫進座位表的（剛開的新的一張）先排在最後，存檔時 fixOrder 補上
@@ -245,6 +248,52 @@ export function seatedNotes(s: State, q: string) {
   const end = seat.size;
   return s.notes.filter(n => !n.deleted && hit(n, k))
     .sort((a, b) => (seat.get(a.id) ?? end) - (seat.get(b.id) ?? end) || b.updated - a.updated);
+}
+
+/* ---------------- 目錄排列同步（C2） ---------------- */
+// iCloud 茄記資料夾裡的 layout.json：{ order, mod }。故意沒有 id 欄位：還沒更新的舊版把它當紙讀進來時，mergeCloud 會濾掉。
+// 多米 2026-11-02 定：只有親手排才算改排列（新的一張補最後、永久拿掉不算）；兩台都排過，後排的那台為準；對不上的紙補在最後
+export type Layout = { order: string[]; mod: number };
+
+// 外面讀進來的 layout.json 先驗：格式不對回 null（當成 iCloud 上沒有）
+export function readLayout(raw: unknown): Layout | null {
+  const r = raw as { order?: unknown; mod?: unknown } | null;
+  if (!r || typeof r !== 'object' || !Array.isArray(r.order)) return null;
+  if (typeof r.mod !== 'number' || !Number.isFinite(r.mod) || r.mod < 0) return null;
+  return { order: r.order.filter((id): id is string => typeof id === 'string'), mod: r.mod };
+}
+
+// 這台有自己的排列（升級上來的、已經有真的紙）：iCloud 上沒有 layout.json 時拿這台的當第一份，mod 從 0 起算（誰親手排過都比它新）。
+// 剛裝好、只有教學紙的不算：重裝時資料夾清單可能還沒列出 layout.json，先傳一份上去會把原本的排列蓋掉
+export function ownLayout(s: State) {
+  if (s.orderMod === undefined && s.notes.some(n => !isUntouchedTutorial(n))) s.orderMod = 0;
+}
+
+// 要傳上 iCloud 的排列：這台的排列跟上次對上 iCloud 的不一樣才傳
+export function layoutToSend(s: State): Layout | null {
+  if (!Array.isArray(s.order) || s.orderMod === undefined || s.orderMod === s.orderSent) return null;
+  return { order: s.order.slice(), mod: s.orderMod };
+}
+export function markLayoutSent(s: State, mod: number) { s.orderSent = mod; }
+
+// 拉 iCloud 時合排列（紙合完之後）。raw：layout.json 的內容；null＝有這個檔但這次讀不到（還沒下載、逾時），undefined＝沒有這個檔。
+// 這台排過還沒傳、而且比 iCloud 那份新 → 留著等上傳；不然照 iCloud 那份排，這台沒有的紙跳過、那份沒有的補最後（fixOrder）。
+// 回傳目錄順序有沒有變
+export function mergeLayout(s: State, raw: unknown): boolean {
+  if (raw === null) return false; // 讀不到：照這台的排，下次再對
+  const r = readLayout(raw);
+  if (!r) {
+    // iCloud 上沒有（第一次、被刪掉、壞掉）：這台有自己的排列就傳上去
+    if (s.orderMod !== undefined) delete s.orderSent;
+    return false;
+  }
+  const mine = s.orderMod;
+  if (mine !== undefined && mine !== s.orderSent && mine > r.mod) return false;
+  const before = (s.order ?? []).join('\n');
+  s.order = r.order;
+  s.orderMod = s.orderSent = r.mod;
+  fixOrder(s);
+  return s.order.join('\n') !== before;
 }
 
 /* ---------------- backup ---------------- */
@@ -512,6 +561,7 @@ export function seemsNewCloud(s: State, names: string[], gone: unknown) {
 // 多米選「放進去」：忘掉跟舊 iCloud 對過的記號，每張紙都當成沒傳過，下一輪全部傳進現在這個 iCloud
 export function forgetSync(s: State) {
   for (const n of s.notes) delete n.sh;
+  delete s.orderSent; // C2：排列也重傳
 }
 
 // 第一次安裝放的教學紙、一個字都沒動過（S3，2026-11-01，規劃七之一）：不上傳；iCloud 上有別的紙時，從 iCloud 下來的這種也不收、本機的拿掉。

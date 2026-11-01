@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
-import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 import { T } from './tokens';
 
@@ -103,6 +103,7 @@ export const store = {
       } catch { box.noSeat = true; }
       if (box.loaded) return;
     }
+    if (!box.noSeat) ownLayout(state); // C2：已經有真的紙的這台，排列可以當 iCloud 的第一份
     box.state = state;
     box.hintSeen = hint === '1';
     box.last = last;
@@ -147,11 +148,13 @@ export const store = {
         return;
       }
       const r = mergeCloud(box.state, remote, Date.now());
+      // C2：紙合完再合排列（座位表要對得上合完的紙）；原始存檔沒另存成功的這次不碰座位表
+      const moved = !box.noSeat && mergeLayout(box.state, remote.layout);
       if (r.retyped.length) {
         const m = (box.synced ??= {});
         for (const id of r.retyped) m[id] = (m[id] ?? 0) + 1;
       }
-      if (r.changed) { box.version++; emit(); }
+      if (r.changed || moved) { box.version++; emit(); }
       await writeNow();
     } finally {
       box.pulling = false;

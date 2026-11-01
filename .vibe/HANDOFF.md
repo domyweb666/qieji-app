@@ -1,6 +1,7 @@
 # Handoff: 2026-11-02 下午｜組塊 B 結案；C1、C3、C4、C5 多米真機「C 都 ok」；下一片 C2 排列同步 iCloud（🔴），之後組塊 D
 
 > 產出時間：2026-11-02 16:00（上一版在 `.vibe/handoff/archive/2026-11-02-1500.md`）
+> **18:00 更新**：C2 排列同步 iCloud 做完、機器自審過（多米選擇題選「照原定」），等多米照 `.vibe/操作清單-待驗.md` 13 條立即驗。C2 驗過之前不開組塊 D。細節在帳本「機器已驗」區
 > **16:00 更新**：多米真機玩完 `.vibe/操作清單-待驗.md` 27 條，回「C 都 ok」→ C1、C3～C5 已搬到帳本「已完成」，跳過紀錄裡 C 那幾筆標補確認。下面「還沒做完」裡等驗組塊 C 的部分已結案，直接從「下一步」第 3 點 C2 開始
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／RN 0.88 新架構，iOS 原生 app；多米沒有 Mac、不太看程式、用 4G 測）
 > GitHub：私人 repo https://github.com/domyweb666/qieji-app（master，commit 完直接 `git push`）
