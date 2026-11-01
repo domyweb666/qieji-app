@@ -343,6 +343,30 @@ export function outOfFolder(s: State, noteId: string, now: number) {
   fixOrder(s);
   return true;
 }
+// D4（照 iOS）：把紙放進資料夾的指定位置，也用來在資料夾裡換順序。visible＝放完之後資料夾裡看得到的紙（不含最近刪除）想要的順序，
+// 要包含這張。在最近刪除裡的紙留在原本的位子（跟 reseat 同一個做法）。不在這個資料夾的先拿過來（從目錄或別的資料夾）
+export function placeInFolder(s: State, noteId: string, folderId: string, visible: string[], now: number) {
+  fixOrder(s);
+  const f = s.folders?.find(x => x.id === folderId);
+  if (!f || !visible.includes(noteId) || s.folders!.some(x => x.id === noteId)) return false; // 資料夾不能放進資料夾
+  if (!f.ids.includes(noteId) && !intoFolder(s, noteId, folderId, now)) return false;
+  // 拿過來時原本的資料夾空了會被 fixOrder 整理掉，資料夾清單換成新的物件：重新拿一次
+  const live = s.folders!.find(x => x.id === folderId)!;
+  const set = new Set(visible.filter(id => live.ids.includes(id)));
+  if (set.size !== visible.length) return false;
+  let k = 0;
+  live.ids = live.ids.map(id => (set.has(id) ? visible[k++] : id));
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+// D4（照 iOS）：把紙放到目錄的指定位置；在資料夾裡的先拿出來（空了資料夾就不見）。visible＝放完之後目錄最上層看得到的那幾格（紙和資料夾）想要的順序
+export function placeTop(s: State, noteId: string, visible: string[], now: number) {
+  if (folderOf(s, noteId)) outOfFolder(s, noteId, now);
+  reseat(s, visible, now);
+  touchLayout(s, now);
+}
+
 // 改資料夾名：清空或沒變就不改（維持原名）
 export function renameFolder(s: State, folderId: string, name: string, now: number) {
   const f = s.folders?.find(x => x.id === folderId);

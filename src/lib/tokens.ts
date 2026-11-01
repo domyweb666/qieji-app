@@ -175,7 +175,6 @@ export const motion = {
   snapBack:      { spring: { duration: 250, dampingRatio: 1 } }, // 沒滑夠放手彈回。減少動態：直接回位
   dragShift:     { spring: { duration: 200, dampingRatio: 1 } }, // 排順序時其他行讓位。減少動態：直接讓位
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
-  folderOut:     { opacity: 0.3, duration: 150 }, // D3：拖著資料夾裡的紙出了框，框淡到這樣（放手就拿出來）。減少動態：直接變淡
   stackTarget:   { scale: 1.08 }, // D2：拖著停在別張磚正中間夠久，底下那張放大一點＝放手就疊（彈簧用 dragLift 那組）。減少動態：直接變大
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
   swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
@@ -240,7 +239,9 @@ export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, fr
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
   reflow: 200,     // D2（多米選照 iOS）：拖著停在別格邊邊或空隙這麼久，其他磚才讓位；一路滑過不停不讓
-  stackHover: 500 }; // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
+  stackHover: 500,
+  folderSpring: 500, // D4（照 iOS）：準備疊到資料夾磚上之後再停這麼久，資料夾自己打開（HIG 的 spring loading），可以放進裡面指定位置
+  folderLeave: 350 }; // D4：資料夾開著時手指離開框這麼久，資料夾收起、回到目錄繼續拖 // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
 // 小工具跑在隔離環境、不能 import 這個檔；這裡的值由 src/lib/widget.ts 算好用 props 傳過去
