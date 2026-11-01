@@ -163,7 +163,14 @@ export function Paper({ n }: { n: Note }) {
 
   /* ---------- focus ---------- */
   // 進某一行編輯：先讓那一行的輸入框收觸控，畫完立刻對焦
-  function focusItem(id: string, caret?: number) { pending.current = { id, caret }; setEditing(id); force(); }
+  // y＝點下去的位置（從這行頂端算）：長的一行點下去時，畫面要捲到你點的那幾個字，不是這行開頭（多米 2026-11-01 第九批）。
+  // 沒給（Return 切行、Backspace 併行這類鍵盤來的）就當游標在這行尾巴
+  const focusAt = useRef<{ id: string; y?: number } | null>(null);
+  function focusItem(id: string, caret?: number, y?: number) {
+    pending.current = { id, caret };
+    focusAt.current = { id, y };
+    setEditing(id); force();
+  }
   // 畫完立刻對焦（不等到畫面顯示後），換格時鍵盤不會先收再開
   useLayoutEffect(() => {
     const p = pending.current;
@@ -270,8 +277,19 @@ export function Paper({ n }: { n: Note }) {
     if (!l || !v.h) return;
     // 沒被鍵盤和工具列擋住的高度，底下留一點空
     const shown = Math.min(v.h, v.kb - v.top) - T.space.l;
-    if (l.y < v.y) scrollTo(l.y);
-    else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
+    if (l.h <= shown) {
+      // 整行放得下：整行露出來
+      if (l.y < v.y) scrollTo(l.y);
+      else if (l.y + l.h > v.y + shown) scrollTo(l.y + l.h - shown);
+      return;
+    }
+    // 這行比看得到的地方還高：露出正在打的那幾個字——點的位置，沒點過就是尾巴。之前一律捲到這行開頭，
+    // 點長的一行的後半段時，你點的地方反而被捲到鍵盤底下（多米 2026-11-01 第九批）
+    const fa = focusAt.current?.id === id ? focusAt.current.y : undefined;
+    const p = l.y + (fa ?? l.h - PAD_V);
+    const band = Math.round(LINE_H * fs); // 上下各留一行
+    if (p - band < v.y) scrollTo(p - band);
+    else if (p + band > v.y + shown) scrollTo(p + band - shown);
   }
   // 捲到哪只在「停下來」和「自己捲」的時候記，捲動途中不回報（每一格畫面都回報一次會拖慢捲動）
   function scrollTo(y: number, animated = true) {
@@ -590,6 +608,9 @@ export function Paper({ n }: { n: Note }) {
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
+                  // 正在打的那行長高了（字多了一行）：點的位置跟著往下，游標通常就在長出來的地方
+                  const old = layouts.current[it.id], fa = focusAt.current;
+                  if (old && fa?.id === it.id && fa.y !== undefined && h > old.h) fa.y += h - old.h;
                   if (newRow.current === it.id) placeNewRow(it.id, h); // 輸入框剛送出的那行：捲回頂端亮一下，或原地不動（見 addFromDraft）
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
@@ -597,7 +618,7 @@ export function Paper({ n }: { n: Note }) {
                 onChange={v => onChange(it.id, v)} onKey={(e, sel) => onKey(it.id, e, sel)} onSubmit={caret => onSubmit(it.id, caret)}
                 onFocus={() => onFocus(it.id)} onBlur={() => onBlur(it.id)}
                 onStrike={fromSwipe => strike(it.id, fromSwipe)} onRemove={() => remove(it.id)}
-                onMenu={y => openRowMenu(it.id, y)} onEdit={caret => focusItem(it.id, caret)}
+                onMenu={y => openRowMenu(it.id, y)} onEdit={(caret, y) => focusItem(it.id, caret, y)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </LayoutAnimationConfig>
@@ -658,7 +679,7 @@ type LineProps = {
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void; onSubmit: (caret: number) => void;
   onFocus: () => void; onBlur: () => void;
   onStrike: (fromSwipe?: boolean) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; onMenu: (bottom: number) => void;
-  onEdit: (caret?: number) => void; // caret＝游標要落在第幾個字（點一下的位置換算來的）；沒給就落在行尾
+  onEdit: (caret?: number, y?: number) => void; // caret＝游標要落在第幾個字（點一下的位置換算來的）；沒給就落在行尾。y＝點在這行的哪個高度
   drag: { start: (id: string) => void; end: () => void };
 };
 
@@ -741,7 +762,7 @@ function LineRow(p: LineProps) {
     runOnJS: true,
     numberOfTaps: 1,
     maxDistance: G.longPressMove,
-    onActivate: e => onEdit(caretAt(lines.current, e.x - T.space.l, e.y, textLen)),
+    onActivate: e => onEdit(caretAt(lines.current, e.x - T.space.l, e.y, textLen), e.y),
   });
   // 長按、點一下、滑動只有一個會成立：手指移超過門檻長按和點一下就放棄，滑動才接手；按住超過長按時間就不算點
   const rowGesture = useExclusiveGestures(hold, tap, swipe);
