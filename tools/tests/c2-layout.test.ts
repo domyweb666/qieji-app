@@ -150,6 +150,16 @@ const sent = (s: { order?: string[]; orderMod?: number; orderSent?: number }) =>
 }
 
 // 13. 換 Apple ID 選「放進去」：排列也重傳
+// 8. 拉 iCloud 拉到一半，這台拖完、新的排列已經傳上去：拉回來的是拖之前的舊那份，不能蓋掉（2026-11-02 錄影回報後查到）
+{
+  const s = saved([note('a', 500), note('b', 400)], ['a', 'b'], { orderMod: 100, orderSent: 100 });
+  reseat(s, ['b', 'a'], 300);
+  markLayoutSent(s, 300);
+  eq('傳過了、拉回來的比較舊（100）：留著這台的', [mergeLayout(s, { order: ['a', 'b'], mod: 100 }), s.order], [false, ['b', 'a']]);
+  eq('不用再傳', layoutToSend(s), null);
+  eq('傳過了、iCloud 那份比較新（400，另一台後來排的）：照它排', [mergeLayout(s, { order: ['a', 'b'], mod: 400 }), s.order], [true, ['a', 'b']]);
+}
+
 {
   const s = saved([note('a', 500)], ['a'], { orderMod: 100, orderSent: 100 });
   forgetSync(s);

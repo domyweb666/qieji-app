@@ -420,7 +420,8 @@ export function mergeLayout(s: State, raw: unknown): boolean {
     return false;
   }
   const mine = s.orderMod;
-  if (mine !== undefined && mine !== s.orderSent && mine > r.mod) return false;
+  // 這台的比 iCloud 那份新就留著，傳過了也一樣：拉到一半這台剛好傳了新的上去，拉回來的是舊的那份，不能拿它蓋掉（2026-11-02 錄影回報後查到）
+  if (mine !== undefined && mine > r.mod) return false;
   const before = JSON.stringify([s.order ?? [], s.folders ?? []]);
   s.order = r.order;
   s.folders = r.folders;
