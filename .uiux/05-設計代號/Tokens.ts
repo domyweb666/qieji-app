@@ -144,7 +144,6 @@ export const T = {
     menuPop:       { in: 170, out: 120, reduced: { fade: 150 } },      // 放大縮小改淡入淡出
     menuBackdrop:  { in: 160, out: 140 },
     pressDim:      { opacity: 0.6 }, // 所有按住效果統一（多米定；右下 ＋ 原本的縮放 0.94 拿掉）
-    composerDim:   { opacity: 0.7 }, // 輸入框開著時紙退一點（多米 2026-11-01 選乙試試；不擋觸控）
   },
 
   // 觸覺：一種事件只對應一種觸覺。系統事件用系統內建。

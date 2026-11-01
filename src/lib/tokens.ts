@@ -174,7 +174,6 @@ export const motion = {
   menuPop:       { in: 170, out: 120 },
   menuBackdrop:  { in: 160, out: 140 },
   pressDim:      0.6, // 所有按住效果統一：透明度
-  composerDim:   0.7, // 輸入框開著時紙退一點（多米 2026-11-01 選乙「紙淡一點試試」）：比按住淡得少，紙照樣看得清、點得到；試了不好就改 1
   reducedDimFrom: 0.4, // 減少動態：劃掉時整行先降到這個透明度再淡回 1
 };
 

@@ -56,8 +56,6 @@ const WEB_DEPS = Platform.OS === 'web';
 const ROW_IN = FadeIn.duration(T.motion.fade);
 const ROW_OUT = FadeOut.duration(T.motion.fade);
 const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
-// 最上面長出新行時，捲在頂端附近（一行高以內）就露出新行，捲得深就原地不動
-const KEEP_POS = { minIndexForVisible: 0, autoscrollToTopThreshold: T.shape.rowMin };
 // 右上 ⋯ 讓位給 ✓ 時用鍵盤的時鐘滑過去（2-4 連續：之前瞬間跳一格）
 const KBF = T.motion.keyboardFollow;
 const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]);
@@ -183,9 +181,15 @@ export function Paper({ n }: { n: Note }) {
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行。畫面留在原地不捲（多米 2026-11-01 定：捲到下面想到一個點子、按 ＋ 記完，視線不要被拉回頂端）；
-  // 在頂端附近時 ScrollView 的 maintainVisibleContentPosition 會把新行露出來，捲得深時原地不動（核心迴圈第 4 格「看到才敢忘」在頂端附近才成立）
+  // 在頂端附近（一行高以內）時新行直接露出來；捲得深時，新行量好高度的那一刻往下補捲同樣的高，畫面原地不動
+  // （核心迴圈第 4 格「看到才敢忘」在頂端附近才成立）。
+  // 之前用 ScrollView 的 maintainVisibleContentPosition 做這件事，但它會記住「最上面那行」：拖曳排順序動到最上面幾行時，
+  // 它把捲動位置跟著那行挪、再自己捲回頂端，就是多米三次回報的「交換好之後又往上抬一下、只有靠近上方會」（2026-11-01 第七批拿掉）
+  const keepFor = useRef<string | null>(null);
   function addFromDraft(t: string) {
-    n.items.unshift({ id: uid(), t, done: false, b: false });
+    const id = uid();
+    if (view.current.y > T.shape.rowMin) keepFor.current = id;
+    n.items.unshift({ id, t, done: false, b: false });
     touch();
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
@@ -368,17 +372,16 @@ export function Paper({ n }: { n: Note }) {
   const dragLift = useSharedValue(0); // 0＝沒拿起，1＝浮起（被拖的行放大一點、有陰影）
   const drag = useRef<{ idx: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  // 放下之後收尾分兩次重畫（多米 2026-11-01 第六批：靠近頂端拖完「又再執行一次動畫、閃一下」）：之前在 rAF 裡 setDragging(false)，
-  // 但換順序那次重畫常常還沒送出，兩個更新被 React 併成同一次——順序剛換的那一刻，行的 layout 過場和 maintainVisibleContentPosition
-  // 已經開回來了：過場把落地的行再滑一次；頂端附近 maintainVisibleContentPosition 會跟著最上面那行挪捲動位置（所以只有靠近頂端會閃）。
-  // 改成：end() 只換順序並記一次 dropTick；那次重畫真的畫完（useLayoutEffect）之後的下一格，才歸零位移、關 dragging
+  // 放下之後收尾分兩步（多米 2026-11-01 第六批：拖完「又再執行一次動畫」）：end() 只換順序並記一次 dropTick；那次重畫畫完
+  // （useLayoutEffect）時歸零位移，下一格才關 dragging（開回行的 layout 過場）。之前 rAF 裡一起做，常跟換順序併成同一次重畫，
+  // 過場在順序剛換那一刻就醒來，把落地的行再滑一次。靠近頂端的「往上抬」是另一個原因，見 addFromDraft 上面
   const [dropTick, setDropTick] = useState(0);
-  // 輸入框開著時紙淡一點（見 render 的 paperDim）
-  const dim = useSharedValue(1);
+  // 輸入框開著時紙變暗（見 render 的 scrimStyle）：暗幕的濃淡 0～1
+  const dim = useSharedValue(0);
   useEffect(() => {
-    dim.value = withTiming(composing ? T.motion.composerDim : 1, { duration: KBF.duration, easing: KB_EASING });
+    dim.value = withTiming(composing ? 1 : 0, { duration: KBF.duration, easing: KB_EASING });
   }, [composing]); // eslint-disable-line react-hooks/exhaustive-deps
-  const paperDim = useAnimatedStyle(() => ({ opacity: dim.value }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算與放下的落地動畫在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
@@ -411,7 +414,9 @@ export function Paper({ n }: { n: Note }) {
 
   useLayoutEffect(() => {
     if (!dropTick) return;
-    const r = requestAnimationFrame(() => { dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0; setDragging(false); });
+    // 位移歸零就在新順序畫完的這一刻（不再等一格：等的那一格，行的序號已經換了、位移還在，會套到別行身上）；行的 layout 過場下一格才開回來
+    dragIdx.value = -1; dragDy.value = 0; dragLift.value = 0;
+    const r = requestAnimationFrame(() => setDragging(false));
     return () => cancelAnimationFrame(r);
   }, [dropTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -512,10 +517,15 @@ export function Paper({ n }: { n: Note }) {
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         {renaming ? (
+          // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
+          // 紙上每一行用的多行輸入框畫中文從沒切過。貼上帶換行的字時換行換成空格，清單名只有一行
           <TextInput autoFocus defaultValue={n.title} placeholder="這張叫什麼" maxFontSizeMultiplier={T.font.listTitleMaxScale}
+            multiline submitBehavior="blurAndSubmit"
+            // 網頁的 textarea 預設兩列高，限一列；iOS 不限（限了長名字打到一半會被藏起來）
+            {...(Platform.OS === 'web' ? { numberOfLines: 1 } : null)}
             placeholderTextColor={c.textMuted} style={[st.titleInput, { minHeight: Math.max(T.shape.hitMin, titleH), color: c.textPrimary }]} returnKeyType="done"
             accessibilityLabel="清單名"
-            onChangeText={v => { n.title = v; touch(true); }}
+            onChangeText={v => { n.title = v.replace(/\n/g, ' '); touch(true); }}
             onFocus={() => onFocus('title')} onBlur={() => { setRenaming(false); onBlur('title'); touch(); }}
             onSubmitEditing={dismissKb} />
         ) : (
@@ -548,14 +558,8 @@ export function Paper({ n }: { n: Note }) {
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
-        {/* 輸入框開著時紙淡一點（多米 2026-11-01 選乙試試，審查紀錄同日「打字時背景要不要變暗」）：只有清單這塊、只是透明度，
-            手指照樣點得到行（點一行＝草稿送出、焦點進那一行，第四版乙不變）。跟鍵盤同一個時鐘進出，一個事件一個時鐘 */}
-        <Animated.View style={[{ flex: 1 }, paperDim]}>
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
-          // 拖著排順序時關掉（多米 2026-11-01：靠近頂端拖會怪、會閃）：放下那一刻順序換了，它會把捲動位置跟著最上面那行挪一下，
-          // 落地的行又被整頁的位移推一次。dragging 到位移歸零那一格才關（dragApi.end），順序換的那一次重畫它是關的
-          maintainVisibleContentPosition={dragging ? undefined : KEEP_POS}
           onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}
@@ -566,8 +570,6 @@ export function Paper({ n }: { n: Note }) {
               <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
           )}
-          {/* 行直接當 ScrollView 的子元件（不多包一層），maintainVisibleContentPosition 才認得它們：最上面長出新行時，
-              捲在頂端附近（一行高以內）就捲上去露出新行，捲得深就原地不動 */}
           <LayoutAnimationConfig skipEntering>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
@@ -575,6 +577,7 @@ export function Paper({ n }: { n: Note }) {
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
                 onLayoutRow={(y, h) => {
+                  if (keepFor.current === it.id) { keepFor.current = null; scrollTo(view.current.y + h, false); } // 捲得深時記一行：畫面原地不動
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
@@ -594,7 +597,6 @@ export function Paper({ n }: { n: Note }) {
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
           <View style={{ height: 200 + kbPad + insets.bottom }} />
         </ScrollView>
-        </Animated.View>
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
@@ -606,6 +608,11 @@ export function Paper({ n }: { n: Note }) {
           第三版整個畫面鋪了暗幕、點外面不能點到別行，多米真機說「編輯感覺很不好」（2-5：記是主線，不該被包成模態），同日定乙拿掉暗幕：
           輸入框開著時紙照常能看、能點——點一行＝草稿先送出、焦點直接進那一行（走 Composer 的 onBlur）；點空白處＝鍵盤收、草稿送出、框收起。
           框那層讓觸控穿透到紙 */}
+      {/* 輸入框開著時整張紙變暗（多米 2026-11-01：淡一點「效果還 ok，這次想改成變暗看看」）。暗幕不接觸控（pointerEvents none）：
+          手指照樣點得到行、⋯、清單名（點一行＝草稿送出、焦點進那一行，第四版乙不變），這是跟第三版暗幕不同的地方。
+          跟鍵盤同一個時鐘進出（keyboardFollow），顏色用選單後面那層暗幕（scrim）。減少動態照樣淡入淡出 */}
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }, scrimStyle]} pointerEvents="none"
+        accessible={false} importantForAccessibility="no-hide-descendants" />
       {composing && (
         <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
           {/* maxH：框最高長到清單頂（標題列與時間列下面），再多才在框裡捲（多米 2026-11-01：打十幾行也要能沉浸，不要三行就捲） */}
