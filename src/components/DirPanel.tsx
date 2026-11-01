@@ -5,6 +5,8 @@
 // C3：放不下往右一頁、頁點。C4：長按一塊磚跳選單（顏色、改名字、刪除、編輯目錄），長按後一拖就進抖動、同一頁裡拖換位置；
 // 抖動時面板不收（往上推、點露出的紙只會結束抖動），點磚不換紙、不能搜尋、不能翻頁。
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
+// 2026-11-02 晚（多米真機回報，照 Apple iPhone 使用手冊，見 .uiux/iOS主畫面編輯-官方規範對照.md）：按住格子空白處＝進抖動、抖動中點空白處＝結束；
+// 抖動中點資料夾會打開，裡面的紙跟著抖、直接拖；資料夾裡的紙長按選單不再有「移出資料夾」（只用拖的，VoiceOver 動作留著）。
 // D3：打開的資料夾裡長按一張後拖，拖出框外放手＝移出資料夾（排在資料夾後面一格，多米選），在框裡放手滑回原位。
 // D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
@@ -293,7 +295,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n.id);
     return [
       { label: '改名字', icon: 'pencil', fn: () => rename(n) },
-      inside ? { label: '移出資料夾', icon: 'folder.badge.minus', fn: () => takeOut(n) } : { label: '放進資料夾…', icon: 'folder.badge.plus', fn: () => putIn(n) },
+      // 資料夾裡的紙沒有「移出資料夾」：照 iOS 只用拖的拿出來（多米 2026-11-02 晚：不要文字選單）；VoiceOver 的「移出資料夾」動作留著
+      { label: '放進資料夾…', icon: 'folder.badge.plus', fn: () => putIn(n), hidden: inside },
       { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
       { label: '編輯目錄', icon: 'square.grid.2x2', fn: () => setEditing(true), hidden: inside },
     ];
@@ -418,7 +421,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     };
     if (f) {
       return (
-        <Tile key={e.id} {...common} label={`資料夾，${f.name}，${e.notes.length} 張`} selected={e.notes.some(x => x.id === store.last)} acts={FOLDER_A11Y}
+        <Tile key={e.id} {...common} tapInEdit label={`資料夾，${f.name}，${e.notes.length} 張`} selected={e.notes.some(x => x.id === store.last)} acts={FOLDER_A11Y}
           onPick={() => setOpenF({ id: f.id, naming: false })} onMenu={y => openMenu(f.id, y, false, 2)}
           onA11y={name => {
             if (name === 'activate') setOpenF({ id: f.id, naming: false });
@@ -433,7 +436,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n!.id);
     return (
       <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 3 : 4)} onA11y={noteA11y(n!)}>
+        onPick={() => pick(n!)} onMenu={y => openMenu(n!.id, y, true, inside ? 2 : 4)} onA11y={noteA11y(n!)}>
         {face(e, tileW)}
       </Tile>
     );
@@ -477,7 +480,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
               onScroll={e => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               scrollEventThrottle={T.timing.pageScroll}>
               {pages.map((list, i) => (
-                <View key={i} style={[st.page, { width }]} accessibilityLabel={pages.length > 1 ? `第 ${i + 1} 頁，共 ${pages.length} 頁` : undefined}>
+                <View key={i} style={[st.page, { width }]} pointerEvents="box-none" accessibilityLabel={pages.length > 1 ? `第 ${i + 1} 頁，共 ${pages.length} 頁` : undefined}>
+                  <PageBack editing={editing} onHold={() => { setMenu(null); haptic('menu'); setEditing(true); }} onTap={() => setEditing(false)} />
                   {i === 0 && (
                     <Pressable onPress={editing ? undefined : add} accessibilityRole="button" accessibilityLabel="新的一張"
                       style={({ pressed }) => [st.tile, st.add, { width: tileW, borderColor: c.separator }, pressed && !editing && { opacity: T.motion.pressDim }]}>
@@ -485,7 +489,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                       <Text style={[st.tileText, { color: c.textPrimary }]}>新的一張</Text>
                     </Pressable>
                   )}
-                  <View style={st.grid}>
+                  <View style={st.grid} pointerEvents="box-none">
                     {shown(i).map((n, k) => tile(n, k, i, list.length))}
                     {/* 拿起來的那張：浮在現在這頁的格子上跟著手指（要放的位置留隱形佔位，其他磚照佔位讓開）。
                         放在拿起那格的位置再平移；翻到別頁時加上兩頁格子的高低差（shift），才會一直在手指下面 */}
@@ -521,7 +525,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         </Pressable>
       )}
 
-      {/* 打開的資料夾（D1）：蓋在目錄上面，點外面收起；名字點了就能改；裡面的紙點了換紙、長按跳選單（不能拖） */}
+      {/* 打開的資料夾（D1）：蓋在目錄上面，點外面收起；名字點了就能改；裡面的紙點了換紙、長按跳選單、長按後拖出框外拿出來（D3）。
+          抖動中也打得開（iOS 一樣），裡面的紙跟著抖、手指一動就拿起來 */}
       {openEntry?.folder && (
         <View style={StyleSheet.absoluteFill}>
           <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
@@ -530,11 +535,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
             accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}
             onLayout={e => { const l = e.nativeEvent.layout; fd.bx.value = l.x; fd.by.value = l.y; fd.bw.value = l.width; fd.bh.value = l.height; }}>
             <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
-            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" scrollEnabled={!editing}>
               <View style={st.grid}>
-                {openEntry.notes.map(n => (
-                  <FolderTile key={n.id} n={n} w={innerW} calm={calm} cur={n.id === store.last} ghost={fdrag === n.id} fd={fd}
-                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}
+                {openEntry.notes.map((n, k) => (
+                  <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={fdrag === n.id} fd={fd}
+                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 2)} onA11y={noteA11y(n)}
                     onDragStart={() => { setMenu(null); setFdrag(n.id); haptic('dragStart'); }} onDrop={out => folderDrop(n, out)} />
                 ))}
               </View>
@@ -564,6 +569,7 @@ type TileProps = {
   w: number; sw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
   dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number>; sv: DragSV;
   label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
+  tapInEdit?: boolean; // 抖動中點一下也算（資料夾磚：iOS 抖動中點檔案夾會打開）
   onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
   onA11y: (name: string) => void;
 };
@@ -585,7 +591,7 @@ function Tile(p: TileProps) {
   const pressed = useSharedValue(0);
   const tap = useTapGesture({
     runOnJS: true,
-    enabled: !p.editing,
+    enabled: !p.editing || !!p.tapInEdit,
     maxDistance: G.longPressMove,
     onBegin: () => { pressed.value = 1; },
     onFinalize: () => { pressed.value = 0; },
@@ -670,18 +676,33 @@ function Tile(p: TileProps) {
   );
 }
 
+// 目錄一頁的空白處（多米 2026-11-02 晚，照 iOS 使用手冊「按住主畫面背景直到項目開始晃動」「完成後點一下背景」）：
+// 墊在磚的下面，磚、新的一張蓋在上面，點到磚不會到這裡（頁和格子都設 box-none，空白處才點得到它）。按住＝進抖動；抖動中點一下＝結束
+function PageBack({ editing, onHold, onTap }: { editing: boolean; onHold: () => void; onTap: () => void }) {
+  const hold = useLongPressGesture({ runOnJS: true, enabled: !editing, minDuration: G.longPressMs, maxDistance: G.longPressMove, onActivate: () => onHold() });
+  const tap = useTapGesture({ runOnJS: true, enabled: editing, maxDistance: G.longPressMove, onActivate: () => onTap() });
+  const gesture = useExclusiveGestures(hold, tap);
+  return (
+    <GestureDetector gesture={gesture}>
+      <View style={StyleSheet.absoluteFill} />
+    </GestureDetector>
+  );
+}
+
 // 資料夾裡的一張（D3）：點＝換紙；長按（不動）＝選單；長按後一拖＝拿起來，拖出框外放手就拿出資料夾，在框裡放手滑回原位。
 // 跟目錄的磚分開寫：資料夾裡不抖動、不換位，只看手指在不在框外（螢幕座標，跟框的 onLayout 比）
 type FD = Record<'dx' | 'dy' | 'x0' | 'y0' | 'out' | 'lift' | 'bx' | 'by' | 'bw' | 'bh', SharedValue<number>>;
 type FolderTileProps = {
-  n: Note; w: number; calm: boolean; cur: boolean; ghost: boolean; fd: FD; label: string;
+  n: Note; k: number; w: number; calm: boolean; editing: boolean; cur: boolean; ghost: boolean; fd: FD; label: string;
   onPick: () => void; onMenu: (y: number) => void; onA11y: (name: string) => void; onDragStart: () => void; onDrop: (out: number) => void;
 };
 function FolderTile(p: FolderTileProps) {
   const { fd, calm, onPick, onMenu, onDragStart, onDrop } = p;
   const pressed = useSharedValue(0);
+  // 抖動中（iOS 晃動中打開的檔案夾）：點不換紙、不跳選單，手指一動就拿起來
   const tap = useTapGesture({
     runOnJS: true,
+    enabled: !p.editing,
     maxDistance: G.longPressMove,
     onBegin: () => { pressed.value = 1; },
     onFinalize: () => { pressed.value = 0; },
@@ -689,12 +710,13 @@ function FolderTile(p: FolderTileProps) {
   });
   const hold = useLongPressGesture({
     runOnJS: true,
+    enabled: !p.editing,
     minDuration: G.longPressMs,
     maxDistance: G.longPressMove,
     onActivate: e => onMenu(e.absoluteY),
   });
   const pan = usePanGesture({
-    activateAfterLongPress: G.longPressMs,
+    activateAfterLongPress: p.editing ? 0 : G.longPressMs,
     minDistance: G.tileDrag,
     onActivate: e => {
       'worklet';
@@ -721,7 +743,18 @@ function FolderTile(p: FolderTileProps) {
     },
   });
   const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
-  const style = useAnimatedStyle(() => ({ opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM) }), WEB_DEPS ? [p.ghost] : undefined);
+  // 抖動：跟目錄的磚同一套（相鄰兩塊方向相反）。減少動態：不抖
+  const rot = useSharedValue(0);
+  useEffect(() => {
+    if (!p.editing || calm) { cancelAnimation(rot); rot.value = 0; return; }
+    const a = p.k % 2 ? -M.jiggle.deg : M.jiggle.deg;
+    rot.value = withRepeat(withSequence(withTiming(a, { duration: M.jiggle.half }), withTiming(-a, { duration: M.jiggle.half })), -1, true);
+    return () => cancelAnimation(rot);
+  }, [p.editing, calm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rot.value}deg` }],
+    opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
+  }), WEB_DEPS ? [p.ghost] : undefined);
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={style} accessible accessibilityRole="button" accessibilityLabel={p.label}
