@@ -278,7 +278,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       if (e.id === d.id) continue;
       if (e.folder && e.id === d.src) {
         const rest = e.notes.filter(n => n.id !== d.id);
-        if (rest.length) base.push({ ...e, notes: rest });
+        // 拖出資料夾、只剩一張：資料夾那格先變回那張（放手時 model 的 dissolveIfOne 也這樣拆，照 iOS）
+        if (rest.length === 1 && !d.inF) base.push({ id: rest[0].id, note: rest[0], notes: rest });
+        else if (rest.length) base.push({ ...e, notes: rest });
         continue;
       }
       base.push(e);
@@ -575,7 +577,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         if (n) takeOut(n);
       }
     } else if (d && onto) {
-      // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）
+      // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）。
+      // 從資料夾拿出來的先拿出來：只剩一張的資料夾先拆掉，底下那張才站在原本那格（疊上去的就是它）
+      if (d.src) outOfFolder(store.s, d.id, now);
       if (onto.folder) intoFolder(store.s, d.id, onto.id, now);
       else intoFolder(store.s, d.id, newFolder(store.s, onto.id, now).id, now);
       store.change();

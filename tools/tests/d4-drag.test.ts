@@ -1,6 +1,6 @@
 // D4 拖曳照 iOS 的資料規則：放進資料夾指定位置、資料夾裡換順序、從資料夾拿出來放到目錄指定位置（跑法：node tools/tests/d4-drag.test.ts）
 // @ts-expect-error node 直接跑 TS 檔要帶 .ts 副檔名
-import { fixOrder, intoFolder, layoutToSend, newFolder, parseState, placeInFolder, placeTop, seatedEntries } from '../../src/lib/model.ts';
+import { fixOrder, intoFolder, layoutToSend, newFolder, outOfFolder, parseState, placeInFolder, placeTop, seatedEntries } from '../../src/lib/model.ts';
 
 let fail = 0;
 const eq = (name: string, a: unknown, b: unknown) => {
@@ -75,16 +75,27 @@ const ids5 = () => [note('a', 500), note('b', 400), note('c', 300), note('d', 20
   newFolder(s, 'b', 1000, 'F');
   intoFolder(s, 'c', 'F', 1001);
   eq('起點', top(s), ['a', '新資料夾[b,c]', 'd', 'e']);
-  placeTop(s, 'c', ['c', 'a', 'F', 'd', 'e'], 2000);
-  eq('c 拿出來放第一格', top(s), ['c', 'a', '新資料夾[b]', 'd', 'e']);
+  // 拖的時候目錄已經把只剩一張的資料夾畫成 b（DirPanel flatOf），visible 裡是 b 不是 F
+  placeTop(s, 'c', ['c', 'a', 'b', 'd', 'e'], 2000);
+  eq('c 拿出來放第一格，資料夾只剩 b 就拆掉、b 站原位（照 iOS）', [top(s), s.folders], [['c', 'a', 'b', 'd', 'e'], []]);
   eq('算親手排', (layoutToSend(s)?.mod ?? 0) >= 2000, true);
   placeTop(s, 'b', ['c', 'a', 'd', 'e', 'b'], 2100);
-  eq('最後一張拿出來放最後，資料夾不見', [top(s), s.folders], [['c', 'a', 'd', 'e', 'b'], []]);
+  eq('不在資料夾的照樣換位', [top(s), s.folders], [['c', 'a', 'd', 'e', 'b'], []]);
   // 目錄裡一般換位也走得通
   placeTop(s, 'e', ['e', 'c', 'a', 'd', 'b'], 2200);
   eq('目錄裡的紙換位', top(s), ['e', 'c', 'a', 'd', 'b']);
   fixOrder(s);
   eq('存檔前整理不改', top(s), ['e', 'c', 'a', 'd', 'b']);
+}
+
+// 從資料夾拖出來、疊到只剩的那張上（DirPanel drop：先 outOfFolder 再疊）：新資料夾站在原本資料夾那格
+{
+  const s = saved(ids5(), ['a', 'b', 'c', 'd', 'e']);
+  newFolder(s, 'b', 1000, 'F');
+  intoFolder(s, 'c', 'F', 1001);
+  outOfFolder(s, 'c', 2000);
+  intoFolder(s, 'c', newFolder(s, 'b', 2000, 'G').id, 2000);
+  eq('疊回剩下那張，新資料夾在原位', top(s), ['a', '新資料夾[b,c]', 'd', 'e']);
 }
 
 console.log(fail ? `\n${fail} 條沒過` : '\n全部通過');

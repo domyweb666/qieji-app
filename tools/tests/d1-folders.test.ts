@@ -70,10 +70,39 @@ eq('移出資料夾', outOfFolder(s2, 'd', 3000), true);
 eq('移出的排在資料夾後面一格', top(s2), ['c', '工作[b,a]', 'd', 'n']);
 eq('不在資料夾的移出不改', outOfFolder(s2, 'c', 3100), false);
 
-// 最後一張移出 → 資料夾不見、紙站在資料夾原位
+// 移出到只剩一張 → 資料夾拆掉、剩的那張站在資料夾原位（照 iOS，多米 2026-11-02 看錄影選）
 outOfFolder(s2, 'b', 3200);
-outOfFolder(s2, 'a', 3300);
-eq('最後一張移出資料夾就不見，紙站原位', [top(s2), s2.folders], [['c', 'a', 'b', 'd', 'n'], []]);
+eq('只剩一張就拆掉，剩的站原位、拿出來的排後面', [top(s2), s2.folders], [['c', 'a', 'b', 'd', 'n'], []]);
+eq('拆掉後那張不在資料夾', outOfFolder(s2, 'a', 3300), false);
+
+// 只剩一張看得到、另一張在最近刪除 → 一樣拆掉，最近刪除那張也站在那裡（還原回到附近）
+{
+  const t = saved([note('a', 500), note('b', 400), note('c', 300), note('d', 200)], ['a', 'b', 'c', 'd']);
+  newFolder(t, 'a', 1000, 'F');
+  intoFolder(t, 'b', 'F', 1001);
+  intoFolder(t, 'c', 'F', 1002);
+  t.notes.find(n => n.id === 'b')!.deleted = true;
+  outOfFolder(t, 'c', 1100);
+  eq('看得到的剩一張就拆', [top(t), t.folders, t.order], [['a', 'c', 'd'], [], ['a', 'b', 'c', 'd']]);
+}
+// 看得到的一張都不剩、只剩最近刪除的 → 不拆（還原時回到資料夾）
+{
+  const t = saved([note('a', 500), note('b', 400), note('c', 300)], ['a', 'b', 'c']);
+  newFolder(t, 'a', 1000, 'F');
+  intoFolder(t, 'b', 'F', 1001);
+  t.notes.find(n => n.id === 'b')!.deleted = true;
+  outOfFolder(t, 'a', 1100);
+  eq('只剩最近刪除的不拆', t.folders?.map(f => f.ids), [['b']]);
+}
+// 從資料夾放進別的資料夾、原本的只剩一張 → 原本的拆掉
+{
+  const t = saved([note('a', 500), note('b', 400), note('c', 300), note('d', 200)], ['a', 'b', 'c', 'd']);
+  newFolder(t, 'a', 1000, 'F');
+  intoFolder(t, 'b', 'F', 1001);
+  newFolder(t, 'c', 1002, 'G');
+  intoFolder(t, 'b', 'G', 1100);
+  eq('原本的只剩一張就拆', top(t), ['a', '新資料夾[c,b]', 'd']);
+}
 
 // 永久拿掉資料夾裡的紙：從資料夾拿掉；拿光了資料夾不見
 const s3 = saved([note('a', 500), note('b', 400), note('c', 300)], ['a', 'b', 'c']);

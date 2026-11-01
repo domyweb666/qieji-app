@@ -303,13 +303,22 @@ export const folderOf = (s: State, noteId: string) => okFolders(s).find(f => f.i
 
 // 建資料夾、放進、移出、改名都算親手排（C2：同步時後排的那台為準）
 const touchLayout = (s: State, now: number) => { s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1); };
+// 從資料夾拿走一張之後：看得到的只剩一張就拆掉資料夾，剩下的紙（含最近刪除的）照原本順序站在資料夾那格
+// （照 iOS 拖出來只剩一個 App 檔案夾就變回那個 App，多米 2026-11-02 看錄影選）。全部在最近刪除的不拆（還原時才回得來）
+function dissolveIfOne(s: State, f: Folder) {
+  const shown = f.ids.filter(id => s.notes.some(n => n.id === id && !n.deleted));
+  const at = s.order!.indexOf(f.id);
+  if (shown.length !== 1 || at < 0) return;
+  s.order!.splice(at, 1, ...f.ids);
+  s.folders = s.folders!.filter(x => x !== f);
+}
 
 // 長按選單「放進資料夾…」→ 新資料夾：在那張紙的位置開一個資料夾，裡面只有它
 export function newFolder(s: State, noteId: string, now: number, id = 'f' + uid()): Folder {
   fixOrder(s);
   const f: Folder = { id, name: FOLDER_NAME, ids: [noteId] };
   const from = folderOf(s, noteId);
-  if (from) from.ids = from.ids.filter(x => x !== noteId);
+  if (from) { from.ids = from.ids.filter(x => x !== noteId); dissolveIfOne(s, from); }
   const at = s.order!.indexOf(noteId);
   if (at >= 0) s.order![at] = id; else s.order!.push(id);
   s.folders = [...(s.folders ?? []), f];
@@ -323,21 +332,21 @@ export function intoFolder(s: State, noteId: string, folderId: string, now: numb
   const f = s.folders?.find(x => x.id === folderId);
   if (!f || f.ids.includes(noteId)) return false;
   const from = folderOf(s, noteId);
-  if (from) from.ids = from.ids.filter(x => x !== noteId);
+  if (from) { from.ids = from.ids.filter(x => x !== noteId); dissolveIfOne(s, from); }
   s.order = s.order!.filter(x => x !== noteId);
   f.ids.push(noteId);
   touchLayout(s, now);
   fixOrder(s);
   return true;
 }
-// 移出資料夾：排在資料夾後面一格；是最後一張就資料夾拿掉、紙站在資料夾原本的位置
+// 移出資料夾：排在資料夾後面一格；是最後一張就資料夾拿掉、紙站在資料夾原本的位置；看得到的只剩一張也拆掉（dissolveIfOne）
 export function outOfFolder(s: State, noteId: string, now: number) {
   fixOrder(s);
   const f = folderOf(s, noteId);
   if (!f) return false;
   f.ids = f.ids.filter(x => x !== noteId);
   const at = s.order!.indexOf(f.id);
-  if (f.ids.length) s.order!.splice(at + 1, 0, noteId);
+  if (f.ids.length) { s.order!.splice(at + 1, 0, noteId); dissolveIfOne(s, f); }
   else { s.order![at] = noteId; s.folders = s.folders!.filter(x => x !== f); }
   touchLayout(s, now);
   fixOrder(s);
