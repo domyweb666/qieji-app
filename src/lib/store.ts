@@ -2,8 +2,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { pushCloud } from './cloud';
-import { dropNotes, emptyState, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { cloudPulled, fetchCloud, initCloud, pushCloud } from './cloud';
+import { dropNotes, emptyState, mergeCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
@@ -12,6 +12,7 @@ type Box = {
   state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
+  pulling?: boolean; synced?: Record<string, number>; // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
@@ -26,8 +27,8 @@ async function writeNow() {
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
     box.saveFailed = false;
     pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
-    // 存檔成功才把改過的紙傳上 iCloud（S2）；傳完要再存一次記下 sh。進背景時不等，馬上傳
-    pushCloud(box.state, () => store.save(), AppState.currentState !== 'active');
+    // 存檔成功才把改過的紙傳上 iCloud（S2）；進背景時不等，馬上傳
+    pushCloud(box.state, AppState.currentState !== 'active');
   } catch {
     // 打字中每 0.25 秒會再存一次；失敗只報一次，成功存回去之後再失敗才再報
     if (box.saveFailed) return;
@@ -82,7 +83,30 @@ export const store = {
     emit();
     if (first) writeNow();
     store.purgeTrash();
+    store.pullCloud();
   },
+  // iCloud S3：拉下來合進本機（打開 app 讀完、回到前景、iCloud 變成可用、上傳時發現別台改過）。
+  // 合併規則全在 model.mergeCloud；有變才重畫，一律存一次（記下 sh、把合出來比 iCloud 新的傳上去）
+  async pullCloud() {
+    if (!box.loaded || box.pulling) return;
+    box.pulling = true;
+    try {
+      const remote = await fetchCloud();
+      if (!remote) return;
+      const r = mergeCloud(box.state, remote, Date.now());
+      if (r.retyped.length) {
+        const m = (box.synced ??= {});
+        for (const id of r.retyped) m[id] = (m[id] ?? 0) + 1;
+      }
+      if (r.changed) { box.version++; emit(); }
+      await writeNow();
+    } finally {
+      box.pulling = false;
+      cloudPulled();
+    }
+  },
+  // 這行的字被同步改過幾次：畫面加進輸入框的 key，字被換掉時重掛才看得到新字
+  syncRev(id: string) { return box.synced?.[id] ?? 0; },
   // 最近刪除 30 天自動清（2026-11-01 接上，多米定；規則在 model.ts 與 tests/trash.test.mjs，鐵則是拿不準就不刪）：
   // 打開 app 讀完資料、回到前景時各跑一次。先把沒有可信時間的張與行補成現在（從今天起算 30 天），再清掉滿 30 天的；清了才重畫，只補時間就只存檔。
   // 清掉不提示、只留一筆墓碑（紙的 id＋時間，給 iCloud 同步擋復活）（跟 iOS 備忘錄一樣；最近刪除頁那句「放滿 30 天會自動清掉」就是告知）。回傳清掉幾張＋幾行
@@ -117,11 +141,13 @@ export const store = {
   onSaveError(fn: () => void) { box.onSaveError = fn; },
 };
 
-// app 進背景時立刻存，不等計時器；回到前景時跑一次 30 天自動清（重跑檔案時不重複註冊）
+// app 進背景時立刻存，不等計時器；回到前景時跑一次 30 天自動清、去 iCloud 拉一次（重跑檔案時不重複註冊）
 if (!box.listening) {
   box.listening = true;
-  AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); else store.purgeTrash(); });
+  AppState.addEventListener('change', s => { if (s !== 'active') writeNow(); else { store.purgeTrash(); store.pullCloud(); } });
 }
+// iCloud：傳上去之後再存一次記下 sh；上傳發現別台改過、或 iCloud 變成可用時去拉（重跑檔案時換成新的這組）
+initCloud({ synced: () => store.save(), pull: () => { store.pullCloud(); } });
 
 const subscribe = (f: () => void) => { box.subs.add(f); return () => { box.subs.delete(f); }; };
 const getVersion = () => box.version;

@@ -426,8 +426,18 @@ export function dropNotes(s: State, pick: (n: Note) => boolean, now: number) {
   return removed;
 }
 
-// 要上傳的紙：內容跟上次傳上 iCloud 的不一樣（從沒傳過的 sh 是空的，也算）
-export function pendingUploads(s: State) { return s.notes.filter(n => n.h !== n.sh); }
+// 第一次安裝放的教學紙、一個字都沒動過（S3，2026-11-01，規劃七之一）：不上傳；iCloud 上有別的紙時，從 iCloud 下來的這種也不收、本機的拿掉。
+// 動過任何一點（改字、劃掉、換色、丟進最近刪除）就是一般的紙，照常同步
+export function isUntouchedTutorial(n: Note) {
+  return !n.deleted && !n.pinned && n.color === 'yellow' && n.title === TUTORIAL.title && !n.bin.length
+    && n.items.length === TUTORIAL.lines.length && n.items.every((it, i) => it.t === TUTORIAL.lines[i] && !it.done);
+}
+
+// 要上傳的紙：內容跟上次傳上 iCloud 的不一樣（從沒傳過的 sh 是空的，也算）；沒動過的教學紙不傳
+export function pendingUploads(s: State) { return s.notes.filter(n => n.h !== n.sh && !isUntouchedTutorial(n)); }
+
+// iCloud 上那個檔案的指紋（跟本機 h 同一套算法），上傳前比對用：不是 sh 也不是 h ＝別台改過、這台還沒拉下來，不能蓋
+export function remotePrint(raw: unknown) { return fingerprint(fixNote(raw)); }
 
 // 上傳成功之後呼叫：這張紙跟 iCloud 對上了。h 傳「開始上傳那一刻」的指紋——
 // 上傳途中又改了，n.h 已經是新的，記成新的就會漏傳這次改動（S2，2026-11-01）
@@ -503,4 +513,45 @@ export function mergeRemote(s: State, remote: { notes: any[]; gone?: any }, now:
   }
   s.notes = out;
   return { added, taken, united, removed, push };
+}
+
+// 合併時盡量沿用本機原本的物件：畫面上的行用物件判斷要不要重畫、輸入框不受控，
+// 換成新物件會讓正在打字的那行寫到沒人看的舊物件上。內容一樣的行沿用舊物件；
+// 字被同步改掉的行換新物件並回報 id，畫面要重掛那行的輸入框才看得到新字。紙一律沿用舊物件、把欄位換成合併後的
+function adopt(before: Note[], s: State) {
+  const old = new Map(before.map(n => [n.id, n]));
+  const retyped: string[] = [];
+  s.notes = s.notes.map(n => {
+    const o = old.get(n.id);
+    if (!o || o === n) return n;
+    const oldItems = new Map(o.items.map(i => [i.id, i]));
+    const items = n.items.map(i => {
+      const oi = oldItems.get(i.id);
+      if (!oi) return i;
+      if (canon(oi) === canon(i)) return oi;
+      if (oi.t !== i.t) retyped.push(i.id);
+      return i;
+    });
+    for (const k of Object.keys(o)) delete (o as any)[k];
+    return Object.assign(o, n, { items });
+  });
+  return retyped;
+}
+
+// S3：把 iCloud 拉下來的東西合進本機（打開 app、回到前景、iCloud 變成可用、上傳時發現別台改過）。
+// remote.notes 是一個個 <id>.json 讀出來的原樣。回傳 changed＝畫面要重畫；retyped＝要重掛輸入框的行
+export function mergeCloud(s: State, remote: { notes: unknown[]; gone?: unknown }, now: number) {
+  const before = s.notes.slice();
+  const notes = ((remote.notes || []) as any[]).filter(r => r && typeof r.id === 'string' && !isUntouchedTutorial(fixNote(r)));
+  const gone = fixGone(remote.gone);
+  // iCloud 上有真的紙（沒被墓碑擋掉的）＝重裝或換新手機：本機那張沒動過的教學紙是多的，拿掉（從沒上傳過，不立墓碑）
+  let spare = 0;
+  if (notes.some(r => !(gone[r.id] !== undefined && gone[r.id] >= (validTime(r.mod) ? r.mod : r.updated || 0)))) {
+    const keep = s.notes.filter(n => !isUntouchedTutorial(n));
+    spare = s.notes.length - keep.length;
+    s.notes = keep;
+  }
+  const r = mergeRemote(s, { notes, gone }, now);
+  const retyped = adopt(before, s);
+  return { ...r, spare, retyped, changed: r.added + r.taken + r.united + r.removed + spare > 0 };
 }

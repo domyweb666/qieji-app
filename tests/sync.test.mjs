@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseState, emptyState, fingerprint, stampMods, dropNotes, markSynced, pendingUploads, mergeRemote, isExpiredTrash,
+  mergeCloud, tutorialNote, isUntouchedTutorial, remotePrint,
 } from '../src/lib/model.ts';
 
 const NOW = new Date(2026, 10, 1, 12, 0).getTime();
@@ -220,4 +221,64 @@ test('上傳途中又改了同一張：記的是開始上傳那一刻的指紋�
   stampMods(s, NOW + 1);                        // 途中又存了一次檔
   markSynced(s.notes[0], h);                    // 這次上傳完成
   assert.deepEqual(pendingUploads(s).map(n => n.id), ['a']);
+});
+
+// S3 下載＋合併（2026-11-01）
+test('沒動過的教學紙不上傳；動過一個字就照常上傳', () => {
+  const t = tutorialNote(NOW);
+  const s = state(t);
+  stampMods(s, NOW);
+  assert.ok(isUntouchedTutorial(t));
+  assert.deepEqual(pendingUploads(s), []);
+  t.items[0].done = true;
+  stampMods(s, NOW + 1);
+  assert.ok(!isUntouchedTutorial(t));
+  assert.deepEqual(pendingUploads(s).map(n => n.id), [t.id]);
+});
+
+test('重裝：iCloud 有紙，本機沒動過的教學紙拿掉、iCloud 的紙全部進來', () => {
+  const s = state(tutorialNote(NOW));
+  const mine = note({ id: 'a', items: [it('1', '舊手機記的')], updated: NOW - 9000 });
+  const r = mergeCloud(s, { notes: [clone(mine)], gone: {} }, NOW);
+  assert.deepEqual(s.notes.map(n => n.id), ['a']);
+  assert.equal(r.spare, 1);
+  assert.ok(r.changed);
+});
+
+test('iCloud 是空的（或只有墓碑擋掉的紙）：教學紙留著', () => {
+  const s = state(tutorialNote(NOW));
+  mergeCloud(s, { notes: [], gone: {} }, NOW);
+  assert.equal(s.notes.length, 1);
+  const dead = note({ id: 'z', updated: NOW - 5000 });
+  mergeCloud(s, { notes: [dead], gone: { z: NOW - 10 } }, NOW);
+  assert.equal(s.notes.length, 1);
+  assert.ok(isUntouchedTutorial(s.notes[0]));
+});
+
+test('iCloud 上別台留下的、沒動過的教學紙不收；動過的教學紙照收', () => {
+  const s = state(note({ id: 'a' }));
+  const plainT = clone(tutorialNote(NOW - 100));
+  const usedT = clone(tutorialNote(NOW - 100)); usedT.items.push(it('x', '我加的'));
+  mergeCloud(s, { notes: [plainT, usedT], gone: {} }, NOW);
+  assert.deepEqual(s.notes.map(n => n.id).sort(), ['a', usedT.id].sort());
+});
+
+test('合併沿用本機原本的物件：沒變的行是同一個物件，被改字的行回報要重掛', () => {
+  const { s, cloud } = synced({ id: 'a', items: [it('1', '一'), it('2', '二')] });
+  const paper = s.notes[0], row1 = paper.items[0];
+  cloud.items[1].t = '二（另一台改的）';
+  cloud.mod = NOW;
+  const r = mergeCloud(s, { notes: [cloud] }, NOW + 1);
+  assert.equal(s.notes[0], paper);            // 紙還是同一個物件（畫面手上那個）
+  assert.equal(s.notes[0].items[0], row1);    // 沒變的行也是
+  assert.equal(texts(s.notes[0])[1], '二（另一台改的）');
+  assert.deepEqual(r.retyped, ['2']);
+  assert.equal(r.taken, 1);
+});
+
+test('上傳前比對：iCloud 上那份的指紋跟本機算法一樣（欄位順序、sh 不影響）', () => {
+  const s = state(note({ id: 'a', items: [it('1', '一')] }));
+  stampMods(s, NOW);
+  const { sh: _sh, ...paper } = { ...s.notes[0], sh: 'whatever' };
+  assert.equal(remotePrint(JSON.parse(JSON.stringify(paper))), s.notes[0].h);
 });

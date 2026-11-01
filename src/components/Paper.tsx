@@ -602,7 +602,7 @@ export function Paper({ n }: { n: Note }) {
           <LayoutAnimationConfig skipEntering>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
-                count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={revs.current[it.id] ?? 0}
+                count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={(revs.current[it.id] ?? 0) + store.syncRev(it.id)}
                 fresh={freshId === it.id} onFreshDone={() => setFreshId(f => (f === it.id ? null : f))}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
@@ -881,7 +881,7 @@ function LineRow(p: LineProps) {
           {/* 輸入框剛送出的這行：捲到頂端那段時間後亮著，再慢慢淡掉（見 Paper 的 addFromDraft） */}
           {p.fresh && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: p.colors.rowEditingFill }, glowStyle]} pointerEvents="none" />}
           <View style={st.field}>
-            {/* key 跟著 rev：程式改了這行的字（Return 切行）就重掛輸入框，defaultValue 才會是新的字 */}
+            {/* key 跟著 rev：程式改了這行的字（Return 切行、iCloud 同步換了字）就重掛輸入框，defaultValue 才會是新的字 */}
             <Field key={p.rev} text={p.it.t} done={p.done} fs={p.fs} colors={p.colors} refInput={p.refInput} actions={actions} onAction={onAction}
               onLines={ls => { lines.current = ls; }}
               onChange={p.onChange} onKey={p.onKey} onSubmit={p.onSubmit} onFocus={p.onFocus} onBlur={p.onBlur} />
