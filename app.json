@@ -68,7 +68,8 @@
           "iCloudContainerIdentifier": "iCloud.org.domyweb.qieji",
           "iCloudContainerEnvironment": "Production"
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "extra": {
       "router": {

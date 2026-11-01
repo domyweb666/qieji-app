@@ -30,7 +30,9 @@ export default function Directory() {
   const navigation = useNavigation();
   useEffect(() => {
     const nav = navigation as unknown as { addListener: (ev: 'transitionEnd', cb: (e: { data?: { closing?: boolean } }) => void) => () => void };
-    return nav.addListener('transitionEnd', e => { if (e.data?.closing) store.panelClosed(); });
+    store.panelOpened(); // 控制中心「記一行」要知道面板開著，等它收完才叫鍵盤（C1）
+    const off = nav.addListener('transitionEnd', e => { if (e.data?.closing) store.panelClosed(); });
+    return () => { off(); if (store.panelOpen) store.panelClosed(); }; // 沒收到收完事件就卸載（網頁、被路由直接拿掉）也要放掉
   }, [navigation]);
 
   // 多米 2026-11-01：目錄的排序選項與顏色篩選拿掉（太雜）。排序固定用 s.sort 現值（預設最近改過的在前），顏色篩選不再有；

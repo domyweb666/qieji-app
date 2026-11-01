@@ -481,6 +481,30 @@ export function Paper({ n }: { n: Note }) {
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
     return () => { clearTimeout(t); off?.(); mounted.current = false; closeNote(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 控制中心「記一行」（qieji://new，C1）：升起輸入框。app 還沒回到前景就等它回來（不在前景叫不起鍵盤）；
+  // 目錄面板開著就等它收完（跟上面從目錄開新的一張同一個理由），沒開就馬上。冷啟動時請求比紙早到，紙掛上來先拿一次
+  const composeNow = useRef(openComposer);
+  composeNow.current = openComposer;
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined, off: (() => void) | undefined, offApp: (() => void) | undefined;
+    const stop = () => { clearTimeout(t); off?.(); off = undefined; offApp?.(); offApp = undefined; };
+    const open = () => { stop(); if (mounted.current) composeNow.current(); };
+    const whenActive = () => {
+      if (!store.panelOpen) return open();
+      off = store.onPanelClosed(open);
+      t = setTimeout(open, T.timing.freshFocusFallback);
+    };
+    const go = () => {
+      if (!store.takeCompose()) return;
+      stop();
+      if (AppState.currentState === 'active') return whenActive();
+      const sub = AppState.addEventListener('change', s => { if (s === 'active') { offApp?.(); whenActive(); } });
+      offApp = () => sub.remove();
+    };
+    go();
+    const unsub = store.onCompose(go);
+    return () => { unsub(); stop(); };
+  }, []);
   // 切到別的 app、鎖屏（被打斷）：輸入框裡打到一半的字先送出、框收起、立刻寫入，字不會丟（多米 2026-11-01 定）
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => {

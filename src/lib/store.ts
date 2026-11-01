@@ -12,6 +12,7 @@ type Box = {
   state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
+  panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
   pulling?: boolean; synced?: Record<string, number>; // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
 };
 const g = globalThis as { __qiejiStore?: Box };
@@ -60,7 +61,9 @@ export const store = {
   get fresh() { return box.fresh ?? null; },
   clearFresh() { box.fresh = null; },
   // 目錄面板收完那一刻（原生堆疊的 transitionEnd closing）由目錄呼叫，紙收到就馬上升起輸入框，不用等 700ms 的保險（K6，2026-11-01）
-  panelClosed() { box.panelSubs?.forEach(f => f()); },
+  panelClosed() { box.panelOpen = false; box.panelSubs?.forEach(f => f()); },
+  panelOpened() { box.panelOpen = true; },
+  get panelOpen() { return !!box.panelOpen; },
   onPanelClosed(f: () => void) { (box.panelSubs ??= new Set()).add(f); return () => { box.panelSubs?.delete(f); }; },
 
   async load() {
@@ -85,6 +88,14 @@ export const store = {
     store.purgeTrash();
     store.pullCloud();
   },
+  // 控制中心「記一行」按鈕（qieji://new，2026-11-01 C1）：要首頁那張紙升起輸入框。
+  // 紙還沒掛上（冷啟動、還在讀資料）就先留著，紙掛上來時自己拿；已經掛著就通知它
+  requestCompose() {
+    box.compose = true;
+    box.composeSubs?.forEach(f => f());
+  },
+  takeCompose() { const c = !!box.compose; box.compose = false; return c; },
+  onCompose(f: () => void) { (box.composeSubs ??= new Set()).add(f); return () => { box.composeSubs?.delete(f); }; },
   // iCloud S3：拉下來合進本機（打開 app 讀完、回到前景、iCloud 變成可用、上傳時發現別台改過）。
   // 合併規則全在 model.mergeCloud；有變才重畫，一律存一次（記下 sh、把合出來比 iCloud 新的傳上去）
   async pullCloud() {
