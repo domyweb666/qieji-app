@@ -13,7 +13,7 @@ import { dropNotes, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, ty
 import { store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
-const FACE_SLEEP = require('../../assets/img/face-flat-sleep.webp');
+const FACE_SLEEP = require('../../assets/img/face-clay-sleep.webp');
 
 export default function Trash() {
   const s = useStore();

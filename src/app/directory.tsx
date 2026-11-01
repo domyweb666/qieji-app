@@ -14,7 +14,7 @@ import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 
-const FACE_PUZZLED = require('../../assets/img/face-flat-puzzled.webp');
+const FACE_PUZZLED = require('../../assets/img/face-clay-puzzled.webp');
 
 export default function Directory() {
   const { move } = useLocalSearchParams<{ move?: string }>();

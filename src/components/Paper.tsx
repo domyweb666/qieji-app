@@ -37,7 +37,7 @@ import { Sym } from './Sym';
 import { DoneBtn, Fab, GlassBtn } from './WebBars';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
-const FACE_FLAT = require('../../assets/img/face-flat.webp');
+const FACE = require('../../assets/img/face-clay.webp'); // 黏土版（多米 2026-11-01 換回，取代 10-31 的扁平線條版）
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
 const dismissKb = () => Keyboard.dismiss();
 // 把游標放到某一格：iOS 用 setSelection；網頁預覽的輸入框就是 DOM 的 textarea，沒有 setSelection，只有 setSelectionRange
@@ -618,7 +618,7 @@ export function Paper({ n }: { n: Note }) {
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}
           {n.items.length === 0 && (
             <View style={st.empty}>
-              <Image source={FACE_FLAT} style={st.emptyFace} contentFit="contain" accessible={false} />
+              <Image source={FACE} style={st.emptyFace} contentFit="contain" accessible={false} />
               <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
               <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
             </View>
