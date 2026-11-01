@@ -1,6 +1,6 @@
 // C1 座位表的純函式測試：舊存檔轉換、改字不換位、新紙排最後、刪除還原回原位、永久拿掉清座位、搜尋照座位
 // @ts-expect-error node 直接跑 TS 檔要帶 .ts 副檔名（跑法：node tools/tests/c1-seats.test.ts）
-import { fixOrder, parseState, seatedNotes, visibleNotes } from '../../src/lib/model.ts';
+import { fixOrder, parseState, reseat, seatedNotes, visibleNotes } from '../../src/lib/model.ts';
 
 let fail = 0;
 const eq = (name: string, a: unknown, b: unknown) => {
@@ -80,6 +80,18 @@ const fresh = parseState(null);
 fresh.notes.push(note('t', 1) as never);
 fixOrder(fresh);
 eq('第一次安裝：教學紙有座位', fresh.order, ['t']);
+
+// C4 拖完換座位：看得到的照新順序，最近刪除的座位留在原位
+const r = parseState(JSON.stringify({ sort: 'updated', garden: { days: {}, tot: { f: 0, e: 0 } }, gone: {}, notes: [
+  note('a', 5), note('b', 4), note('x', 9, { deleted: true }), note('c', 3), note('d', 2),
+], order: ['a', 'b', 'x', 'c', 'd'] }));
+reseat(r, ['c', 'a', 'b', 'd']);
+eq('拖完換座位：看得到的照新順序', ids(seatedNotes(r, '')), ['c', 'a', 'b', 'd']);
+eq('拖完換座位：最近刪除那張座位不動', r.order, ['c', 'a', 'x', 'b', 'd']);
+// 還沒存檔的新紙也能拖（reseat 先補座位）
+r.notes.push(note('n', 1) as never);
+reseat(r, ['n', 'c', 'a', 'b', 'd']);
+eq('新紙拖到最前', ids(seatedNotes(r, '')), ['n', 'c', 'a', 'b', 'd']);
 
 console.log(fail ? `\n${fail} FAIL` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

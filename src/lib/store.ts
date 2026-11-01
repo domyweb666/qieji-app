@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -79,6 +79,10 @@ export const store = {
   },
   get fresh() { return box.fresh ?? null; },
   clearFresh() { box.fresh = null; },
+  // 目錄長按選單「改名字」（C4）：要那張紙的清單名變成可以打字。紙還沒掛上就先留著，掛上來時自己拿（同 requestCompose）
+  requestRename(id: string) { box.rename = id; box.renameSubs?.forEach(f => f()); },
+  takeRename(id: string) { if (box.rename !== id) return false; box.rename = null; return true; },
+  onRename(f: () => void) { (box.renameSubs ??= new Set()).add(f); return () => { box.renameSubs?.delete(f); }; },
   // 目錄面板收完那一刻（原生堆疊的 transitionEnd closing）由目錄呼叫，紙收到就馬上升起輸入框，不用等 700ms 的保險（K6，2026-11-01）
   panelClosed() { box.panelOpen = false; box.panelSubs?.forEach(f => f()); },
   panelOpened() { box.panelOpen = true; },

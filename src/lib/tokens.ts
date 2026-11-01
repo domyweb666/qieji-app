@@ -185,6 +185,10 @@ export const motion = {
   // 標題區左右撥換張（B4）：舊的清單名滑出去（out，越來越快），新的那張的清單名從另一邊滑進來（in，越來越慢）（原型 160ms／300ms）。
   // 沒撥夠放手彈回用 snapBack。減少動態：撥的當下照樣跟手，放手不滑出滑進，交給換紙本來就有的整張淡入
   noteSwap:      { out: 160, in: 300, outEasing: [0.42, 0, 1, 1] as const, inEasing: [0.2, 0.85, 0.25, 1] as const },
+  // 目錄編輯（C4，抖動）：每塊磚左右轉 deg 度來回（單程 half 毫秒），相鄰兩塊方向相反才像 iOS 主畫面。減少動態：不抖
+  jiggle:        { deg: 1.2, half: 120 },
+  // 目錄拖磚時其他磚讓位滑過去（C4）。減少動態：直接到位
+  tileShift:     { duration: 200 },
   sheetBackdrop: { in: 180, out: 180 },
   menuPop:       { in: 170, out: 120 },
   menuBackdrop:  { in: 160, out: 140 },
@@ -216,6 +220,7 @@ export const gesture = {
   // 標題區左右撥換張（B4）：左右動超過 pullFailX 才算撥（跟上面往下拉同一個門檻，先動哪個方向就是哪個）；先上下動超過 swapFailY 就不算。
   // 撥過 swapDist 點或往同一邊甩超過 swapFlick（點／秒）放手就換；到頭（沒有下一張）標題只跟手指的 swapEdge 倍（多米原型）
   swapFailY: 12, swapDist: 60, swapFlick: 500, swapEdge: 0.3,
+  tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起

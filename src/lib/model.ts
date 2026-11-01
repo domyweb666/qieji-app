@@ -229,6 +229,15 @@ export function fixOrder(s: State) {
   return true;
 }
 
+// 拖完換座位（C4）：visible＝目錄裡看得到的紙排好的新順序。座位表裡「看得到的紙」那些位子依序換成新順序，
+// 看不到的（最近刪除）留在原位，還原時照樣回到附近
+export function reseat(s: State, visible: string[]) {
+  fixOrder(s);
+  const set = new Set(visible);
+  let k = 0;
+  s.order = s.order!.map(id => (set.has(id) ? visible[k++] : id));
+}
+
 // 目錄裡的紙（不含最近刪除），照座位排；搜尋也照座位。純函式不改 state：還沒寫進座位表的（剛開的新的一張）先排在最後，存檔時 fixOrder 補上
 export function seatedNotes(s: State, q: string) {
   const seat = new Map((Array.isArray(s.order) ? s.order : firstSeats(s)).map((id, i) => [id, i] as const));

@@ -510,6 +510,12 @@ export function Paper({ n }: { n: Note }) {
     const unsub = store.onCompose(go);
     return () => { unsub(); stop(); };
   }, []);
+  // 目錄長按選單「改名字」（C4）：目錄收完才送來（換了紙就是新掛上的這張先拿一次；點的就是現在這張時紙不重掛，靠通知）
+  useEffect(() => {
+    const go = () => { if (store.takeRename(n.id)) setRenaming(true); };
+    go();
+    return store.onRename(go);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 切到別的 app、鎖屏（被打斷）：輸入框裡打到一半的字先送出、框收起、立刻寫入，字不會丟（多米 2026-11-01 定）
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => {
