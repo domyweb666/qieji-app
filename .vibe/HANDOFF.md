@@ -1,6 +1,7 @@
-# Handoff: 2026-11-02 下午｜組塊 B 真機結案；C1、C3、C4、C5 做完（機器已驗），等多米真機玩組塊 C；之後才做 C2 → 組塊 D
+# Handoff: 2026-11-02 下午｜組塊 B 結案；C1、C3、C4、C5 多米真機「C 都 ok」；下一片 C2 排列同步 iCloud（🔴），之後組塊 D
 
-> 產出時間：2026-11-02 15:00（上一版在 `.vibe/handoff/archive/2026-11-02-0135.md`）
+> 產出時間：2026-11-02 16:00（上一版在 `.vibe/handoff/archive/2026-11-02-1500.md`）
+> **16:00 更新**：多米真機玩完 `.vibe/操作清單-待驗.md` 27 條，回「C 都 ok」→ C1、C3～C5 已搬到帳本「已完成」，跳過紀錄裡 C 那幾筆標補確認。下面「還沒做完」裡等驗組塊 C 的部分已結案，直接從「下一步」第 3 點 C2 開始
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／RN 0.88 新架構，iOS 原生 app；多米沒有 Mac、不太看程式、用 4G 測）
 > GitHub：私人 repo https://github.com/domyweb666/qieji-app（master，commit 完直接 `git push`）
 > **測試方式**：改 JS 用 tunnel：`npx expo start --tunnel --port 8083`（終端機面板，**先 `cd E:\茄記\qieji-app`**）。改原生要 `npx eas-cli@latest build --profile development --platform ios`
@@ -45,12 +46,9 @@
 
 ## ⏭️ 下一步從哪繼續
 
-1. 讀這份，再讀帳本「進行中」與「機器已驗」的組塊 C
-2. 等多米回報 `.vibe/操作清單-待驗.md` 結果：
-   - 有怪的 → 照條號找對應片，走 vibe-rescue／修，修完重驗那幾條
-   - C1 順序亂掉或少紙 → 先停，原始存檔在 AsyncStorage `colornotes.v1.before-c1`，紙在 iCloud 也各有一份
-   - 全過 → 組塊 C 結案（帳本搬到已完成、state human_verified）→ 每 3 片的完整回放已經超過，順便跑一次 health-check
-3. 組塊 C 過了才做 C2：vibe-spec-standards 列標準 → 覆誦（看多米還要不要跳）→ 實作 → 立即驗
+1. 讀這份，再讀帳本「進行中」（本片＝C2）與組塊 C 在「已完成」的做法摘要（座位表 `State.order`、`fixOrder`、`reseat`）
+2. ~~等多米回報組塊 C~~ ✅ 2026-11-02「C 都 ok」已結案。每 3 片的完整回放已過，動 C2 前可先跑一次 vibe-health-check（建議，不擋）
+3. **C2**：先讀 `src/lib/cloud.ts`（每張紙一個檔、墓碑 gone、mergeCloud）再走 vibe-spec-standards 列標準 → 覆誦（C2 寫 iCloud，就算多米說直接做也要先用一題問清楚：iCloud 上多一個 `layout.json`、以最後改的那台為準、對不上的補最後）→ 實作 → **立即驗**（看得到檔案出現、刪 app 重裝排列回來；兩台互改驗不了已在跳過紀錄）
 4. 然後組塊 D（先問卡片分類要不要做）
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）

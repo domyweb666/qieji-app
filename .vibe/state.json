@@ -1,11 +1,11 @@
 {
-  "station": "audit-batch",
-  "updated_at": "2026-11-02T15:00:00+08:00",
+  "station": "spec-standards",
+  "updated_at": "2026-11-02T16:00:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
     "todo": 4,
     "machine_verified": 9,
-    "human_verified": 5
+    "human_verified": 9
   },
   "chunks": [
     {
@@ -37,9 +37,7 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [
-    "C1"
-  ],
+  "pending_immediate_verify": [],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -87,19 +85,19 @@
       "what": "C1 真實情境走查",
       "why": "多米 2026-11-02 只回「對，開工」",
       "since": "2026-11-02",
-      "status": "C1 立即驗時補確認"
+      "status": "2026-11-02 組塊 C 真機都 ok，補確認"
     },
     {
       "what": "C1 立即驗延後",
       "why": "多米 2026-11-02「全做完再說」；C2 與 D 等 C1 真機過再做",
       "since": "2026-11-02",
-      "status": "待補驗"
+      "status": "2026-11-02 組塊 C 真機都 ok，補確認"
     },
     {
       "what": "C3～C5 走查＋覆誦",
       "why": "多米 2026-11-02「全做完再說」",
       "since": "2026-11-02",
-      "status": "C 塊批次驗時補確認"
+      "status": "2026-11-02 組塊 C 真機都 ok，補確認"
     }
   ],
   "decisions": [
