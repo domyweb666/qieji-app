@@ -1,2 +1,4 @@
 # git hook 是 shell 腳本，換行一定要是 LF（CRLF 在 sh 裡會「\r: command not found」）
 tools/githooks/* text eol=lf
+# patch-package 的 patch 要跟 node_modules 裡的檔案一樣是 LF，CRLF 在 EAS（macOS）上會套不上
+*.patch text eol=lf
