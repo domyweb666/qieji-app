@@ -20,7 +20,7 @@ import {
 import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
-  Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
+  Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
   useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +56,11 @@ const WEB_DEPS = Platform.OS === 'web';
 const ROW_IN = FadeIn.duration(T.motion.fade);
 const ROW_OUT = FadeOut.duration(T.motion.fade);
 const ROW_MOVE = LinearTransition.duration(T.motion.rowShift.duration);
+// 最上面長出新行時，捲在頂端附近（一行高以內）就露出新行，捲得深就原地不動
+const KEEP_POS = { minIndexForVisible: 0, autoscrollToTopThreshold: T.shape.rowMin };
+// 右上 ⋯ 讓位給 ✓ 時用鍵盤的時鐘滑過去（2-4 連續：之前瞬間跳一格）
+const KBF = T.motion.keyboardFollow;
+const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF.easing[3]));
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -507,9 +512,13 @@ export function Paper({ n }: { n: Note }) {
             </View>
           </Pressable>
         )}
-        <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
-        {/* 鍵盤開著才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。輸入框開著時不畫，它旁邊自己有 ✓ */}
-        {kbUp && !composing && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
+        {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
+        <Animated.View layout={calm ? undefined : KB_SLIDE}>
+          <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
+        </Animated.View>
+        {/* 在行裡或清單名裡打字時才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。
+            看「哪一格在編輯」不看 composing：按輸入框的 ✓ 收起時框先收、鍵盤晚一兩格才開始收，看 composing 會在那幾格閃出一顆 ✓ */}
+        {kbUp && (editing !== null || renaming) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
@@ -523,7 +532,9 @@ export function Paper({ n }: { n: Note }) {
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
-          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: T.shape.rowMin }}
+          // 拖著排順序時關掉（多米 2026-11-01：靠近頂端拖會怪、會閃）：放下那一刻順序換了，它會把捲動位置跟著最上面那行挪一下，
+          // 落地的行又被整頁的位移推一次。dragging 到位移歸零那一格才關（dragApi.end），順序換的那一次重畫它是關的
+          maintainVisibleContentPosition={dragging ? undefined : KEEP_POS}
           onScrollEndDrag={dragEnd} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging}>
           {/* 空紙：扁平線條的茄子＋兩行灰字指到右下角的 ＋ */}

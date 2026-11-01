@@ -140,10 +140,8 @@ export function ago(ts: number) {
 export const plain = (n: Note) =>
   n.type === 'text' ? n.body : n.items.filter(i => i.t.trim())
     .map((i, k) => `${k + 1}.${i.done ? '（劃線）' : ''}${i.t}`).join('\n\n');
-export const label = (n: Note) =>
-  n.title.trim() ||
-  (n.type === 'text' ? n.body : n.items.map(i => i.t).join('\n')).split('\n').find(l => l.trim()) ||
-  '（無標題）';
+// 沒取名的紙一律叫「未命名」，跟紙的標題列同一個字（多米 2026-11-01：目錄磚拿第一行當名字，會以為那是名字）
+export const label = (n: Note) => n.title.trim() || '未命名';
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {

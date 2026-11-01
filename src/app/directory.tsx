@@ -46,7 +46,7 @@ export default function Directory() {
   const moving = from?.items.find(i => i.id === move);
   function pick(n: Note) {
     if (from && moving) {
-      const name = label(n); // 先取名字：沒標題的紙搬進去後第一行會變成這一行
+      const name = label(n);
       if (moveItem(from, n, moving.id)) { n.updated = from.updated = Date.now(); store.change(); ui.toast(`已搬到「${name}」`); }
       router.back();
       return;
@@ -123,7 +123,8 @@ function Tile({ n, w, cur, onPress }: { n: Note; w: number; cur: boolean; onPres
       accessibilityState={{ selected: cur }}
       style={({ pressed }) => [st.tile, { width: w, backgroundColor: nc.bg, borderColor: cur ? c.accent : nc.rule, borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard },
         pressed && { opacity: T.motion.pressDim }]}>
-      <Text style={[st.tileText, { color: c.textPrimary }]} numberOfLines={2}>{label(n)}</Text>
+      {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
+      <Text style={[st.tileText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={2}>{label(n)}</Text>
       <View style={[st.tag, { backgroundColor: nc.hd }]} />
     </Pressable>
   );
