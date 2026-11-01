@@ -4,6 +4,8 @@
 
 export const KEY = 'colornotes.v1';
 export const HINT_KEY = 'cn.hint';
+// 第一次轉成座位表（C1）之前，整份原始存檔原封不動另存在這裡，只存一次；轉壞了從這裡救
+export const SEAT_BACKUP_KEY = 'colornotes.v1.before-c1';
 
 export type ColorKey = 'purple' | 'yellow' | 'orange' | 'red' | 'blue' | 'green' | 'gray' | 'black' | 'white';
 export type SortKey = 'updated' | 'created' | 'title' | 'color';
@@ -32,7 +34,8 @@ export type Note = {
 export type Day = { f: number; e: number; g: number };
 export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } };
 // gone＝墓碑：永久拿掉的紙 id → 拿掉的時間（S0，2026-11-01 加）。沒有它，另一台還留著的那張會被同步回來，刪掉的紙復活
-export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number> };
+// order＝目錄座位表（C1，2026-11-02 加）：每張紙的 id 照目錄裡的先後排，舊存檔沒有。sort 從此不用，但照鐵則留著
+export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[] };
 
 // name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
 // 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
@@ -183,12 +186,15 @@ export function swipeSet(s: State, cur: Note) {
 }
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
+// q 要先 trim、轉小寫
+const hit = (n: Note, q: string) => !q || (n.title + '\n' + n.body + '\n' + n.items.map(i => i.t).join('\n')).toLowerCase().includes(q);
+
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {
   const q = o.q.trim().toLowerCase();
   const notes = s.notes
     .filter(n => (o.trash ? n.deleted : !n.deleted))
     .filter(n => o.filter === 'all' || n.color === o.filter)
-    .filter(n => !q || (n.title + '\n' + n.body + '\n' + n.items.map(i => i.t).join('\n')).toLowerCase().includes(q));
+    .filter(n => hit(n, q));
   notes.sort((a, b) => {
     if (!o.trash && a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     switch (o.sort) {
@@ -199,6 +205,37 @@ export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | '
     }
   });
   return notes;
+}
+
+/* ---------------- 目錄座位表（C1） ---------------- */
+// 改字不換位（公理 2：手記得住不動的位置）。舊存檔沒有座位表時，照 C1 之前目錄的樣子編第一次（釘選的在前、再照 sort），
+// 打開新版看到的順序才會跟以前一模一樣；在最近刪除裡的紙接在後面（看不到，座位留著，還原就回原位）
+const firstSeats = (s: State) => [
+  ...visibleNotes(s, { trash: false, filter: 'all', q: '', sort: s.sort }),
+  ...s.notes.filter(n => n.deleted).sort((a, b) => b.updated - a.updated),
+].map(n => n.id);
+
+// 存檔前對一次座位表：表裡有、紙沒有的座位丟掉（永久拿掉的紙），重複的只留第一個；紙有、表裡沒有的補在最後（新的一張、
+// 這台沒見過的、匯入的；好幾張時最近改過的在前）。有改才寫回，回傳有沒有改
+export function fixOrder(s: State) {
+  const ids = new Set(s.notes.map(n => n.id));
+  const seen = new Set<string>();
+  const order = (Array.isArray(s.order) ? s.order : firstSeats(s))
+    .filter(id => typeof id === 'string' && ids.has(id) && !seen.has(id) && !!seen.add(id));
+  for (const n of s.notes.filter(n => !seen.has(n.id)).sort((a, b) => b.updated - a.updated)) order.push(n.id);
+  const old = s.order;
+  if (Array.isArray(old) && old.length === order.length && old.every((id, i) => id === order[i])) return false;
+  s.order = order;
+  return true;
+}
+
+// 目錄裡的紙（不含最近刪除），照座位排；搜尋也照座位。純函式不改 state：還沒寫進座位表的（剛開的新的一張）先排在最後，存檔時 fixOrder 補上
+export function seatedNotes(s: State, q: string) {
+  const seat = new Map((Array.isArray(s.order) ? s.order : firstSeats(s)).map((id, i) => [id, i] as const));
+  const k = q.trim().toLowerCase();
+  const end = seat.size;
+  return s.notes.filter(n => !n.deleted && hit(n, k))
+    .sort((a, b) => (seat.get(a.id) ?? end) - (seat.get(b.id) ?? end) || b.updated - a.updated);
 }
 
 /* ---------------- backup ---------------- */

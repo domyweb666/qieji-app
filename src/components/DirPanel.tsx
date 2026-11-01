@@ -1,6 +1,7 @@
 // 目錄面板（B3，多米 2026-11-01 晚（二）定）：自己做的、從螢幕上面垂下來的面板，取代系統 formSheet。
 // 開：紙的標題區往下拉（跟著手指）、點標題下的把手、行的「搬到…」。收：點下面露出的那截紙、把面板底部把手往上推、點一塊磚。
-// 裡面的東西照舊（搜尋、新的一張、已釘選／其他、色磚、最近刪除、搬行模式）：原本 src/app/directory.tsx 整段搬過來，這片只換容器。
+// 裡面：搜尋、新的一張、色磚、最近刪除、搬行模式（原本 src/app/directory.tsx 整段搬過來）。
+// C1（2026-11-02）：磚照座位表（State.order）排，改字不換位、新的一張排最後；「已釘選／其他」兩段拿掉，釘選的磚右上角一個圖釘。
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { makeMutable, useAnimatedStyle, useReducedMotion, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { col, label, moveItem, visibleNotes, type Note } from '../lib/model';
+import { col, label, moveItem, seatedNotes, type Note } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { T, useColors, useNoteColors } from '../lib/tokens';
 import { Empty } from './Empty';
@@ -115,10 +116,8 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
   const [q, setQ] = useState('');
   const searching = !!q.trim();
 
-  // 多米 2026-11-01：目錄的排序選項與顏色篩選拿掉（太雜）。排序固定用 s.sort 現值（預設最近改過的在前），顏色篩選不再有；
-  // 清單多了要不要分組／資料夾，照 2-5 寫成方案等他選（審查紀錄 2026-11-01 最後一段）
-  const notes = visibleNotes(s, { trash: false, filter: 'all', q, sort: s.sort });
-  const pinned = notes.filter(n => n.pinned), other = notes.filter(n => !n.pinned);
+  // 多米 2026-11-01：排序選項與顏色篩選拿掉（太雜）；C1 起照座位表排，搜尋也照座位（審查紀錄 2026-11-01 晚、晚（三））
+  const notes = seatedNotes(s, q);
   const trashed = s.notes.filter(n => n.deleted).length;
   // 兩欄：整頁左右各留 16，中間留 12
   const tileW = (width - T.space.l * 2 - T.space.m) / 2;
@@ -144,8 +143,6 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
     dirPanel.close();
   }
 
-  const tiles = (list: Note[]) => list.map(n => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />);
-
   return (
     <View style={{ flex: 1 }} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
@@ -168,11 +165,9 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
           </Pressable>
         )}
 
-        {pinned.length > 0 && <Text style={[st.head, { color: c.textSecondary }]}>已釘選</Text>}
-        {pinned.length > 0 && <View style={st.grid}>{tiles(pinned)}</View>}
-        {/* 沒有任何釘選時只剩一組，「其他」沒東西可對照，不印（06-首次體驗 ❓2） */}
-        {pinned.length > 0 && other.length > 0 && <Text style={[st.head, { color: c.textSecondary }]}>其他</Text>}
-        <View style={st.grid}>{tiles(other)}</View>
+        <View style={st.grid}>
+          {notes.map(n => <Tile key={n.id} n={n} w={tileW} cur={n.id === store.last} onPress={() => pick(n)} />)}
+        </View>
 
         {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
         {notes.length === 0 && searching && <Empty lines={[`找不到含「${q.trim()}」的清單`]} />}
@@ -192,18 +187,20 @@ function Directory({ move, padTop }: { move?: string; padTop: number }) {
   );
 }
 
-// 一塊磚：底色是那張紙的顏色，右下角露出一顆色圓，只有名字。正在看的那張用 accent 框起來（面板上唯一的 accent）
+// 一塊磚：底色是那張紙的顏色，右下角露出一顆色圓，只有名字。正在看的那張用 accent 框起來（面板上唯一的 accent）。
+// 釘選的右上角一個圖釘（次要字色，跟紙標題旁那顆同一個；C1）
 function Tile({ n, w, cur, onPress }: { n: Note; w: number; cur: boolean; onPress: () => void }) {
   const c = useColors();
   const nc = useNoteColors(n.color);
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label(n)}，${col(n.color).hue}`}
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label(n)}，${col(n.color).hue}${n.pinned ? '，已釘選' : ''}`}
       accessibilityState={{ selected: cur }}
       style={({ pressed }) => [st.tile, { width: w, backgroundColor: nc.bg, borderColor: cur ? c.accent : nc.rule, borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard },
         pressed && { opacity: T.motion.pressDim }]}>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
-      <Text style={[st.tileText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={2}>{label(n)}</Text>
+      <Text style={[st.tileText, n.pinned && st.tileTextPinned, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={2}>{label(n)}</Text>
       <View style={[st.tag, { backgroundColor: nc.hd }]} />
+      {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={14} color={c.textSecondary} /></View> : null}
     </Pressable>
   );
 }
@@ -219,12 +216,13 @@ const st = StyleSheet.create({
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s, paddingBottom: T.space.l },
-  head: { ...T.font.sectionHead, marginTop: T.space.l, marginBottom: T.space.s, marginLeft: T.space.xs },
   moveHead: { ...T.font.subhead, marginBottom: T.space.m, marginLeft: T.space.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
   tile: { height: T.shape.tile, borderRadius: T.shape.radiusCard, borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   add: { borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.s },
   tileText: { ...T.font.emphasis },
+  tileTextPinned: { marginRight: T.space.l }, // 名字長的時候不壓到右上角的圖釘
+  pin: { position: 'absolute', top: T.space.m, right: T.space.m },
   tag: { position: 'absolute', right: -T.space.m, bottom: -T.space.m, width: T.shape.tileTag, height: T.shape.tileTag, borderRadius: T.shape.pill(T.shape.tileTag) },
   trashRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, marginTop: T.space.xl,
     paddingVertical: T.space.m, borderTopWidth: StyleSheet.hairlineWidth },

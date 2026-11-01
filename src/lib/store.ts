@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
-import { dropNotes, emptyState, forgetSync, mergeCloud, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 import { T } from './tokens';
 
@@ -15,6 +15,7 @@ type Box = {
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
   pulling?: boolean; synced?: Record<string, number>;
+  noSeat?: boolean; // 原始存檔沒另存成功：這次打開不寫座位表（目錄照 C1 之前的樣子排），下次打開再試（C1）
   newCloud?: 'asking' | 'declined'; onNewCloud?: (adopt: () => void, decline: () => void) => void; onCloudOff?: () => void; // S5 // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
 };
 const g = globalThis as { __qiejiStore?: Box };
@@ -42,6 +43,7 @@ async function writeNow() {
   if (!box.loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
   try {
     stampMods(box.state, Date.now()); // iCloud 同步用：內容變了的紙記下改動時間（S0；畫面上的 updated 不動）
+    if (!box.noSeat) fixOrder(box.state); // 目錄座位表（C1）：新的一張、別台來的補在最後，永久拿掉的紙座位丟掉
     await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
     box.saveFailed = false;
     pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
@@ -87,7 +89,17 @@ export const store = {
     if (box.loaded) return;
     const [raw, hint, last] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY)]);
     if (box.loaded) return;
-    box.state = parseState(raw);
+    const state = parseState(raw);
+    // C1 第一次轉成座位表（🔴 動真資料）：先把整份原始存檔原封不動另存一份，只存一次（已經有就不蓋）；另存失敗這次就不轉
+    const convert = raw !== null && !Array.isArray(state.order);
+    if (convert) {
+      try {
+        if ((await AsyncStorage.getItem(SEAT_BACKUP_KEY)) === null) await AsyncStorage.setItem(SEAT_BACKUP_KEY, raw);
+        box.noSeat = false;
+      } catch { box.noSeat = true; }
+      if (box.loaded) return;
+    }
+    box.state = state;
     box.hintSeen = hint === '1';
     box.last = last;
     // 第一次安裝（手機上根本沒有這個存檔，raw 是 null）：放一張教學紙當第一張（多米 2026-11-01）。
@@ -101,7 +113,7 @@ export const store = {
     box.loaded = true;
     box.version++;
     emit();
-    if (first) writeNow();
+    if (first || (convert && !box.noSeat)) writeNow(); // 轉好的座位表馬上存，不等第一次改字
     store.purgeTrash();
     store.pullCloud();
   },
