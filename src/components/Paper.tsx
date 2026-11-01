@@ -24,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, pickLabel, PIN_MAX, pinnedNotes, plain, splitPasted, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
@@ -518,7 +518,17 @@ export function Paper({ n }: { n: Note }) {
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); router.push('/directory'); }
-  function togglePin() { n.pinned = !n.pinned; touch(); ui.toast(n.pinned ? '已釘選' : '已取消釘選'); }
+  // 釘滿了一步跳選單問換掉哪張（審查紀錄 11/01 晚（四）甲）；換掉的那張不動 updated，目錄裡位置不跳
+  function togglePin() {
+    if (n.pinned) { n.pinned = false; touch(); ui.toast('已取消釘選'); return; }
+    const pinned = pinnedNotes(store.s);
+    if (pinned.length < PIN_MAX) { n.pinned = true; touch(); ui.toast('已釘選'); return; }
+    ui.sheet(pinned.map(o => ({ label: pickLabel(o), fn: () => swapPin(o) })), '已釘滿兩張', '要換掉哪一張？');
+  }
+  function swapPin(o: Note) {
+    o.pinned = false; n.pinned = true; touch();
+    ui.toast(`已釘選，「${pickLabel(o)}」已取消釘選`, { label: '復原', fn: () => { o.pinned = true; n.pinned = false; touch(); } });
+  }
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
     if (n.color === k) return;

@@ -19,13 +19,14 @@ let host: {
 
 export const ui = {
   // iOS 用系統的動作表單與確認框，其他平台（網頁預覽）用自己畫的
-  sheet: (rows: Row[], title?: string) => {
-    if (Platform.OS !== 'ios') return host?.sheet({ rows, title });
+  // message：標題下面那行小字（例：釘滿兩張的「要換掉哪一張？」）；網頁預覽併在標題下一行
+  sheet: (rows: Row[], title?: string, message?: string) => {
+    if (Platform.OS !== 'ios') return host?.sheet({ rows, title: [title, message].filter(Boolean).join('\n') || undefined });
     const opts = [...rows.map(r => (r.on ? `✓ ${r.label}` : r.label)), '取消'];
     const destructiveButtonIndex = rows.map((r, i) => (r.danger ? i : -1)).filter(i => i >= 0);
     // 系統動作表單不在 React 樹裡，拿不到 hook，顏色照目前外觀算一次
     ActionSheetIOS.showActionSheetWithOptions(
-      { title, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: colors('light').accent },
+      { title, message, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: colors('light').accent },
       i => { if (i < rows.length) rows[i].fn(); },
     );
   },

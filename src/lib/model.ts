@@ -162,6 +162,19 @@ export const plain = (n: Note) =>
     .map((i, k) => `${k + 1}.${i.done ? '（劃線）' : ''}${i.t}`).join('\n\n');
 // 沒取名的紙一律叫「未命名」，跟紙的標題列同一個字（多米 2026-11-01：目錄磚拿第一行當名字，會以為那是名字）
 export const label = (n: Note) => n.title.trim() || '未命名';
+// 要在選單裡分出是哪張：沒名字的寫「未命名・」＋第一行開頭，不單用第一行（理由同上）
+const PEEK = 8;
+export function pickLabel(n: Note) {
+  if (n.title.trim()) return n.title.trim();
+  const first = (n.type === 'text' ? n.body.split('\n') : n.items.map(i => i.t)).map(t => t.trim()).find(Boolean);
+  if (!first) return '未命名';
+  const chars = Array.from(first);
+  return `未命名・${chars.slice(0, PEEK).join('')}${chars.length > PEEK ? '…' : ''}`;
+}
+// 釘選最多兩張：標題區左右滑只在這兩張之間換（多米 2026-11-01 晚定）。
+// 舊資料或別台同步回來超過的不自動拔，等下次釘新的時全部列出來讓人挑
+export const PIN_MAX = 2;
+export const pinnedNotes = (s: State) => s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated);
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {
