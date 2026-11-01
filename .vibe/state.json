@@ -1,18 +1,18 @@
 {
-  "station": "audit-immediate",
-  "updated_at": "2026-11-01T23:10:00+08:00",
+  "station": "spec-standards",
+  "updated_at": "2026-11-01T23:30:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
     "todo": 12,
     "machine_verified": 1,
-    "human_verified": 0
+    "human_verified": 1
   },
   "chunks": [
     {
       "name": "A 紙感配色",
       "total": 1,
       "machine_done": 1,
-      "human_verified": false,
+      "human_verified": true,
       "approved": true
     },
     {
@@ -37,9 +37,7 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [
-    "A1 紙感配色"
-  ],
+  "pending_immediate_verify": [],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
