@@ -214,19 +214,20 @@ export const widget = {
 export const T = { font, space, shape, motion, gesture, timing, widget };
 
 /* ---------- 筆記色票：內容色，不是介面色。不當文字色、不當按鈕色。key 不能改（存檔格式） ---------- */
-// bg 整頁底與標題列底；hd 色點、色塊；rule 行卡片框線。深色候選＝hd 混深底（bg 30%、rule 45%）
+// bg 整頁底與標題列底；hd 色點、色塊；rule 行卡片框線。淺色 bg＝「乙 紙感」（多米 2026-11-01 晚定）；
+// rule＝hd 混進 bg，深淺差剩舊格線的七成（增加對比維持舊的深淺差）；深色＝hd 混深底（bg 22%、rule 34%，比舊的 30%／45% 收斂）
 export const NOTE_KEYS = ['purple', 'yellow', 'orange', 'red', 'blue', 'green', 'gray', 'black', 'white'] as const;
 export type NoteKey = (typeof NOTE_KEYS)[number];
 const NOTES: Record<NoteKey, { bg: Four; hd: string; rule: Four }> = {
-  purple: { bg: four('#F2E8EC', '#4A3A50', '#F2E8EC', '#45364B'), hd: '#A985AE', rule: four('#DDCAD8', '#5E4A64', '#DDCAD8', '#5A4760') },
-  yellow: { bg: four('#FAF0D2', '#5D4D3A', '#FAF0D2', '#584936'), hd: '#E8C468', rule: four('#EEDDA6', '#7B6644', '#EEDDA6', '#776340') },
-  orange: { bg: four('#FBE6D3', '#5D3F37', '#FBE6D3', '#583A32'), hd: '#E8945C', rule: four('#F0C7A4', '#7B513F', '#F0C7A4', '#774E3B') },
-  red:    { bg: four('#F8E0D8', '#58373C', '#F8E0D8', '#533337'), hd: '#D97C6C', rule: four('#EBBBAE', '#744646', '#EBBBAE', '#704342') },
-  blue:   { bg: four('#E7E8F0', '#424157', '#E7E8F0', '#3D3C52'), hd: '#8E9BC6', rule: four('#C7CBE0', '#52546F', '#C7CBE0', '#4E516B') },
-  green:  { bg: four('#EBEED9', '#46473B', '#EBEED9', '#414236'), hd: '#9DAF6A', rule: four('#CED8AE', '#595D45', '#CED8AE', '#555A41') },
-  gray:   { bg: four('#F2EADF', '#504546', '#F2EADF', '#4C4041'), hd: '#BFA88E', rule: four('#DDCFBD', '#685A55', '#DDCFBD', '#645752') },
-  black:  { bg: four('#E0D8D6', '#2E2532', '#E0D8D6', '#2A212D'), hd: '#4E3F4C', rule: four('#C8BEBC', '#352B38', '#C8BEBC', '#312734') },
-  white:  { bg: four('#FFFCF6', '#5E565A', '#FFFCF6', '#595255'), hd: '#EDE3D2', rule: four('#EFE6D8', '#7D7474', '#EFE6D8', '#797170') },
+  purple: { bg: four('#F4EEF2', '#3F3245', '#F4EEF2', '#392D3F'), hd: '#A985AE', rule: four('#E4D7E3', '#4F3E55', '#DDCEDE', '#4B3A50') },
+  yellow: { bg: four('#FAF5E4', '#4D3F35', '#FAF5E4', '#473B30'), hd: '#E8C468', rule: four('#F5E6BF', '#65543D', '#F2E0B0', '#605038') },
+  orange: { bg: four('#FBF0E6', '#4D3533', '#FBF0E6', '#47302D'), hd: '#E8945C', rule: four('#F6D7C1', '#654339', '#F4CFB4', '#604034') },
+  red:    { bg: four('#F9ECE8', '#493036', '#F9ECE8', '#442B31'), hd: '#D97C6C', rule: four('#F1CFC8', '#603B3E', '#EEC5BD', '#5B373A') },
+  blue:   { bg: four('#EEF0F5', '#39364A', '#EEF0F5', '#343245'), hd: '#8E9BC6', rule: four('#D5DAE9', '#46465D', '#CCD2E5', '#414258') },
+  green:  { bg: four('#EFF2E6', '#3C3B36', '#EFF2E6', '#373630'), hd: '#9DAF6A', rule: four('#DAE1C7', '#4B4D3E', '#D3DBBC', '#474939') },
+  gray:   { bg: four('#F3EEE7', '#44393E', '#F3EEE7', '#3E3538'), hd: '#BFA88E', rule: four('#E3D9CC', '#574A4A', '#DED2C3', '#524645') },
+  black:  { bg: four('#E6E2E1', '#2B222F', '#E6E2E1', '#251D2A'), hd: '#4E3F4C', rule: four('#D4CECF', '#302734', '#CCC6C8', '#2C232F') },
+  white:  { bg: four('#FFFDF9', '#4E464D', '#FFFDF9', '#484247'), hd: '#EDE3D2', rule: four('#F4EDE0', '#665E61', '#EFE6D7', '#625A5D') },
 };
 export type NoteColors = { bg: string; hd: string; rule: string };
 // 不認得的 key 用玉米（跟 model.ts 的 col() 同一個預設）

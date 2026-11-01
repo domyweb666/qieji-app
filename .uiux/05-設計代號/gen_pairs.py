@@ -1,7 +1,7 @@
 """產生 contrast.py 要吃的 pairs.json（對比檢查表的來源）。
 用法：python -I -X utf8 gen_pairs.py pairs.json
       python -I -X utf8 <skill>/scripts/contrast.py pairs.json
-淺色值＝多米 2026-10-31 定案（照推薦全收）；深色、增加對比＝候選值，要在真機看過才算定。
+淺色值＝多米 2026-10-31 定案（照推薦全收）；紙的九色 2026-11-01 晚換成「乙 紙感」、深色改混 22%；深色、增加對比＝候選值，要在真機看過才算定。
 半透明的字色先跟底色合成成不透明色再算（contrast.py 只收 #RRGGBB）。
 色值改了，這裡要跟 Tokens.ts 同步改。
 """
@@ -45,14 +45,14 @@ ALPHA = {
     'outline': {'light': 0.55, 'dark': 0.6,  'hc_light': 0.7,  'hc_dark': 0.75},
 }
 NOTE = {
-    'purple': ('#F2E8EC', '#A985AE', '茄子'), 'yellow': ('#FAF0D2', '#E8C468', '玉米'),
-    'orange': ('#FBE6D3', '#E8945C', '紅蘿蔔'), 'red': ('#F8E0D8', '#D97C6C', '甜椒'),
-    'blue': ('#E7E8F0', '#8E9BC6', '藍莓'), 'green': ('#EBEED9', '#9DAF6A', '青蔥'),
-    'gray': ('#F2EADF', '#BFA88E', '香菇'), 'black': ('#E0D8D6', '#4E3F4C', '黑豆'),
-    'white': ('#FFFCF6', '#EDE3D2', '白蘿蔔'),
+    'purple': ('#F4EEF2', '#A985AE', '茄子'), 'yellow': ('#FAF5E4', '#E8C468', '玉米'),
+    'orange': ('#FBF0E6', '#E8945C', '紅蘿蔔'), 'red': ('#F9ECE8', '#D97C6C', '甜椒'),
+    'blue': ('#EEF0F5', '#8E9BC6', '藍莓'), 'green': ('#EFF2E6', '#9DAF6A', '青蔥'),
+    'gray': ('#F3EEE7', '#BFA88E', '香菇'), 'black': ('#E6E2E1', '#4E3F4C', '黑豆'),
+    'white': ('#FFFDF9', '#EDE3D2', '白蘿蔔'),
 }
 for k, (bg, hd, _) in NOTE.items():
-    RAW['note.' + k] = {'light': bg, 'dark': blend(hd, '#211A27', 0.3), 'hc_light': bg, 'hc_dark': blend(hd, '#1A1420', 0.3)}
+    RAW['note.' + k] = {'light': bg, 'dark': blend(hd, '#211A27', 0.22), 'hc_light': bg, 'hc_dark': blend(hd, '#1A1420', 0.22)}
 
 colors = dict(RAW)
 pairs = []

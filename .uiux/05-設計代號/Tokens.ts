@@ -177,17 +177,17 @@ export const T = {
 /* =========================================================
  * 筆記色票：內容色，不是介面色（書 3-5 第八點的「角色色」）。
  * 規則：不拿來當文字色、不拿來當按鈕色。key 不能改（存檔格式鐵則，見 model.ts）。
- * 淺色抄 model.ts；深色候選＝hd 30% 混深底（bg）、hd 45% 混深底（rule），接進程式後真機看過才定。
+ * 淺色 bg＝「乙 紙感」（2026-11-01 晚）；rule＝hd 混進 bg、深淺差剩舊的七成；深色＝hd 22% 混深底（bg）、hd 34% 混深底（rule），真機看過才定。
  * 色點（hd）在卡片上 7/9 不到 3:1，一律加描邊 dotOutlineAlpha，色點本身當裝飾（旁邊永遠有名字）。
  * ========================================================= */
 export const Notes = {
-  purple: { name: '茄子',   hue: '紫色',   bg: four('#F2E8EC', '#4A3A50', '#F2E8EC', '#45364B'), hd: '#A985AE', rule: '#DDCAD8' },
-  yellow: { name: '玉米',   hue: '黃色',   bg: four('#FAF0D2', '#5D4D3A', '#FAF0D2', '#584936'), hd: '#E8C468', rule: '#EEDDA6' },
-  orange: { name: '紅蘿蔔', hue: '橘色',   bg: four('#FBE6D3', '#5D3F37', '#FBE6D3', '#583A32'), hd: '#E8945C', rule: '#F0C7A4' },
-  red:    { name: '甜椒',   hue: '紅色',   bg: four('#F8E0D8', '#58373C', '#F8E0D8', '#533337'), hd: '#D97C6C', rule: '#EBBBAE' },
-  blue:   { name: '藍莓',   hue: '藍色',   bg: four('#E7E8F0', '#424157', '#E7E8F0', '#3D3C52'), hd: '#8E9BC6', rule: '#C7CBE0' },
-  green:  { name: '青蔥',   hue: '綠色',   bg: four('#EBEED9', '#46473B', '#EBEED9', '#414236'), hd: '#9DAF6A', rule: '#CED8AE' },
-  gray:   { name: '香菇',   hue: '奶茶色', bg: four('#F2EADF', '#504546', '#F2EADF', '#4C4041'), hd: '#BFA88E', rule: '#DDCFBD' },
-  black:  { name: '黑豆',   hue: '深灰',   bg: four('#E0D8D6', '#2E2532', '#E0D8D6', '#2A212D'), hd: '#4E3F4C', rule: '#C8BEBC' },
-  white:  { name: '白蘿蔔', hue: '白色',   bg: four('#FFFCF6', '#5E565A', '#FFFCF6', '#595255'), hd: '#EDE3D2', rule: '#EFE6D8' },
+  purple: { name: '茄子',   hue: '紫色',   bg: four('#F4EEF2', '#3F3245', '#F4EEF2', '#392D3F'), hd: '#A985AE', rule: four('#E4D7E3', '#4F3E55', '#DDCEDE', '#4B3A50') },
+  yellow: { name: '玉米',   hue: '黃色',   bg: four('#FAF5E4', '#4D3F35', '#FAF5E4', '#473B30'), hd: '#E8C468', rule: four('#F5E6BF', '#65543D', '#F2E0B0', '#605038') },
+  orange: { name: '紅蘿蔔', hue: '橘色',   bg: four('#FBF0E6', '#4D3533', '#FBF0E6', '#47302D'), hd: '#E8945C', rule: four('#F6D7C1', '#654339', '#F4CFB4', '#604034') },
+  red:    { name: '甜椒',   hue: '紅色',   bg: four('#F9ECE8', '#493036', '#F9ECE8', '#442B31'), hd: '#D97C6C', rule: four('#F1CFC8', '#603B3E', '#EEC5BD', '#5B373A') },
+  blue:   { name: '藍莓',   hue: '藍色',   bg: four('#EEF0F5', '#39364A', '#EEF0F5', '#343245'), hd: '#8E9BC6', rule: four('#D5DAE9', '#46465D', '#CCD2E5', '#414258') },
+  green:  { name: '青蔥',   hue: '綠色',   bg: four('#EFF2E6', '#3C3B36', '#EFF2E6', '#373630'), hd: '#9DAF6A', rule: four('#DAE1C7', '#4B4D3E', '#D3DBBC', '#474939') },
+  gray:   { name: '香菇',   hue: '奶茶色', bg: four('#F3EEE7', '#44393E', '#F3EEE7', '#3E3538'), hd: '#BFA88E', rule: four('#E3D9CC', '#574A4A', '#DED2C3', '#524645') },
+  black:  { name: '黑豆',   hue: '深灰',   bg: four('#E6E2E1', '#2B222F', '#E6E2E1', '#251D2A'), hd: '#4E3F4C', rule: four('#D4CECF', '#302734', '#CCC6C8', '#2C232F') },
+  white:  { name: '白蘿蔔', hue: '白色',   bg: four('#FFFDF9', '#4E464D', '#FFFDF9', '#484247'), hd: '#EDE3D2', rule: four('#F4EDE0', '#665E61', '#EFE6D7', '#625A5D') },
 } as const;
