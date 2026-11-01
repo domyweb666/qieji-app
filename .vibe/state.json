@@ -1,10 +1,10 @@
 {
-  "station": "spec-standards",
-  "updated_at": "2026-11-02T21:30:00+08:00",
+  "station": "audit-batch",
+  "updated_at": "2026-11-02T22:30:00+08:00",
   "updated_by": "vibe-self-review",
   "pieces": {
-    "todo": 1,
-    "machine_verified": 12,
+    "todo": 0,
+    "machine_verified": 13,
     "human_verified": 11
   },
   "chunks": [
@@ -32,7 +32,7 @@
     {
       "name": "D 資料夾",
       "total": 3,
-      "machine_done": 2,
+      "machine_done": 3,
       "human_verified": false,
       "approved": true
     }
@@ -120,6 +120,12 @@
     {
       "what": "D2 真實情境走查＋計畫覆誦",
       "why": "多米 2026-11-02「做 D2」，只回選擇題",
+      "since": "2026-11-02",
+      "status": "組塊 D 批次驗時一併確認"
+    },
+    {
+      "what": "D3 真實情境走查＋計畫覆誦",
+      "why": "多米 2026-11-02「直接做 D3」，只回選擇題",
       "since": "2026-11-02",
       "status": "組塊 D 批次驗時一併確認"
     }

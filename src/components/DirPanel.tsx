@@ -5,6 +5,7 @@
 // C3：放不下往右一頁、頁點。C4：長按一塊磚跳選單（顏色、改名字、刪除、編輯目錄），長按後一拖就進抖動、同一頁裡拖換位置；
 // 抖動時面板不收（往上推、點露出的紙只會結束抖動），點磚不換紙、不能搜尋、不能翻頁。
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
+// D3：打開的資料夾裡長按一張後拖，拖出框外放手＝移出資料夾（排在資料夾後面一格，多米選），在框裡放手滑回原位。
 // D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
@@ -36,12 +37,12 @@ const M = T.motion, G = T.gesture;
 const WEB_DEPS = Platform.OS === 'web';
 // 拖磚時其他磚讓位滑過去（C4）
 const TILE_MOVE = LinearTransition.duration(M.tileShift.duration);
-const noop = () => {};
+const hapticOut = () => haptic('dragPass');
 // 給手勢（UI 執行緒）呼叫的放模組層級（規矩檔：worklet 裡不准直接叫 tokens 的函式）
 const hapticLand = () => haptic('dragDrop');
 // 格子裡第 k 格的左上角（兩欄，磚高 TILE、間距 GAP），與拖到哪一格：看被拖那塊的中心落在哪一格
 const TILE = T.shape.tile, GAP = T.space.m, PAD = T.space.l, EDGE = T.gesture.edgeZone, PRESS_DIM = T.motion.pressDim; // worklet 只抓數字，不抓整個 T（裡面有函式）
-const ZONE = T.gesture.stackZone, GROW = T.motion.stackTarget.scale;
+const ZONE = T.gesture.stackZone, GROW = T.motion.stackTarget.scale, OUT_DIM = T.motion.folderOut.opacity, OUT_MS = T.motion.folderOut.duration;
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
 function slotAt(from: number, tx: number, ty: number, w: number, count: number) {
@@ -181,6 +182,25 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   useEffect(() => { if (openF && !openEntry) setOpenF(null); }, [openF, openEntry]);
   // 打開的資料夾裡兩欄：框左右各留 l、框裡再留 l
   const innerW = (width - T.space.l * 4 - T.space.m) / 2;
+  // 從資料夾拖出來（D3）：拿起哪一張；浮起那塊的原點（x0、y0，目錄座標＝螢幕座標，面板從螢幕頂端開始）、手指移了多少、在不在框外；框的位置大小
+  const [fdrag, setFdrag] = useState<string | null>(null);
+  const fd = {
+    dx: useSharedValue(0), dy: useSharedValue(0), x0: useSharedValue(0), y0: useSharedValue(0), out: useSharedValue(0), lift: useSharedValue(0),
+    bx: useSharedValue(0), by: useSharedValue(0), bw: useSharedValue(0), bh: useSharedValue(0),
+  };
+  const boxFade = useAnimatedStyle(() => {
+    const o = fd.out.value ? OUT_DIM : 1;
+    return { opacity: calm ? o : withTiming(o, { duration: OUT_MS }) };
+  });
+  // 放手：在框外＝移出資料夾、收起資料夾；在框裡（已經滑回原位）什麼都不改
+  function folderDrop(n: Note, out: number) {
+    haptic('dragDrop');
+    setFdrag(null);
+    fd.out.value = 0; fd.dx.value = 0; fd.dy.value = 0;
+    if (!out) return;
+    takeOut(n);
+    setOpenF(null);
+  }
   // 拖的那塊（C4、C5）：從哪一頁拿起（origin）、現在在哪一頁（page）、在整排座位裡原本第幾個（from）、現在要放第幾個（to）。
   // 手指位置（dx、dy）在 UI 執行緒；換格、翻頁才回 JS 重排讓位
   const [drag, setDrag] = useState<{ id: string; origin: number; page: number; from: number; to: number } | null>(null);
@@ -506,22 +526,24 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         <View style={StyleSheet.absoluteFill}>
           <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
             accessibilityRole="button" accessibilityLabel="收起資料夾" />
-          <View style={[st.folderBox, { top: padTop, maxHeight: panelH - padTop - T.shape.hitMin, backgroundColor: c.surface }]} accessibilityViewIsModal
-            onAccessibilityEscape={() => setOpenF(null)}>
+          <Animated.View style={[st.folderBox, { top: padTop, maxHeight: panelH - padTop - T.shape.hitMin, backgroundColor: c.surface }, boxFade]}
+            accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}
+            onLayout={e => { const l = e.nativeEvent.layout; fd.bx.value = l.x; fd.by.value = l.y; fd.bw.value = l.width; fd.bh.value = l.height; }}>
             <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
             <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
               <View style={st.grid}>
-                {openEntry.notes.map((n, k) => (
-                  <Tile key={n.id} w={innerW} sw={width} k={k} editing={false} calm={calm} canDrag={false} ghost={false} count={openEntry.notes.length}
-                    dx={dx} dy={dy} lift={lift} sv={sv} onDragStart={noop} onAim={noop} onEdge={noop} onDrop={noop} target={false}
-                    label={noteLabel(n)} selected={n.id === store.last} acts={NOTE_IN_A11Y}
-                    onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}>
-                    <TileFace n={n} w={innerW} cur={n.id === store.last} />
-                  </Tile>
+                {openEntry.notes.map(n => (
+                  <FolderTile key={n.id} n={n} w={innerW} calm={calm} cur={n.id === store.last} ghost={fdrag === n.id} fd={fd}
+                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}
+                    onDragStart={() => { setMenu(null); setFdrag(n.id); haptic('dragStart'); }} onDrop={out => folderDrop(n, out)} />
                 ))}
               </View>
             </ScrollView>
-          </View>
+          </Animated.View>
+          {/* 拿起來的那張浮在最上層（框外也看得到），跟著手指 */}
+          {fdrag && openEntry.notes.some(n => n.id === fdrag) && (
+            <FolderGhost fd={fd}><TileFace n={openEntry.notes.find(n => n.id === fdrag)!} w={innerW} cur={false} /></FolderGhost>
+          )}
         </View>
       )}
 
@@ -648,6 +670,75 @@ function Tile(p: TileProps) {
   );
 }
 
+// 資料夾裡的一張（D3）：點＝換紙；長按（不動）＝選單；長按後一拖＝拿起來，拖出框外放手就拿出資料夾，在框裡放手滑回原位。
+// 跟目錄的磚分開寫：資料夾裡不抖動、不換位，只看手指在不在框外（螢幕座標，跟框的 onLayout 比）
+type FD = Record<'dx' | 'dy' | 'x0' | 'y0' | 'out' | 'lift' | 'bx' | 'by' | 'bw' | 'bh', SharedValue<number>>;
+type FolderTileProps = {
+  n: Note; w: number; calm: boolean; cur: boolean; ghost: boolean; fd: FD; label: string;
+  onPick: () => void; onMenu: (y: number) => void; onA11y: (name: string) => void; onDragStart: () => void; onDrop: (out: number) => void;
+};
+function FolderTile(p: FolderTileProps) {
+  const { fd, calm, onPick, onMenu, onDragStart, onDrop } = p;
+  const pressed = useSharedValue(0);
+  const tap = useTapGesture({
+    runOnJS: true,
+    maxDistance: G.longPressMove,
+    onBegin: () => { pressed.value = 1; },
+    onFinalize: () => { pressed.value = 0; },
+    onActivate: () => onPick(),
+  });
+  const hold = useLongPressGesture({
+    runOnJS: true,
+    minDuration: G.longPressMs,
+    maxDistance: G.longPressMove,
+    onActivate: e => onMenu(e.absoluteY),
+  });
+  const pan = usePanGesture({
+    activateAfterLongPress: G.longPressMs,
+    minDistance: G.tileDrag,
+    onActivate: e => {
+      'worklet';
+      fd.dx.value = 0; fd.dy.value = 0; fd.out.value = 0;
+      fd.x0.value = e.absoluteX - e.x; fd.y0.value = e.absoluteY - e.y;
+      fd.lift.value = calm ? 1 : withSpring(1, M.dragLift.spring);
+      scheduleOnRN(onDragStart);
+    },
+    onUpdate: e => {
+      'worklet';
+      fd.dx.value = e.translationX; fd.dy.value = e.translationY;
+      const o = e.absoluteX < fd.bx.value || e.absoluteX > fd.bx.value + fd.bw.value || e.absoluteY < fd.by.value || e.absoluteY > fd.by.value + fd.bh.value ? 1 : 0;
+      if (o === fd.out.value) return;
+      fd.out.value = o;
+      scheduleOnRN(hapticOut);
+    },
+    onDeactivate: () => {
+      'worklet';
+      const o = fd.out.value;
+      fd.lift.value = calm ? 0 : withSpring(0, M.dragLift.spring);
+      if (o || calm) { scheduleOnRN(onDrop, o); return; }
+      fd.dx.value = withSpring(0, M.dragLand.spring);
+      fd.dy.value = withSpring(0, M.dragLand.spring, () => scheduleOnRN(onDrop, 0));
+    },
+  });
+  const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
+  const style = useAnimatedStyle(() => ({ opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM) }), WEB_DEPS ? [p.ghost] : undefined);
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.View style={style} accessible accessibilityRole="button" accessibilityLabel={p.label}
+        accessibilityState={{ selected: p.cur }} accessibilityActions={NOTE_IN_A11Y}
+        onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
+        <TileFace n={p.n} w={p.w} cur={p.cur} />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+function FolderGhost({ fd, children }: { fd: FD; children: ReactNode }) {
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: fd.x0.value + fd.dx.value }, { translateY: fd.y0.value + fd.dy.value }, { scale: 1 + fd.lift.value * (M.dragLift.scale - 1) }],
+  }));
+  return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
+}
+
 // 拿起來的那張：放在原本那格的位置、跟著手指平移，浮起一點（放大＋陰影）。不接觸控，手勢還在原本那塊上
 type GhostProps = { w: number; from: number; dx: SharedValue<number>; dy: SharedValue<number>; shift: SharedValue<number>; lift: SharedValue<number>; children: ReactNode };
 function Ghost({ w, from, dx, dy, shift, lift, children }: GhostProps) {
@@ -727,6 +818,7 @@ const st = StyleSheet.create({
   dot: { width: T.shape.pageDot, height: T.shape.pageDot, borderRadius: T.shape.pill(T.shape.pageDot) },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
   ghost: { position: 'absolute', ...T.shape.shadowSoft },
+  ghostAt: { left: 0, top: 0 },
   tile: { height: T.shape.tile, borderRadius: T.shape.radiusCard, borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   add: { borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.s },
   tileText: { ...T.font.emphasis },
