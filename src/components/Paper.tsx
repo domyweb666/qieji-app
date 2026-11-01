@@ -814,8 +814,8 @@ const PagePreview = memo(function PagePreview({ n, side }: { n: Note; side: -1 |
 // 預覽頁的一行：跟紙上的一行（LineRow）同一套樣式、同一個 Field，只是沒有手勢、不能打字。字變了就重掛 Field（它的字是不受控的）
 const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: string; done: boolean; bg: string; rule: string; colors: Colors; fs: number }) {
   return (
-    // 陰影平常是 0（紙上那行由 shift 只在拿起時亮起來），這裡也明寫 0，不然網頁會畫出預設的陰影
-    <View style={[st.ci, st.ciFlat, { backgroundColor: bg, borderBottomColor: rule }]}>
+    // 跟紙上那行的 st.ci 同樣的框線與裁切，但不帶陰影設定（紙上那行的陰影只在拿起時亮，平常是 0；帶著設定網頁會畫出預設陰影、iOS 會跳效能提示）
+    <View style={[st.ciFlat, { backgroundColor: bg, borderBottomColor: rule }]}>
       <View style={[st.cin, { backgroundColor: bg }]}>
         <View style={st.field}>
           <Field key={t} text={t} done={done} fs={fs} colors={colors} refInput={NOOP} actions={NO_ACTIONS} onAction={NOOP}
@@ -1157,7 +1157,7 @@ const st = StyleSheet.create({
   timeText: { ...T.font.footnote },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）
-  ciFlat: { shadowOpacity: 0 }, // 預覽頁的行沒有陰影（紙上那行平常也是 0）；只用一次
+  ciFlat: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden' },
   emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去
