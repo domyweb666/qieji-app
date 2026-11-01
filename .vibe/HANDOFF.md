@@ -1,70 +1,68 @@
-# Handoff: 2026-11-01 下午｜iCloud S2～S5 寫完（上傳、下載合併、刪除跨裝置、邊界）、控制中心「記一行」建置成功、小工具留白修掉、茄子插圖拿掉、圖示換成方格紙黏土茄子；全部待真機驗，下一步先驗再做 S6
+# Handoff: 2026-11-01 晚｜上架準備全部做完，多米決定先不送審，改兩件事：配色換「乙 紙感」、目錄改主畫面式＋標題區手勢。設計已定案，下一步拆片實作
 
-> 產出時間：2026-11-01 14:12（上一版 11:05 在 `.vibe/handoff/archive/2026-11-01-1105.md`）
-> 前一會話的最後狀態，給下一個會話接續用
+> 產出時間：2026-11-01 21:32（上一版在 `.vibe/handoff/archive/2026-11-01-1412.md`）
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／RN 0.88 新架構，iOS 原生 app；多米沒有 Mac、不太看程式、用 4G 測）
-> **測試方式**：改 JS 用 tunnel 重載：`npx expo start --tunnel --port 8083`（在終端機面板開；8081 是「豆帳」）。改原生（圖示、擴充、套件）要 `npx eas-cli@latest build --profile development --platform ios`（互動式，在終端機面板跑）
-> **多米的節奏**：真機一批一批回報，回報一批改一批、每批一個 commit；碰到畫面改法先過 UX 準則（domi-uiux-review）再寫甲乙丙；圖片他會自己生好幾版丟來，Agent 縮到主畫面大小、淺深桌布比給他看再推薦
+> GitHub：私人 repo https://github.com/domyweb666/qieji-app（master、redesign/claude-blank-slate 都推了，追蹤已設好，commit 完直接 `git push`）
+> **測試方式**：改 JS 用 tunnel：`npx expo start --tunnel --port 8083`（終端機面板，**先 `cd E:\茄記\qieji-app`**，多米上次在 `E:\茄記` 跑建置失敗就是這個原因）。改原生要 `npx eas-cli@latest build --profile development --platform ios`
+> **多米的節奏**：真機一批一批回報，回報一批改一批、每批一個 commit；畫面改法先過 UX 準則（domi-uiux-review）再寫甲乙丙
 
 ## ✅ 這次完成了什麼
 
-（cad0ca8 之後 25 個 commit，每包都可單獨 revert）
-
-- **iCloud S2 只上傳**：新檔 `src/lib/cloud.ts`，存檔成功後等 2 秒（進背景馬上）把 `h ≠ sh` 的紙各寫一個 `<id>.json` 到「檔案 › iCloud 雲碟 › 茄記」；墓碑先讀 `gone.json` 合併再寫；`markSynced(n, h)` 記開始上傳那一刻的指紋（修上傳途中又改會漏傳）
-- **iCloud S3 下載＋合併**：`fetchCloud` 讀整個資料夾；`store.pullCloud` 在讀完資料、回前景、iCloud 變可用、上傳撞到別台改過時跑；`model.mergeCloud`＝教學紙規則＋`mergeRemote`＋沿用本機物件（`adopt`，畫面手上的紙與行不變孤兒；被同步改字的行回報 `retyped`，Paper 輸入框 key 加 `store.syncRev` 重掛）。打開後第一次拉完才准上傳；上傳前讀 iCloud 那份比指紋，別台改過不蓋、改成先拉
-- **iCloud S4 刪除跨裝置**：永久刪除後 `cloud.sweep` 在 `gone.json` 寫成功後才把被墓碑擋住的檔案拿掉（`model.cloudFileBuried`）
-- **iCloud S5 邊界**：每個原生呼叫逾時（讀寫 10 秒、列資料夾 35 秒、整次拉取 60 秒；讀到逾時的檔 5 分鐘內不重讀）——原生讀還沒下載的檔會一直等，離線會卡死上傳閘門；換 Apple ID／資料夾被刪 → `model.seemsNewCloud` 推測、暫停、問一次「放進去／先不要」（`ui.ask`）；iCloud 沒開持續 10 秒才 toast 一次（記在 `cn.cloudOffSeen`）
-- **控制中心「記一行」**：C1 `src/app/+native-intent.tsx` 接 `qieji://new` → `store.requestCompose`，Paper 升起輸入框（等回前景、等目錄面板收完）；C2 `@bacons/apple-targets` 5.0.0、`targets/controls/`（`_shared/NewLine.swift`：ControlWidgetButton＋openAppWhenRun＋OpenURLIntent）。第一次 EAS 建置失敗（apple-targets 抓錯 expo-widgets 的擴充去改），用 `patches/@bacons+apple-targets+5.0.0.patch`＋postinstall 修好，**第二次建置成功、多米已下載**
-- `app.json` 補 `ios.appleTeamId` 3ZT74P4WM2；`.gitattributes` 讓 `*.patch` 固定 LF
-- 小工具拿掉自己那圈 padding（不用重建）
-- **茄子插圖三處全部拿掉**（空紙、搜尋找不到、最近刪除空了只剩字）
-- **App 圖示換成方格紙上的黏土茄子**（`assets/icon.png`，要重建才換）
-- 測試 67 條全綠（`tests/sync.test.mjs` 含兩台手機＋假 iCloud 的模擬）；每片四檢全綠
+- iCloud S2～S5、控制中心 K1～K6：多米回報都過，驗收清單第十四～十八節已勾
+- S6 網頁版搬家：多米定跳過
+- 安全閘門：補建 `.vibe/安全標準.md`（iPhone app／MASVS），上架前自查 🟢 可上架（`.vibe/安全檢查報告.md`）
+- 完工驗收書 `.vibe/完工驗收書.md`：認領的洞逐條列（閘門 1、2 跳過、D3～D6／E3～E6／F5～F6 沒測、沒做全域整理）
+- `app.json` `supportsTablet` 改 false（只上 iPhone）
+- 上架檢核表 `.uiux/08-上架.md`（L1～L14，第一版不埋點、隱私填「不蒐集資料」）
+- 送審步驟 `.vibe/送審步驟-1.0.0.md`、文案草稿 `.vibe/送審文案-1.0.0.md`（含隱私權政策）
+- README＋四張網頁預覽截圖（`docs/readme/`）
+- 審查兩輪：配色、目錄主畫面式、標題區手勢，全部定案寫進 `.uiux/審查紀錄.md` 最後兩段；多米的手勢原型存在 `.uiux/重新設計/茄記手勢原型-多米-2026-11-01.html`
 
 ## 🚧 還沒做完 / 待決定
 
-- **真機全部沒驗**（`.vibe/真機驗收-四包-2026-11-01.md`）：第十四節 U1～U6（上傳）、十五 D1～D5（下載合併；**D2 刪掉重裝要等 U1 確認檔案數量跟紙一樣多**）、十六 K1～K6（控制中心，新建置已裝）、十七 E1～E6（刪除跨裝置，一台只能測 E1～E2）、十八 F1～F6（邊界）
-- **圖示要再建置一次才會換**（icon.png 在建置成功之後才改；插圖拿掉、S5 是 JS 重載就有）
-- ~~iCloud S6 網頁版搬家~~：**多米 11/01 定跳過，不做**（網頁版停在那裡）
-- 本機是 Windows，iOS prebuild 跑不起來（停在解開範本），原生改動只能靠 EAS 建置驗
-- 待決定（上架前）：原生版沒有開花、結茄子、茄子田要不要找回來；收費
-- 沒動、留給 vibe-simplify：`Overlay.tsx` 的 `ui.sheet`、`model.ts` 的 `backupName`、`importBackup`／`exportJSON`；`assets/img/` 裡一堆沒引用的圖（含今天的 face-clay*）
-- 閘門 1、2 都沒過（沒找沒看過的人測；圖示顯不顯眼也是閘門 2）
+- **送審暫停**：多米要先做完下面的改版再上架。送審步驟檔照舊有效（改版後要重跑 08 檢核表）
+- **D2（刪掉重裝紙會回來）**：要在裝 TestFlight 正式版時補測，沒過不准刪 app
+- **實作第一片前要先問多米的兩題**：(1) 釘選的兩張在主畫面式目錄裡怎麼表示（磚上一個圖釘記號就好，還是另有一區）；(2) 釘第三張時：擋下來說「最多兩張」，還是換掉最舊那張
+- 卡片分類（資料夾之前，閘門 2）：建議多米把現有的紙寫在便條上分堆，分得出來資料夾才有用。多米還沒回要不要做
+- LICENSE 還是 Expo 範本（版權人寫 Expo），repo 私人暫時沒影響；要公開前要換
+- 送審還缺：App Store Connect 建 app 後的 Apple ID（寫進 `eas.json` `submit.production.ios.ascAppId`）、隱私權政策與支援網址的公開網頁、公開信箱
 
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
 
-- 控制中心按鈕走甲（`qieji://new`＋OpenURLIntent）；真機打不開才換乙（App Group 放記號）
-- 換 Apple ID：停下來問一次（不靜靜合併）；iCloud 沒開：提示一次
-- 茄子插圖全部拿掉，app 裡沒有茄子角色；圖示＝方格紙黏土茄子（奶油底方格＝一張紙，呼應 app；斜躺茄子像 🍆 表情符號，不用）
-- 小工具不自己加 padding（iOS 17 起系統已留）
-- 合併沿用本機物件、同步改字的行重掛輸入框；上傳前比指紋，別台改過不蓋
-- 原生呼叫一律加逾時；讀到逾時的檔不重讀 5 分鐘
-- apple-targets 的 patch 要留著，升版時檢查還需不需要
+- **配色：乙 紙感**，淺色九色：茄子 #F4EEF2、玉米 #FAF5E4、紅蘿蔔 #FBF0E6、甜椒 #F9ECE8、藍莓 #EEF0F5、青蔥 #EFF2E6、香菇 #F3EEE7、黑豆 #E6E2E1、白蘿蔔 #FFFDF9。深色、增加對比兩組要另調（不能拿淺色降亮度），格線色跟著淡，改完重算對比檢查表
+- **目錄：主畫面式整套做，但磚維持現在的兩欄大磚**：長按先跳選單、手指一拖就進抖動；拖換位置；兩張疊起來變資料夾；多頁、放不下往右滑新的一頁；新的一張放最後一頁最後一格；排列跨裝置同步（整份排列以最後改的那台為準，對不上的紙補在最後）；排序選項拿掉（手排就是順序）
+- **釘選留著，最多兩張**
+- **標題區手勢（入口甲）**：標題區往下拉＝目錄從**上面垂下來**（自己做的面板，不用系統 formSheet）；標題區左右滑＝只在釘選的兩張之間換（現在這張沒釘選時暫時排最左）；點標題＝改名；⌄ 拿掉；標題下一條分段把手（亮的那段＝第幾張），**把手可點也開目錄**（熱區 44 點、VoiceOver 念「全部清單」）；捏合不做；標題區觸控範圍要停在分隔線，不能吃到第一行的左右滑
+- 第一版免費；只上 iPhone；不裝分析套件
 
 ## 📂 下個會話最重要的檔案
 
-- `.vibe/HANDOFF.md` ← 就是這份
-- `.vibe/真機驗收-四包-2026-11-01.md` 第十四～十八節
-- `.vibe/待審-iCloud同步規劃.md` ← S2～S5 🟡 的實作摘要、S6 的規劃（第四節 ❓2）
-- `src/lib/cloud.ts`（傳輸層）、`src/lib/model.ts` 最後兩段（同步規則）、`src/lib/store.ts`（`pullCloud`、`adoptCloud`、`cloudOffOnce`、`requestCompose`）
-- `tests/sync.test.mjs`（S0～S5 的規則與兩台模擬）
-- `.vibe/控制中心-C2-建置步驟.md`、`.vibe/待審-控制中心按鈕.md`
-- `.uiux/審查紀錄.md` 最後幾段（插圖與圖示的來回）、`.uiux/lessons.md` 最後一條
+- `.vibe/HANDOFF.md` ← 這份
+- `.uiux/審查紀錄.md` 最後兩段（「紙的配色＋目錄改成主畫面」「標題區手勢＋釘選上限兩張」）← 所有定案與手勢衝突表
+- `.uiux/重新設計/茄記手勢原型-多米-2026-11-01.html` ← 多米要的手感（下拉跟手、左右滑跟手、分段把手、第一次探頭）
+- `.uiux/lessons.md` 最後幾條（手勢改動網頁預覽不算驗、同一塊畫面加手勢前先列已有手勢、核心動作多包一層多米就會有感）
+- `src/lib/tokens.ts`（`NOTES` 九色）、`.uiux/05-設計代號/對比檢查表.md`、`gen_pairs.py`
+- `src/app/directory.tsx`（現在的目錄：釘選／其他兩段、兩欄磚）、`src/components/Paper.tsx`（標題區在 578 行附近：點清單名 `openDir`）
+- `src/lib/model.ts`（`Note` 型別、`pinned`）、`src/lib/cloud.ts`＋`store.ts`（同步；排列要加進同步）
+- `.vibe/送審步驟-1.0.0.md`、`.uiux/08-上架.md` ← 改版完回來送審用
 
 ## ⏭️ 下一步從哪繼續
 
-> **11/01 傍晚更新：要上架了。** iCloud／控制中心多米回報都過；安全閘門 🟢；完工驗收書 `.vibe/完工驗收書.md`；iPad 關掉；README 已上 GitHub（私人 repo domyweb666/qieji-app）。
-> 送審照 `.vibe/送審步驟-1.0.0.md` 走：等多米貼 App Store Connect 的 Apple ID → 寫進 `eas.json` 的 `submit.production.ios.ascAppId` → 多米跑 production 建置＋auto-submit → TestFlight 自裝補 D2、跑 `.uiux/08-上架.md` L2～L14 → 截圖放大到 1320×2868 → 填資料送審。文案草稿 `.vibe/送審文案-1.0.0.md`。下面是舊的步驟，留著對照。
-
-1. 先讀這份。問多米：圖示要不要現在重建（`npx eas-cli@latest build --profile development --platform ios`）
-2. 請多米照驗收清單測，**順序**：U1（數「檔案」裡的 `.json` 數量）→ U2～U6 → K1～K6 → D1 → F1～F4 → E1～E2 →（U1 數量對了才）D2。回報一批修一批
-3. 同一個同步 bug 第二次沒修好：在 `cloud.ts` 的 `warn` 之外加開發版量測（印到 Metro），別再推理（lessons）
-4. S6 跳過（多米 11/01 定），iCloud 同步驗完就收工
+1. 讀這份，再讀 `.uiux/審查紀錄.md` 最後兩段
+2. 先問多米上面「實作第一片前要先問的兩題」（釘選怎麼表示、釘第三張怎麼辦）
+3. 走 vibe-traffic-control → vibe-decompose 拆片，建議順序（每片真機驗過才下一片，每片一個 commit）：
+   - **片 1 配色乙**：改 `tokens.ts` 九色淺色值、另調深色與增加對比、重算對比檢查表。純 JS，tunnel 重載就看得到，最先做、最快有感
+   - **片 2 標題區手勢**：拿掉 ⌄、點標題改名、分段把手（可點）、下拉開目錄（目錄改成從上垂下的自製面板）、左右滑在釘選兩張間換、釘選上限兩張
+   - **片 3 目錄資料模型**：每張紙的位置（頁、格）、資料夾實體；存檔格式、iCloud 同步排列（`layout.json` 之類）；舊資料轉換（現在的順序＝最近改過在前，轉成初始排列）
+   - **片 4 抖動拖排＋多頁**：長按選單＋一拖進抖動、拖換位、拖到邊緣翻頁、新的一張放最後；編輯時目錄不能被拖收
+   - **片 5 資料夾**：疊成資料夾、展開、改名、拖出來；長按選單「放進資料夾…」當看得見的替代入口
+4. 每片碰到手勢就只能真機定；同一個真機 bug 第二次沒修好，先加開發版量測再改（lessons）
+5. 全部做完 → 重跑 `.uiux/08-上架.md` 檢核表 → 照 `.vibe/送審步驟-1.0.0.md` 送審
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
-- 圖示來回七、八版（黏土全身、黏土特寫、笑臉自帶圓角、扁平斜躺、紫底紫茄、花萼、直立扁平）——已定案方格紙那張
-- 茄子插圖換黏土版又拿掉——已定案拿掉
-- 本機 Windows 用「假裝 macOS」跑 prebuild 會停在解開範本，Docker 沒開；別再試，直接 EAS 建置
-- EAS 建置紀錄是 brotli 壓縮的：`npx -y eas-cli@27.2.0 build:view <id> --json` 拿 `logFiles[0]`，curl 下來用 `zlib.brotliDecompressSync` 解
-- 審查時曾把舊圖示誤認成黏土版（其實是扁平），已更正並寫進 lessons：審素材先開原檔
+- 圖示樣子比過「現在的磚縮四欄」「迷你紙四欄」，多米定維持兩欄大磚
+- 上一輪曾定「拿掉釘選」，多米改回「留著、最多兩張」
+- 捏合縮小看全部：原型有，定案不做
+- 截圖尺寸：多米的 iPhone 17 截圖要放大到 1320×2868 才符合 6.9 吋規格（送審時再做）
+- 網頁預覽拍 README 截圖時，App 卸載會把狀態寫回 localStorage；要先到同源的 `/favicon.ico` 頁改資料再回來
