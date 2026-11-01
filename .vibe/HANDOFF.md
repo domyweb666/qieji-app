@@ -25,7 +25,7 @@
 
 - **真機全部沒驗**（`.vibe/真機驗收-四包-2026-11-01.md`）：第十四節 U1～U6（上傳）、十五 D1～D5（下載合併；**D2 刪掉重裝要等 U1 確認檔案數量跟紙一樣多**）、十六 K1～K6（控制中心，新建置已裝）、十七 E1～E6（刪除跨裝置，一台只能測 E1～E2）、十八 F1～F6（邊界）
 - **圖示要再建置一次才會換**（icon.png 在建置成功之後才改；插圖拿掉、S5 是 JS 重載就有）
-- **iCloud S6 網頁版搬家**還沒做：多米把網頁版備份 JSON 丟進「檔案 › iCloud 雲碟 › 茄記」，app 同步時合併（規劃 ❓2 選 B）。注意 `fetchCloud` 現在讀所有 `.json`，備份檔沒有 `id` 會被 `mergeCloud` 濾掉——S6 要辨認備份格式（有 `notes` 陣列）並決定合完要不要改名或刪掉那個檔
+- ~~iCloud S6 網頁版搬家~~：**多米 11/01 定跳過，不做**（網頁版停在那裡）
 - 本機是 Windows，iOS prebuild 跑不起來（停在解開範本），原生改動只能靠 EAS 建置驗
 - 待決定（上架前）：原生版沒有開花、結茄子、茄子田要不要找回來；收費
 - 沒動、留給 vibe-simplify：`Overlay.tsx` 的 `ui.sheet`、`model.ts` 的 `backupName`、`importBackup`／`exportJSON`；`assets/img/` 裡一堆沒引用的圖（含今天的 face-clay*）
@@ -56,7 +56,7 @@
 1. 先讀這份。問多米：圖示要不要現在重建（`npx eas-cli@latest build --profile development --platform ios`）
 2. 請多米照驗收清單測，**順序**：U1（數「檔案」裡的 `.json` 數量）→ U2～U6 → K1～K6 → D1 → F1～F4 → E1～E2 →（U1 數量對了才）D2。回報一批修一批
 3. 同一個同步 bug 第二次沒修好：在 `cloud.ts` 的 `warn` 之外加開發版量測（印到 Metro），別再推理（lessons）
-4. 都過了再做 S6：先讀規劃 ❓2、確認網頁版備份 JSON 的格式（`E:\茄記\easynote\index.html` 的匯出），在 `fetchAll` 辨認備份檔、`mergeCloud` 合進來；合完怎麼處理那個檔要問多米
+4. S6 跳過（多米 11/01 定），iCloud 同步驗完就收工
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
 
