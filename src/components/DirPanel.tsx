@@ -5,6 +5,7 @@
 // C3：放不下往右一頁、頁點。C4：長按一塊磚跳選單（顏色、改名字、刪除、編輯目錄），長按後一拖就進抖動、同一頁裡拖換位置；
 // 抖動時面板不收（往上推、點露出的紙只會結束抖動），點磚不換紙、不能搜尋、不能翻頁。
 // 面板跟紙在同一個畫面（index）裡，紙那邊的手勢才能逐格推它；開到多開由 dirPanel.p（0＝收起、1＝全開）決定。
+// D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
 import { router } from 'expo-router';
@@ -37,10 +38,10 @@ const WEB_DEPS = Platform.OS === 'web';
 const TILE_MOVE = LinearTransition.duration(M.tileShift.duration);
 const noop = () => {};
 // 給手勢（UI 執行緒）呼叫的放模組層級（規矩檔：worklet 裡不准直接叫 tokens 的函式）
-const hapticPass = () => haptic('dragPass');
 const hapticLand = () => haptic('dragDrop');
 // 格子裡第 k 格的左上角（兩欄，磚高 TILE、間距 GAP），與拖到哪一格：看被拖那塊的中心落在哪一格
 const TILE = T.shape.tile, GAP = T.space.m, PAD = T.space.l, EDGE = T.gesture.edgeZone, PRESS_DIM = T.motion.pressDim; // worklet 只抓數字，不抓整個 T（裡面有函式）
+const ZONE = T.gesture.stackZone, GROW = T.motion.stackTarget.scale;
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
 function slotAt(from: number, tx: number, ty: number, w: number, count: number) {
@@ -189,7 +190,16 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   // 手勢在 UI 執行緒要用的：拿起那格在原本那頁是第幾格（fromK）、翻頁後格子上下差多少（shift：第一頁上面多一列「新的一張」）、
   // 現在這頁有幾格（count）、現在對到第幾格（last）、在不在邊緣（edge：−1 左、1 右、0 不在）
   const fromK = useSharedValue(0), shift = useSharedValue(0), count = useSharedValue(0), last = useSharedValue(0), edge = useSharedValue(0);
-  const sv = { fromK, shift, count, last, edge };
+  // D2：手指現在瞄著哪裡（aim：k＝想讓位到第 k 格；−k−1＝停在第 k 格那張磚的正中間）、準備疊到第幾格（stackK，−1＝沒有）
+  const aim = useSharedValue(0), stackK = useSharedValue(-1);
+  const sv = { fromK, shift, count, last, edge, aim, stackK };
+  // 準備疊上去的那一格是誰（放大那塊）；計時器到了才設。ref 給放手時讀最新的
+  const [stackOn, setStackOn] = useState<string | null>(null);
+  const stackRef = useRef(stackOn);
+  stackRef.current = stackOn;
+  const aimT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
   const pagerRef = useRef<ScrollViewInstance>(null);
   const edgeT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const cap = (i: number) => (i === 0 ? (rows - 1) * 2 : rows * 2);
@@ -287,6 +297,29 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     haptic('dragStart');
   }
   function dragTo(k: number) { setDrag(d => (d && d.to !== pageStart(d.page) + k ? { ...d, to: pageStart(d.page) + k } : d)); }
+  function unstack() {
+    if (stackK.value >= 0) stackK.value = -1;
+    if (stackRef.current) setStackOn(null);
+  }
+  // 手指瞄的地方變了（D2）：先取消還在等的讓位／疊、縮回放大的那塊。邊邊或空隙：停 reflow 才讓位；
+  // 別張磚正中間：停 stackHover 那張放大＝放手就疊。拖的是資料夾磚就只讓位不疊（資料夾不能放進資料夾）
+  function onAim(a: number) {
+    clearTimeout(aimT.current);
+    unstack();
+    const d = dragRef.current;
+    if (!d) return;
+    const flat = entriesRef.current.filter(e => e.id !== d.id), me = entriesRef.current.find(e => e.id === d.id);
+    const k = a >= 0 ? a : -a - 1;
+    if (a >= 0 || me?.folder) {
+      if (pageStart(d.page) + k === dragRef.current?.to) return;
+      aimT.current = setTimeout(() => { last.value = k; dragTo(k); haptic('dragPass'); }, T.timing.reflow);
+      return;
+    }
+    if (me) flat.splice(d.to, 0, me);
+    const under = flat[pageStart(d.page) + k];
+    if (!under || under.id === d.id) return;
+    aimT.current = setTimeout(() => { stackK.value = k; setStackOn(under.id); haptic('dragStart'); }, T.timing.stackHover);
+  }
   // 在邊緣停 edgeFlip 就翻一頁；一直停著就再翻。翻過去後格子對到哪格照手指現在的位置重算（手指不動也要算）
   function onEdge(z: number) {
     clearTimeout(edgeT.current);
@@ -295,28 +328,42 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       const d = dragRef.current;
       const np = d ? d.page + z : -1;
       if (!d || np < 0 || np >= pages.length || edge.value !== z) return;
+      clearTimeout(aimT.current);
+      unstack();
       pagerRef.current?.scrollTo({ x: np * width, animated: !calm });
       setPage(np);
       shift.value = gridTop(d.origin) - gridTop(np);
       count.value = Math.max(1, Math.min(cap(np), entries.length - pageStart(np)));
       const k = slotAt(fromK.value, dx.value, dy.value + shift.value, tileW, count.value);
-      last.value = k;
+      last.value = k; aim.value = k;
       setDrag({ ...d, page: np, to: pageStart(np) + k });
       haptic('dragPass');
       edgeT.current = setTimeout(flip, T.timing.edgeFlip);
     }, T.timing.edgeFlip);
   }
-  useEffect(() => () => clearTimeout(edgeT.current), []);
+  useEffect(() => () => { clearTimeout(edgeT.current); clearTimeout(aimT.current); }, []);
   // 落地動畫跑完才改座位表：被拖的那張從整排的第 from 個搬到第 to 個（其他照原順序，空出來的由後面補上）
   function drop() {
     clearTimeout(edgeT.current);
-    const d = dragRef.current;
-    if (d && d.to !== d.from) {
+    clearTimeout(aimT.current);
+    const d = dragRef.current, onto = stackRef.current ? entriesRef.current.find(e => e.id === stackRef.current) : undefined;
+    if (d && onto) {
+      // D2 疊：疊在資料夾上＝放進最後面；疊在紙上＝在那張的位置開新資料夾（它排第一），打開取名（跟 D1 新資料夾一樣）
+      const now = Date.now();
+      if (onto.folder) intoFolder(store.s, d.id, onto.id, now);
+      else {
+        const f = newFolder(store.s, onto.id, now);
+        intoFolder(store.s, d.id, f.id, now);
+        setOpenF({ id: f.id, naming: true });
+      }
+      store.change();
+    } else if (d && d.to !== d.from) {
       const ids = seatedEntries(store.s).map(x => x.id);
       const [m] = ids.splice(d.from, 1);
       ids.splice(d.to, 0, m);
       reseat(store.s, ids); store.change();
     }
+    setStackOn(null); stackK.value = -1;
     setDrag(null);
     dx.value = 0; dy.value = 0; shift.value = 0;
   }
@@ -347,7 +394,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const f = e.folder, n = e.note;
     const common = {
       w: tileW, sw: width, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, count: total, dx, dy, lift, sv,
-      onDragStart: () => dragStart(e.id, pg, k), onDragTo: dragTo, onEdge, onDrop: drop,
+      onDragStart: () => dragStart(e.id, pg, k), onAim, onEdge, onDrop: drop, target: stackOn === e.id,
     };
     if (f) {
       return (
@@ -466,7 +513,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
               <View style={st.grid}>
                 {openEntry.notes.map((n, k) => (
                   <Tile key={n.id} w={innerW} sw={width} k={k} editing={false} calm={calm} canDrag={false} ghost={false} count={openEntry.notes.length}
-                    dx={dx} dy={dy} lift={lift} sv={sv} onDragStart={noop} onDragTo={noop} onEdge={noop} onDrop={noop}
+                    dx={dx} dy={dy} lift={lift} sv={sv} onDragStart={noop} onAim={noop} onEdge={noop} onDrop={noop} target={false}
                     label={noteLabel(n)} selected={n.id === store.last} acts={NOTE_IN_A11Y}
                     onPick={() => pick(n)} onMenu={y => openMenu(n.id, y, true, 3)} onA11y={noteA11y(n)}>
                     <TileFace n={n} w={innerW} cur={n.id === store.last} />
@@ -487,12 +534,15 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   );
 }
 
-type DragSV = { fromK: SharedValue<number>; shift: SharedValue<number>; count: SharedValue<number>; last: SharedValue<number>; edge: SharedValue<number> };
+type DragSV = {
+  fromK: SharedValue<number>; shift: SharedValue<number>; count: SharedValue<number>; last: SharedValue<number>; edge: SharedValue<number>;
+  aim: SharedValue<number>; stackK: SharedValue<number>;
+};
 type TileProps = {
   w: number; sw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; count: number;
   dx: SharedValue<number>; dy: SharedValue<number>; lift: SharedValue<number>; sv: DragSV;
   label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
-  onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onDragTo: (to: number) => void; onEdge: (z: number) => void; onDrop: () => void;
+  onPick: () => void; onMenu: (y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
   onA11y: (name: string) => void;
 };
 
@@ -507,9 +557,9 @@ const FOLDER_A11Y = [{ name: 'activate' }, { name: 'rename', label: '改名字' 
 // 一塊磚的手勢（C4）：點＝換紙；長按（不動）＝選單；長按後一拖、或抖動中直接拖＝拿起來換位置。
 // 長按與拖同時聽（長按先成立跳選單，手指再動才拖）；點要等它們都不成立。抖動中不能點、不跳選單
 function Tile(p: TileProps) {
-  const { k, w, sw, count, calm, dx, dy, lift, onPick, onMenu, onDragStart, onDragTo, onEdge, onDrop } = p;
+  const { k, w, sw, count, calm, dx, dy, lift, onPick, onMenu, onDragStart, onAim, onEdge, onDrop } = p;
   // 拖的時候對到第幾格、翻頁的高低差、這頁幾格都放在目錄那邊共用（翻頁是目錄做的，這塊磚的手勢要讀得到最新的）
-  const { fromK, shift, count: pageCount, last, edge } = p.sv;
+  const { fromK, shift, count: pageCount, last, edge, aim, stackK } = p.sv;
   const pressed = useSharedValue(0);
   const tap = useTapGesture({
     runOnJS: true,
@@ -532,7 +582,7 @@ function Tile(p: TileProps) {
     minDistance: G.tileDrag,
     onActivate: () => {
       'worklet';
-      dx.value = 0; dy.value = 0; fromK.value = k; shift.value = 0; pageCount.value = count; last.value = k; edge.value = 0;
+      dx.value = 0; dy.value = 0; fromK.value = k; shift.value = 0; pageCount.value = count; last.value = k; edge.value = 0; aim.value = k; stackK.value = -1;
       lift.value = calm ? 1 : withSpring(1, M.dragLift.spring);
       scheduleOnRN(onDragStart);
     },
@@ -543,17 +593,22 @@ function Tile(p: TileProps) {
       const sx = slotX(fromK.value, w) + w / 2 + e.translationX + PAD;
       const z = sx < EDGE ? -1 : sx > sw - EDGE ? 1 : 0;
       if (z !== edge.value) { edge.value = z; scheduleOnRN(onEdge, z); }
-      const to = slotAt(fromK.value, e.translationX, e.translationY + shift.value, w, pageCount.value);
-      if (to === last.value) return;
-      last.value = to;
-      scheduleOnRN(onDragTo, to);
-      scheduleOnRN(hapticPass);
+      const ty = e.translationY + shift.value;
+      const to = slotAt(fromK.value, e.translationX, ty, w, pageCount.value);
+      // D2：中心在那格磚的正中間（磚寬、高各 ZONE 以內）＝瞄著那張要疊（−to−1），不然＝瞄著那格要讓位（to）。變了才回 JS 計時
+      const ox = slotX(fromK.value, w) + e.translationX - slotX(to, w), oy = slotY(fromK.value) + ty - slotY(to);
+      const over = to !== last.value && Math.abs(ox) < w * ZONE && Math.abs(oy) < TILE * ZONE;
+      const a = over ? -to - 1 : to;
+      if (a === aim.value) return;
+      aim.value = a;
+      scheduleOnRN(onAim, a);
     },
     // 放手：滑進要放的那一格（翻過頁就扣掉兩頁格子的高低差），到了才回 JS 改座位表；放手那一刻震一下。減少動態：直接到位
     onDeactivate: e => {
       'worklet';
       if (edge.value) { edge.value = 0; scheduleOnRN(onEdge, 0); }
-      const from = fromK.value, to = last.value, tx = slotX(to, w) - slotX(from, w), ty = slotY(to) - slotY(from) - shift.value;
+      // 準備疊了就滑到底下那張的位置（放手後才疊），不然滑進讓出來的那格
+      const from = fromK.value, to = stackK.value >= 0 ? stackK.value : last.value, tx = slotX(to, w) - slotX(from, w), ty = slotY(to) - slotY(from) - shift.value;
       scheduleOnRN(hapticLand);
       lift.value = calm ? 0 : withSpring(0, M.dragLift.spring);
       if (calm) { dx.value = tx; dy.value = ty; scheduleOnRN(onDrop); return; }
@@ -571,8 +626,13 @@ function Tile(p: TileProps) {
     rot.value = withRepeat(withSequence(withTiming(a, { duration: M.jiggle.half }), withTiming(-a, { duration: M.jiggle.half })), -1, true);
     return () => cancelAnimation(rot);
   }, [p.editing, calm]); // eslint-disable-line react-hooks/exhaustive-deps
+  // D2：被瞄著要疊的那張放大一點。減少動態：直接變大
+  const grow = useSharedValue(1);
+  useEffect(() => {
+    grow.value = calm ? (p.target ? GROW : 1) : withSpring(p.target ? GROW : 1, M.dragLift.spring);
+  }, [p.target, calm]); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }],
+    transform: [{ rotate: `${rot.value}deg` }, { scale: grow.value }],
     opacity: p.ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [p.ghost] : undefined);
 

@@ -175,6 +175,7 @@ export const motion = {
   snapBack:      { spring: { duration: 250, dampingRatio: 1 } }, // 沒滑夠放手彈回。減少動態：直接回位
   dragShift:     { spring: { duration: 200, dampingRatio: 1 } }, // 排順序時其他行讓位。減少動態：直接讓位
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
+  stackTarget:   { scale: 1.08 }, // D2：拖著停在別張磚正中間夠久，底下那張放大一點＝放手就疊（彈簧用 dragLift 那組）。減少動態：直接變大
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
   swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
   freshGlow:     { delay: 300, duration: 600 }, // 輸入框送出的那行捲回頂端後亮一下再淡掉：delay≈iOS 捲動動畫的時間（亮著等它到），duration＝淡掉（2026-11-01 第八批）
@@ -225,6 +226,7 @@ export const gesture = {
   swapFailY: 12, swapDist: 60, swapFlick: 500, swapEdge: 0.3,
   tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
+  stackZone: 0.3, // D2：拖著那塊的中心離底下那格中心，左右不到磚寬、上下不到磚高的這個比例＝在正中間（停著就疊，不讓位）
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
@@ -235,7 +237,9 @@ export const gesture = {
 export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700,
   cloudOffGrace: 10000,
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
-  edgeFlip: 600 }; // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
+  edgeFlip: 600,
+  reflow: 200,     // D2（多米選照 iOS）：拖著停在別格邊邊或空隙這麼久，其他磚才讓位；一路滑過不停不讓
+  stackHover: 500 }; // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
 // 小工具跑在隔離環境、不能 import 這個檔；這裡的值由 src/lib/widget.ts 算好用 props 傳過去
