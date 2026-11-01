@@ -2,10 +2,10 @@
 // 「檔案 › iCloud 雲碟 › 茄記」裡一張紙一個 <id>.json，墓碑合在同一層的 gone.json。
 // 靜靜做：iCloud 沒登入、雲碟關掉、讀寫失敗都不跳提示，下次存檔、回到前景或 iCloud 變成可用時再試（規劃第八節）。
 // 只有 iOS 的開發版／正式版有原生模組：網頁、Android 不做；Expo Go 沒有模組，第一次載入失敗之後就不再試。
-// 刪掉 iCloud 上的檔案是 S4，這裡不做。
+// S4：永久刪除的紙，墓碑寫進 gone.json 之後把 iCloud 上那張的檔案也拿掉（墓碑之後別台又改過的留著）。
 import { Platform } from 'react-native';
 import type { CloudStorage as CloudStorageClass } from 'react-native-cloud-storage';
-import { markSynced, pendingUploads, remotePrint, type State } from './model';
+import { cloudFileBuried, markSynced, pendingUploads, remotePrint, type State } from './model';
 
 type Cloud = InstanceType<typeof CloudStorageClass>;
 let cloud: Cloud | null | undefined;
@@ -129,10 +129,28 @@ async function once() {
     }
     await c.writeFile(GONE, JSON.stringify(merged));
     goneSent = goneNow;
+    await sweep(c, merged);
   }
 
   if (synced) hooks?.synced();
   if (conflict) hooks?.pull();
+}
+
+// S4：墓碑寫上去之後，把被擋住的紙的檔案從 iCloud 拿掉（「檔案」app 裡才不會一直留著刪掉的紙）。
+// 一定在 gone.json 寫成功之後才拿：先拿檔案、墓碑沒上去，別台會把它當成「還沒上傳」又傳回來。
+// 讀檔再判斷：墓碑之後別台又改過（離線那台還在記）就留著。某一張失敗不影響其他張，下次再掃
+async function sweep(c: Cloud, gone: Record<string, number>) {
+  let names: string[];
+  try { names = await c.readdir(''); } catch (e) { warn('列資料夾', e); return; }
+  for (const name of names) {
+    const id = name.endsWith('.json') ? name.slice(0, -'.json'.length) : '';
+    if (!id || name === GONE || gone[id] === undefined) continue;
+    try {
+      if (cloudFileBuried(gone, JSON.parse(await c.readFile(name)))) await c.unlink(name);
+    } catch (e) {
+      warn(`清 ${name} `, e);
+    }
+  }
 }
 
 // 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud）。拿不到（沒登入、雲碟關掉、資料夾還沒有、讀失敗）回 null。

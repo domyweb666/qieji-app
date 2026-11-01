@@ -426,6 +426,13 @@ export function dropNotes(s: State, pick: (n: Note) => boolean, now: number) {
   return removed;
 }
 
+// S4（2026-11-01）：iCloud 上這個檔案的紙已經被墓碑擋住（永久刪除之後沒人再改過）＝可以從 iCloud 拿掉。
+// 墓碑之後還有人改過（離線那台還在記）就留著，跟 mergeRemote 同一條規則
+export function cloudFileBuried(gone: Record<string, number>, raw: unknown) {
+  const r = fixNote(raw);
+  return gone[r.id] !== undefined && gone[r.id] >= (validTime(r.mod) ? r.mod : r.updated || 0);
+}
+
 // 第一次安裝放的教學紙、一個字都沒動過（S3，2026-11-01，規劃七之一）：不上傳；iCloud 上有別的紙時，從 iCloud 下來的這種也不收、本機的拿掉。
 // 動過任何一點（改字、劃掉、換色、丟進最近刪除）就是一般的紙，照常同步
 export function isUntouchedTutorial(n: Note) {

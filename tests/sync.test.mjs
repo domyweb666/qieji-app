@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseState, emptyState, fingerprint, stampMods, dropNotes, markSynced, pendingUploads, mergeRemote, isExpiredTrash,
-  mergeCloud, tutorialNote, isUntouchedTutorial, remotePrint,
+  mergeCloud, tutorialNote, isUntouchedTutorial, remotePrint, cloudFileBuried, markDeleted, markRestored, binItem,
 } from '../src/lib/model.ts';
 
 const NOW = new Date(2026, 10, 1, 12, 0).getTime();
@@ -281,4 +281,80 @@ test('上傳前比對：iCloud 上那份的指紋跟本機算法一樣（欄位�
   stampMods(s, NOW);
   const { sh: _sh, ...paper } = { ...s.notes[0], sh: 'whatever' };
   assert.equal(remotePrint(JSON.parse(JSON.stringify(paper))), s.notes[0].h);
+});
+
+// S4 刪除跨裝置（2026-11-01）：兩台手機＋一個假的 iCloud 資料夾，照 cloud.ts 的上傳、下載流程走
+function fakeCloud() { return { files: {}, gone: {} }; }
+function upload(s, c) {
+  stampMods(s, NOW);
+  for (const n of pendingUploads(s)) {
+    const there = c.files[n.id];
+    if (there && remotePrint(there) !== n.sh && remotePrint(there) !== n.h) continue; // 別台改過：不蓋，等拉
+    const { sh: _sh, ...paper } = n;
+    c.files[n.id] = clone(paper);
+    markSynced(n, n.h);
+  }
+  for (const [id, t] of Object.entries(s.gone || {})) c.gone[id] = Math.max(c.gone[id] ?? 0, t);
+  for (const [id, raw] of Object.entries(c.files)) if (cloudFileBuried(c.gone, raw)) delete c.files[id];
+}
+const pull = (s, c, now) => mergeCloud(s, { notes: Object.values(clone(c.files)), gone: clone(c.gone) }, now);
+function twoPhones() {
+  const c = fakeCloud();
+  const A = state(note({ id: 'p', title: '點子', items: [it('1', '一'), it('2', '二')], updated: NOW - 9000 }));
+  const B = emptyState();
+  upload(A, c); pull(B, c, NOW); upload(B, c);
+  return { c, A, B };
+}
+
+test('S4：A 丟進最近刪除，B 拉下來也在最近刪除；A 還原，B 也回來', () => {
+  const { c, A, B } = twoPhones();
+  markDeleted(A.notes[0], NOW + 10);
+  upload(A, c); pull(B, c, NOW + 20);
+  assert.equal(B.notes[0].deleted, true);
+  markRestored(A.notes[0]);
+  upload(A, c); pull(B, c, NOW + 30);
+  assert.equal(B.notes[0].deleted, false);
+  assert.deepEqual(texts(B.notes[0]), ['一', '二']);
+});
+
+test('S4：A 永久刪除，B 拉下來就沒了、不會復活；iCloud 上的檔案也拿掉', () => {
+  const { c, A, B } = twoPhones();
+  markDeleted(A.notes[0], NOW + 10);
+  upload(A, c); pull(B, c, NOW + 20);
+  dropNotes(A, n => n.id === 'p', NOW + 30);
+  upload(A, c);
+  assert.equal(c.files.p, undefined);
+  assert.ok(c.gone.p);
+  pull(B, c, NOW + 40); upload(B, c);
+  assert.deepEqual(B.notes.map(n => n.id), []);
+  pull(A, c, NOW + 50);
+  assert.deepEqual(A.notes.map(n => n.id), []);
+});
+
+test('S4：A 永久刪除時，B 離線還在那張記東西：B 的留著、傳回去，A 拉回來看得到（拿不準就留）', () => {
+  const { c, A, B } = twoPhones();
+  dropNotes(A, n => n.id === 'p', NOW + 30);
+  B.notes[0].items.push(it('3', 'B 離線記的'));
+  stampMods(B, NOW + 60);                         // B 改的時間比墓碑新
+  upload(A, c);                                    // A 先連上：檔案拿掉、墓碑上去
+  pull(B, c, NOW + 70); upload(B, c);              // B 連上：比墓碑新，留著，傳回去
+  assert.deepEqual(texts(B.notes[0]), ['一', '二', 'B 離線記的']);
+  assert.ok(c.files.p);
+  pull(A, c, NOW + 80);
+  assert.deepEqual(texts(A.notes[0]), ['一', '二', 'B 離線記的']);
+});
+
+test('S4：A 刪掉一行（進這張紙的最近刪除），B 沒動：B 也看到那行不見、在 bin 裡', () => {
+  const { c, A, B } = twoPhones();
+  binItem(A.notes[0], '2', NOW + 10);
+  upload(A, c); pull(B, c, NOW + 20);
+  assert.deepEqual(texts(B.notes[0]), ['一']);
+  assert.deepEqual(B.notes[0].bin.map(i => i.t), ['二']);
+});
+
+test('S4：iCloud 上的檔案比墓碑新（永久刪除後別台又改過）不拿掉', () => {
+  const raw = note({ id: 'p', updated: 1, mod: NOW + 100 });
+  assert.equal(cloudFileBuried({ p: NOW }, raw), false);
+  assert.equal(cloudFileBuried({ p: NOW + 100 }, raw), true);
+  assert.equal(cloudFileBuried({}, raw), false);
 });
