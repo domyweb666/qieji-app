@@ -1,11 +1,11 @@
 {
-  "station": "audit",
-  "updated_at": "2026-11-02T20:00:00+08:00",
-  "updated_by": "vibe-self-review",
+  "station": "traffic-control",
+  "updated_at": "2026-11-02T20:30:00+08:00",
+  "updated_by": "vibe-audit",
   "pieces": {
     "todo": 2,
     "machine_verified": 11,
-    "human_verified": 10
+    "human_verified": 11
   },
   "chunks": [
     {
@@ -37,14 +37,7 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [
-    {
-      "piece": "D1",
-      "what": "從選單放進資料夾（資料夾寫進 iCloud 的 layout.json）",
-      "list": ".vibe/操作清單-待驗.md",
-      "since": "2026-11-02"
-    }
-  ],
+  "pending_immediate_verify": [],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -122,7 +115,7 @@
       "what": "D1 卡片分類（閘門 2）＋真實情境走查＋計畫覆誦",
       "why": "多米 2026-11-02「直接做 D1」",
       "since": "2026-11-02",
-      "status": "D1 立即驗時一併確認"
+      "status": "2026-11-02 D1 ok：走查、覆誦補確認；卡片分類沒做，認領"
     }
   ],
   "decisions": [
