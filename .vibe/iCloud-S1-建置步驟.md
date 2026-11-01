@@ -63,3 +63,10 @@ npx eas-cli@latest build --platform ios --profile development
 
 - 回報 C1～C5 → Claude 接 **S2：只上傳**（每次存檔後把改過的紙寫進 iCloud 的「茄記」資料夾，你在「檔案」app › iCloud 雲碟 › 茄記 看得到一張紙一個檔案）。S2、S3 都是純 JS，重載就能測，不用再建
 - 第二台裝置（iPad 或另一支 iPhone，同一個 Apple ID）要在 S3 之前準備好；也要先 `eas device:create` 登錄，再建一次才裝得上（ad hoc 只認登錄過的裝置）。沒有第二台也行，S3 改用「刪掉 app 重裝、資料回來」驗
+
+## 丁、裝的時候踩到的坑（2026-11-01）
+
+- 建置 `8c94e6a2`（commit bd16ca4）一次就過，EAS 自動處理了 iCloud 權限與兩個 target（app、ExpoWidgetsTarget）的描述檔
+- **裝不上：「已安裝『捏捏史萊姆』……有相同的套件識別碼，無法安裝」**。捏捏史萊姆（`E:\捏捏史萊姆\nienie-slime`，Swift＋GitHub Actions＋TestFlight）借用了茄記的 Bundle ID `org.domyweb.qieji`。從 TestFlight 裝它時 iPhone 當成茄記的更新、把開發版蓋掉；之後用連結裝 ad hoc 版不能蓋 TestFlight 裝的 App，就跳這個警告
+- 多米選「刪掉沒關係」：刪掉捏捏史萊姆（手機上舊的茄記資料跟著沒了，多米接受）、再用建置連結裝茄記
+- **之後**：捏捏史萊姆要換自己的 Bundle ID（例如 `org.domyweb.nienie`，改它的 `project.yml` 的 `PRODUCT_BUNDLE_IDENTIFIER`、在 App Store Connect 開新的 App），不然兩個 App 會一直互相蓋掉。換好之前，從 TestFlight 裝捏捏史萊姆＝茄記不見
