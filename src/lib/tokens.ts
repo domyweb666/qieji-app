@@ -108,7 +108,10 @@ export const font = {
   listTitle:    { fontSize: 20, fontWeight: '700' as const }, // Title 3；清單標題，最多放大 1.5 倍（多米定）
   paperTitle:   { fontSize: 28, fontWeight: '700' as const }, // Title 1；紙最上面的清單名（重新設計分支）
   body:         { fontSize: 17, fontWeight: '400' as const }, // Body；每一行、首頁清單名稱、選單項目
-  bodyLine:     { fontSize: 17, lineHeight: 27 },             // 每一行的字（行高約 1.6）。2026-10-31 A4 曾試 20/30，多米 2026-11-01 真機看了說太大，定回 17/27
+  bodyLine:     { fontSize: 17, lineHeight: 27 },
+  // 輸入框的字（iOS）：行高貼著字型自己的行距（17 點的中文約 21～22），iOS 輸入框把字放在每行底部，行高拉大字就偏下；
+  // 而且要明寫，不寫的話隱形量高度的文字和輸入框各用各的預設行距（真機量到一行 23 對 28），框永遠比字矮（2026-11-01 第六版）
+  composerLine: { fontSize: 17, lineHeight: 22 },             // 每一行的字（行高約 1.6）。2026-10-31 A4 曾試 20/30，多米 2026-11-01 真機看了說太大，定回 17/27
   emphasis:     { fontSize: 17, fontWeight: '600' as const }, // Headline；確認框的字
   subhead:      { fontSize: 15, fontWeight: '400' as const }, // chip、空狀態、toast
   subheadBold:  { fontSize: 15, fontWeight: '600' as const }, // 滑動露出的字、面板標題、toast 按鈕

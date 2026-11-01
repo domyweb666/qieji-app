@@ -82,6 +82,7 @@ export const T = {
     listTitle:    { size: 20, weight: '700' as const, system: 'Title 3',     maxScale: 1.5 }, // 清單標題（上限 1.5 倍是多米定的）
     paperTitle:   { size: 28, weight: '700' as const, system: 'Title 1',     maxScale: 1.5 }, // 紙最上面的清單名（重新設計分支）
     body:         { size: 17, weight: '400' as const, system: 'Body' },                       // 首頁清單名稱、選單項目
+    composerLine: { size: 17, weight: '400' as const, system: 'Body',        lineHeight: 22 }, // 輸入框（iOS）的字：行高貼字型行距，量高度的隱形文字與輸入框同一個值（2026-11-01 第六版）
     bodyLine:     { size: 17, weight: '400' as const, system: 'Body',        lineHeight: 27 }, // 紙上每一行的字。2026-10-31 A4 曾放大到 20/30，多米 2026-11-01 真機看了說太大，定回 17/27
     emphasis:     { size: 17, weight: '600' as const, system: 'Headline' },                   // 確認框的字
     subhead:      { size: 15, weight: '400' as const, system: 'Subheadline' },                // chip、空狀態、toast
