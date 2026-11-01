@@ -1,11 +1,11 @@
 {
-  "station": "audit-immediate",
-  "updated_at": "2026-11-02T01:10:00+08:00",
+  "station": "spec-standards",
+  "updated_at": "2026-11-02T01:30:00+08:00",
   "updated_by": "vibe-traffic-control",
   "pieces": {
     "todo": 9,
     "machine_verified": 4,
-    "human_verified": 2
+    "human_verified": 3
   },
   "chunks": [
     {
@@ -37,9 +37,7 @@
       "approved": true
     }
   ],
-  "pending_immediate_verify": [
-    "B3 目錄從上面垂下來＋往下拉"
-  ],
+  "pending_immediate_verify": [],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -75,7 +73,7 @@
       "what": "B3 真實情境走查＋計畫覆誦",
       "why": "多米 2026-11-02「直接做 B3」",
       "since": "2026-11-02",
-      "status": "真機立即驗時補確認"
+      "status": "真機立即驗過，補確認"
     }
   ],
   "decisions": [
