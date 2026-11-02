@@ -64,8 +64,8 @@ const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF
 const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(KB_EASING);
 // 標題區左右撥換張（B4；多米 2026-11-02 改成整頁一起換，照 iOS 分頁捲動）：整張紙跟著手指走，旁邊那張（PagePreview）同時從另一邊滑進來，
 // 放手撥過半頁或往那邊甩就整頁滑過去，滑到定位才換紙。給 worklet 用的值先拆成數字和自己的物件（worklet 抓到的物件會被鎖住，規矩檔）
-const PAGE_TURN = { ...T.motion.pageTurn.spring }, SNAP_BACK = { ...T.motion.snapBack.spring };
-const TURN_RATIO = T.gesture.pageTurnRatio, TURN_FLICK = T.gesture.swapFlick, EDGE_FOLLOW = T.gesture.swapEdge;
+// （撥的手勢本身 2026-11-03 搬到 PageBar；這裡只剩換不成時彈回用的彈簧）
+const SNAP_BACK = { ...T.motion.snapBack.spring };
 // 換紙＝key 換了、新的那張重新掛上。整頁撥過來的：旁邊那張的預覽已經滑到定位，新的那張直接接手、不淡入（pagedIn 放模組層級交給它）
 let pagedIn = false;
 const NOOP = () => {};
@@ -576,14 +576,8 @@ export function Paper({ n }: { n: Note }) {
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); dirPanel.open(); }
-  // 開目錄（2026-11-02 起在底部列 PageBar）：往上滑＝目錄跟著手指從下面升起來，放手過門檻或往上甩就打開；點一下也開
-  const dirP = dirPanel.p, dirH = dirPanel.h;
-  const dirBegin = () => dirPanel.begin();
-  const dirSettle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
-  const PG = T.gesture;
-  // B4：左右撥＝在頁點那幾張（swipeSet）之間換，手指往左＝換到右邊那張。2026-11-02 起只在底部列（PageBar）上撥，標題區、空白處不再接（跟行的左右滑分開）。整張紙跟著手指走（多米 2026-11-02：像 iOS 分頁一樣整頁一起換，只從標題區撥），
-  // 旁邊那張的預覽（PagePreview）同時從另一邊滑進來；到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
-  // 撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙（turnTo）；不夠就彈回。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
+  // 開目錄、左右撥換張的手勢在底部列（PageBar，2026-11-03 起手勢由列自己建，見那邊的說明）；這裡只給它「平移誰、左右是哪兩張」和換紙的動作。
+  // B4：在頁點那幾張（swipeSet）之間換，整張紙跟著手指走（hx），旁邊那張的預覽（PagePreview）同時從另一邊滑進來。改名、排順序時關掉；目錄開著時面板蓋著，撥不到
   // 最左邊那頁是 store.lastFree（最近看的那張沒釘選的）；滑走前現在這張沒釘選就先記下，取消釘選後再滑走也回得來
   const swapSet = swipeSet(store.s, n, store.lastFree), at = swapSet.indexOf(n);
   const prevN = swapSet[at - 1], nextN = swapSet[at + 1];
@@ -602,59 +596,14 @@ export function Paper({ n }: { n: Note }) {
     if (!n.pinned) store.setLastFree(n.id);
     store.open(id);
   }
-  const swapMove = (e: { translationX: number }) => {
-    'worklet';
-    if (turning.value) return;
-    const x = e.translationX, end = x < 0 ? !nextId : !prevId;
-    hx.value = end ? x * EDGE_FOLLOW : x;
-  };
-  const swapEnd = (e: { translationX: number; velocityX: number; canceled: boolean }) => {
-    'worklet';
-    if (turning.value) return;
-    const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
-    const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
-    if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
-    if (calm) { scheduleOnRN(openNote, id); return; }
-    turning.value = 1;
-    hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(turnTo, id); });
-  };
-  // 底部列的手勢：手指動超過 barActivate 那一刻看方向定案——橫的多＝換張（整頁跟手）、往上＝拉出目錄（面板跟手）、往下＝不做事。
-  // 以前標題區是「往下拉」和「左右撥」兩個手勢比誰的門檻先到，斜著動結果靠運氣；現在只有一個手勢、看角度，不會兩個都成立
-  const barMode = useSharedValue(0); // 0 沒定、1 換張、2 開目錄、3 往下（不做事）
-  const barPan = usePanGesture({
-    enabled: !renaming && !ordering,
-    minDistance: PG.barActivate,
-    onActivate: () => { 'worklet'; barMode.value = 0; },
-    onUpdate: e => {
-      'worklet';
-      // 方向在手指真的動夠了那一刻定（成立那一刻的位移有的平台還是 0）
-      if (barMode.value === 0) {
-        const ax = Math.abs(e.translationX), ay = Math.abs(e.translationY);
-        if (Math.max(ax, ay) < PG.barActivate) return;
-        barMode.value = ax >= ay ? 1 : e.translationY < 0 ? 2 : 3;
-        if (barMode.value === 2) scheduleOnRN(dirBegin);
-      }
-      if (barMode.value === 1) swapMove(e);
-      // 扣掉起步那段，面板才從 0 開始跟，不會先跳一格
-      else if (barMode.value === 2) dirP.value = Math.min(1, Math.max(0, (-e.translationY - PG.barActivate) / dirH.value));
-    },
-    onDeactivate: e => {
-      'worklet';
-      if (barMode.value === 1) swapEnd(e);
-      else if (barMode.value === 2) {
-        const open = !e.canceled && (-e.translationY > dirH.value * PG.pullOpenRatio || -e.velocityY > PG.flick);
-        scheduleOnRN(dirSettle, open, -e.velocityY / dirH.value);
-      }
-      barMode.value = 0;
-    },
-  });
   // VoiceOver 的上下滑（可調整元素）：直接換到旁邊那張
   function step(d: -1 | 1) { const id = d > 0 ? nextId : prevId; if (id) openNote(id); }
   // 底部列（換張、開目錄、右下 ＋）畫在紙外面、換張時不重掛（多米 2026-11-03：＋ 要一直停在原地）。每次畫完把最新的內容交過去；
   // 紙卸載時不收回，下一張紙同一輪就會交新的，列不會閃。鍵盤升起、輸入框開著、排順序時不畫。
   // 紙自己的彈出選單（茄記版行的長按、網頁的 ⋯）開著時也不畫：列畫在紙外面、疊在紙的選單上面，不收的話選單後面霧掉了列還清清楚楚、還點得到
   useLayoutEffect(() => {
-    barSlot.set({ notes: swapSet, cur: n, name, pan: barPan, onOpen: openDir, onStep: step, onAdd: addLine },
+    const swipe = { hx, turning, prevId, nextId, winW, calm, enabled: !renaming && !ordering, onTurn: turnTo, onOpenNote: openNote };
+    barSlot.set({ notes: swapSet, cur: n, name, swipe, onOpen: openDir, onStep: step, onAdd: addLine },
       !kbUp && !composing && !ordering && !menu && !rowMenu);
   });
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }

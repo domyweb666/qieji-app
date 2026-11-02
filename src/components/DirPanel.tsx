@@ -109,13 +109,16 @@ function folderSlot(i: number, dg: DG, fw: number) {
   const kk = i - dg.fpg.value * FPER;
   return [dg.bx.value + FPAD + slotX(kk, fw), dg.by.value + FPAD + slotY(kk)];
 }
-// 拖著那塊左上角在 (ax, ay)，瞄著哪：看它跟哪一張重疊最多（2026-11-02 原型對過的規則）
-function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number) {
+// 拖著那塊左上角在 (ax, ay)、手指在 (fx, fy)，瞄著哪：看它跟哪一張重疊最多（2026-11-02 原型對過的規則）
+function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: number, fy: number) {
   'worklet';
   const cx = ax + dg.sw.value / 2, cy = ay + TILE / 2;
   if (dg.fopen.value) {
     if (!dg.bw.value) return AIM_NONE;
-    const inBox = cx >= dg.bx.value - GAP && cx <= dg.bx.value + dg.bw.value + GAP && cy >= dg.by.value - GAP && cy <= dg.by.value + dg.bh.value + GAP;
+    // 出框（停 folderLeave 就收起、拿出資料夾）看手指，跟翻資料夾頁（手指到框的左右邊）同一個基準（2026-11-03 多米真機：跨頁搬被搬到外面去）。
+    // 之前出框看磚的中心：抓著磚的右半邊往左拖，手指才到框邊、中心已經出框，出框 350 毫秒比翻頁 600 毫秒先到，資料夾收起、那張被拿出去。
+    // 框離螢幕左右各 16、外面再寬 GAP 才算出框：左右翻頁區整個在框內這一側，要拿出來是往框的上面或下面拖（照 iOS 檔案夾）
+    const inBox = fx >= dg.bx.value - GAP && fx <= dg.bx.value + dg.bw.value + GAP && fy >= dg.by.value - GAP && fy <= dg.by.value + dg.bh.value + GAP;
     if (!inBox) return AIM_OUT;
     let best = -1, br = 0;
     const first = dg.fpg.value * FPER;
@@ -195,17 +198,17 @@ function useDragPan(o: DragOpts) {
       // 不然用的是上一次拖留下的值：資料夾裡拿起時被當成在目錄某一格，稍微一動放手就被拿出資料夾（多米 2026-11-02 真機記錄 aim:0、fopen:1）
       if (!dg.ready.value) return;
       const ax = dg.x0.value + e.translationX, ay = dg.y0.value + e.translationY;
-      const cy = ay + TILE / 2;
       // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候看框的左右邊（翻資料夾的頁，2026-11-02），框外是收起資料夾。
       // 看的是手指，不是磚的中心（2026-11-03 多米真機：拖不到隔壁頁）：磚很寬，抓著右半邊往右拖，手指到螢幕邊了磚的中心還差五十幾點，永遠到不了邊緣
-      const fx = e.absoluteX;
+      const fx = e.absoluteX, fy = e.absoluteY;
       const z = dg.fopen.value ? 0 : fx < EDGE ? -1 : fx > screenW - EDGE ? 1 : 0;
       if (z !== dg.edge.value) { dg.edge.value = z; scheduleOnRN(onEdge, z); }
-      const inBoxY = cy >= dg.by.value && cy <= dg.by.value + dg.bh.value;
+      // 資料夾框的上下也看手指（跟 aimOf 的出框同一個基準）
+      const inBoxY = fy >= dg.by.value && fy <= dg.by.value + dg.bh.value;
       const fz = !dg.fopen.value || !dg.bw.value || !inBoxY ? 0
         : fx < dg.bx.value + EDGE && fx >= dg.bx.value - GAP ? -1 : fx > dg.bx.value + dg.bw.value - EDGE && fx <= dg.bx.value + dg.bw.value + GAP ? 1 : 0;
       if (fz !== dg.fedge.value) { dg.fedge.value = fz; scheduleOnRN(onEdge, fz * 2); }
-      const a = aimOf(ax, ay, dg, gw, fw);
+      const a = aimOf(ax, ay, dg, gw, fw, fx, fy);
       if (a === dg.aim.value) return;
       dg.aim.value = a;
       scheduleOnRN(onAim, a);
@@ -652,7 +655,9 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     setD({ ...d, inF: null, to });
     haptic('dragPass');
     // 手指不動也先對一次目錄的格子
-    const a = aimOf(dg.x0.value + dg.dx.value, dg.y0.value + dg.dy.value, dg, tileW, innerW);
+    // 資料夾剛收起（fopen 0），只對目錄的格子，用不到手指的位置；給磚的中心就好
+    const ax = dg.x0.value + dg.dx.value, ay = dg.y0.value + dg.dy.value;
+    const a = aimOf(ax, ay, dg, tileW, innerW, ax + dg.sw.value / 2, ay + TILE / 2);
     dg.aim.value = a;
     onAim(a);
   }

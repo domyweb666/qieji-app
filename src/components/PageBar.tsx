@@ -4,22 +4,42 @@
 // 去別的地方的手勢放在專用的列上」（Safari 在底部網址列左右滑換分頁、往上滑看全部分頁）。
 // - 左邊玻璃膠囊：目錄圖示＋這張的名字＋頁點。在膠囊上左右滑＝換張（整張紙跟著手指走，跟以前一樣）；往上滑或點一下＝目錄從下面升起
 // - 右邊茄紫玻璃圓鈕：＋ 記一行（核心動作，固定在右下角，跟以前同一個位置）
-// 手勢由 Paper 傳進來（要用到整頁平移、目錄面板的進度）。VoiceOver：膠囊是「可調整」的元素，上下滑換張、點兩下開目錄
+// VoiceOver：膠囊是「可調整」的元素，上下滑換張、點兩下開目錄
 // 2026-11-03 多米：左右換張時 ＋ 要一直停在原地。以前底部列畫在紙裡面，換張＝整張紙重掛，列跟著重掛（玻璃重新長出來會閃一下）；
-// 改成紙只把「列要用的東西」交給 barSlot，列本身由根畫面的 PageBarHost 畫在紙外面，換張時列從頭到尾是同一個、不動
+// 改成紙只把「列要用的東西」交給 barSlot，列本身由根畫面的 PageBarHost 畫在紙外面，換張時列從頭到尾是同一個、不動。
+// 手勢一定要在列自己這裡建（2026-11-03 多米真機：膠囊左右滑不動）：手勢的偵測元件（RNGH v3 LeanReanimatedNativeDetector）第一次掛上時
+// 就把事件綁給當時那個手勢的處理器，之後換成別的手勢不會重綁（Reanimated NativeEventsManager.updateEvents 比的是掛上時記下的那份）。
+// 之前手勢由紙建、交給列：第一張紙滑得動，換過一次紙，膠囊還綁著第一張紙的處理器，新紙的事件全被丟掉。
+// 現在手勢跟偵測元件同一個元件、同一輩子；紙只交「平移誰、左右是哪兩張」，換紙時同一個處理器原地換內容（Reanimated useEvent rebuild）
 import { useSyncExternalStore } from 'react';
-import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import type { Note } from '../lib/model';
 import { T, useColors } from '../lib/tokens';
+import { dirPanel } from './DirPanel';
 import { Glass } from './Glass';
 import { Sym } from './Sym';
 
 const KB = T.motion.keyboardFollow.duration;
+// 給手勢（UI 執行緒）用的值先拆成數字和自己的物件（worklet 抓到的物件會被鎖住，規矩檔）
+const PAGE_TURN = { ...T.motion.pageTurn.spring }, SNAP_BACK = { ...T.motion.snapBack.spring };
+const TURN_RATIO = T.gesture.pageTurnRatio, TURN_FLICK = T.gesture.swapFlick, EDGE_FOLLOW = T.gesture.swapEdge;
+const BAR_ACT = T.gesture.barActivate, PULL_OPEN = T.gesture.pullOpenRatio, FLICK = T.gesture.flick;
+// 目錄面板的進度與高度（模組層級的 shared value）；開、收由手勢排回 JS（模組層級的函式，規矩檔）
+const dirP = dirPanel.p, dirH = dirPanel.h;
+const dirBegin = () => dirPanel.begin();
+const dirSettle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
 
-type BarProps = { notes: Note[]; cur: Note; name: string; pan: PanGesture; onOpen: () => void; onStep: (d: -1 | 1) => void; onAdd: () => void };
+// 換張要用的東西（紙給的）：整張紙的平移（hx）、已經決定換頁正在滑過去（turning）、左右兩張的 id（沒有＝''）、螢幕寬、減少動態、能不能撥；
+// 滑到定位叫 onTurn（新的那張不淡入）、減少動態直接換叫 onOpenNote
+export type Swipe = {
+  hx: SharedValue<number>; turning: SharedValue<number>; prevId: string; nextId: string; winW: number; calm: boolean; enabled: boolean;
+  onTurn: (id: string) => void; onOpenNote: (id: string) => void;
+};
+type BarProps = { notes: Note[]; cur: Note; name: string; swipe: Swipe; onOpen: () => void; onStep: (d: -1 | 1) => void; onAdd: () => void };
 // 現在這張紙交過來的列內容；show＝要不要畫（鍵盤、輸入框、排順序時收起）
 let slot: { props: BarProps; show: boolean } | null = null;
 const subs = new Set<() => void>();
@@ -36,13 +56,60 @@ export function PageBarHost() {
   return <PageBar {...s.props} />;
 }
 
-export function PageBar({ notes, cur, name, pan, onOpen, onStep, onAdd }: {
-  notes: Note[]; cur: Note; name: string;
-  pan: PanGesture;
-  onOpen: () => void; onStep: (d: -1 | 1) => void; onAdd: () => void;
-}) {
+export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  // worklet 只抓拆出來的值，不抓整包 swipe
+  const { hx, turning, prevId, nextId, winW, calm, enabled, onTurn, onOpenNote } = swipe;
+  // B4：左右撥＝在頁點那幾張之間換，手指往左＝換到右邊那張。整張紙跟著手指走，旁邊那張的預覽（Paper 的 PagePreview）同時從另一邊滑進來；
+  // 到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙；不夠就彈回。
+  // 減少動態：照樣跟手，放手直接換，交給整張淡入
+  const swapMove = (e: { translationX: number }) => {
+    'worklet';
+    if (turning.value) return;
+    const x = e.translationX, end = x < 0 ? !nextId : !prevId;
+    hx.value = end ? x * EDGE_FOLLOW : x;
+  };
+  const swapEnd = (e: { translationX: number; velocityX: number; canceled: boolean }) => {
+    'worklet';
+    if (turning.value) return;
+    const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
+    const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
+    if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
+    if (calm) { scheduleOnRN(onOpenNote, id); return; }
+    turning.value = 1;
+    hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(onTurn, id); });
+  };
+  // 手指動超過 barActivate 那一刻看方向定案——橫的多＝換張（整頁跟手）、往上＝拉出目錄（面板跟手）、往下＝不做事。
+  // 以前標題區是「往下拉」和「左右撥」兩個手勢比誰的門檻先到，斜著動結果靠運氣；現在只有一個手勢、看角度，不會兩個都成立
+  const barMode = useSharedValue(0); // 0 沒定、1 換張、2 開目錄、3 往下（不做事）
+  const pan = usePanGesture({
+    enabled,
+    minDistance: BAR_ACT,
+    onActivate: () => { 'worklet'; barMode.value = 0; },
+    onUpdate: e => {
+      'worklet';
+      // 方向在手指真的動夠了那一刻定（成立那一刻的位移有的平台還是 0）
+      if (barMode.value === 0) {
+        const ax = Math.abs(e.translationX), ay = Math.abs(e.translationY);
+        if (Math.max(ax, ay) < BAR_ACT) return;
+        barMode.value = ax >= ay ? 1 : e.translationY < 0 ? 2 : 3;
+        if (barMode.value === 2) scheduleOnRN(dirBegin);
+      }
+      if (barMode.value === 1) swapMove(e);
+      // 扣掉起步那段，面板才從 0 開始跟，不會先跳一格
+      else if (barMode.value === 2) dirP.value = Math.min(1, Math.max(0, (-e.translationY - BAR_ACT) / dirH.value));
+    },
+    onDeactivate: e => {
+      'worklet';
+      if (barMode.value === 1) swapEnd(e);
+      else if (barMode.value === 2) {
+        const open = !e.canceled && (-e.translationY > dirH.value * PULL_OPEN || -e.velocityY > FLICK);
+        scheduleOnRN(dirSettle, open, -e.velocityY / dirH.value);
+      }
+      barMode.value = 0;
+    },
+  });
   const at = Math.max(0, notes.indexOf(cur));
   const onA11y = (e: AccessibilityActionEvent) => {
     const a = e.nativeEvent.actionName;
