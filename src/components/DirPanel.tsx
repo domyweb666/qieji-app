@@ -30,7 +30,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
-  col, dropNotes, folderOf, intoFolder, isBreak, isEmpty, isHole, label, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
+  col, dropNotes, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
   placeTop, renameFolder, reseat, searchLines, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
@@ -584,14 +584,16 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   function rename(n: Note) {
     dirPanel.close(() => { if (n.id !== store.last) store.open(n.id); store.requestRename(n.id); });
   }
-  // 刪除：跟紙的 ⋯「刪除這張」同一套（進最近刪除、30 天、空白的直接拿掉），toast 復原。刪的是現在這張，紙自己換到最近改過的
+  // 刪除：跟紙的 ⋯「刪除這張」同一套（進最近刪除、30 天、空白的直接拿掉），toast 復原。刪的是現在這張，紙自己換到最近改過的。
+  // 2026-11-03 多米：刪掉的那格留空位、別張不往前補；復原時站回那格（leaveHole、fillHole）
   function del(n: Note) {
     markDeleted(n, Date.now()); n.pinned = false;
+    leaveHole(store.s, n.id, Date.now());
     n.items = n.items.filter(i => i.t.trim());
     const empty = isEmpty(n);
     if (empty) dropNotes(store.s, x => x === n, Date.now());
     store.change();
-    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); store.change(); } });
+    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); fillHole(store.s, n.id, Date.now()); store.change(); } });
   }
   // 抖動中點紙磚左上角的「−」（照 iOS 主畫面移除 App，多米 2026-11-02 選跳確認框）：按「刪除」才刪，刪法跟長按選單的刪除一樣（進最近刪除、toast 復原）
   function askDel(n: Note) {
@@ -611,9 +613,15 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       { label: '新資料夾', fn: made },
     ], '放進資料夾');
   }
-  // 移出資料夾（VoiceOver 動作、在框外放手）：排在資料夾後面一格；最後一張移出，資料夾不見（打開的框跟著收起）
+  // 移出資料夾（VoiceOver 動作、在框外放手）：放到資料夾那頁第一個空格（空位，或最後一張後面這頁還放得下；2026-11-03 多米：別張不往後推），
+  // 那頁滿了才排在資料夾後面一格；最後一張移出，資料夾不見（打開的框跟著收起）
   function takeOut(n: Note) {
-    if (outOfFolder(store.s, n.id, Date.now())) store.change();
+    const f = folderOf(store.s, n.id);
+    if (!f) return;
+    const L = seatedLayout(store.s), P = paginate(L), pg = P.findIndex(p => p.some(i => L[i].id === f.id));
+    const k = pg >= 0 ? firstEmpty(L, P[pg], pg) : -1;
+    const to = k < 0 ? undefined : k < P[pg].length ? { hole: L[P[pg][k]].id } : { after: L[P[pg][P[pg].length - 1]].id };
+    if (outOfFolder(store.s, n.id, Date.now(), to)) store.change();
   }
   const tileActs = (n: Note): Act[] => {
     return [
@@ -831,9 +839,10 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     } else if (d && onto) {
       // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）。
       // 從資料夾拿出來的先拿出來：只剩一張的資料夾先拆掉，底下那張才站在原本那格（疊上去的就是它）
+      // 從資料夾拿出來的：拿出來時臨時排在資料夾後面那格，疊進去之後不留空位（leave＝false；不然後面的全被推一格）
       if (d.src) outOfFolder(store.s, d.id, now);
-      if (onto.folder) { intoFolder(store.s, d.id, onto.id, now); into = onto.id; }
-      else { into = newFolder(store.s, onto.id, now).id; intoFolder(store.s, d.id, into, now); }
+      if (onto.folder) { intoFolder(store.s, d.id, onto.id, now, !d.src); into = onto.id; }
+      else { into = newFolder(store.s, onto.id, now).id; intoFolder(store.s, d.id, into, now, !d.src); }
       store.change();
     } else if (d && d.cells) {
       // 整排（含空位、換頁標記）照放手當下的格子存回座位表；從資料夾拿出來的先拿出來（placeTop）

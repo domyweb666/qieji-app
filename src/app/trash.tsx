@@ -6,7 +6,7 @@ import { Empty } from '../components/Empty';
 import { ListGroup, ListRow, listStyles, NoteSections } from '../components/NoteList';
 import { ui } from '../components/Overlay';
 import { GlassBtn, WebTop } from '../components/WebBars';
-import { dropNotes, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
+import { dropNotes, fillHole, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
 import { store, useStore } from '../lib/store';
 import { noteColors, T, useColors } from '../lib/tokens';
 
@@ -22,7 +22,8 @@ export default function Trash() {
   // 點一則（2026-11-02 系統元件化）：iOS 系統的動作表單（從下面升起、刪除是紅字），網頁預覽是自己畫的同一份
   function onPress(n: Note) {
     ui.sheet([
-      { label: '還原', fn: () => { markRestored(n); store.change(); ui.toast('已還原'); } },
+      // 還原：目錄裡它刪掉時留下的空位還在，就站回那格（2026-11-03）
+      { label: '還原', fn: () => { markRestored(n); fillHole(s, n.id, Date.now()); store.change(); ui.toast('已還原'); } },
       { label: '永久刪除', danger: true, fn: () => { dropNotes(s, x => x === n, Date.now()); store.change(); } },
     ], label(n));
   }

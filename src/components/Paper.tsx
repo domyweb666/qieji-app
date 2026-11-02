@@ -23,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, fullDate, isEmpty, markDeleted, markRestored, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
@@ -614,9 +614,11 @@ export function Paper({ n }: { n: Note }) {
     haptic('color'); // 選單不關，震一下才知道有換到
   }
   // 刪除這張：換到最近改過的另一張；一張都沒有就開一張新的。刪除時間記下來（30 天自動清，2026-11-01 接上），復原時清掉
+  // 2026-11-03 多米：目錄裡這張那格留空位、別張不往前補；復原時站回那格（leaveHole、fillHole）
   function del() {
     Keyboard.dismiss();
     markDeleted(n, Date.now()); n.pinned = false;
+    leaveHole(store.s, n.id, Date.now());
     n.items = n.items.filter(i => i.t.trim());
     const empty = isEmpty(n);
     if (empty) dropNotes(store.s, x => x === n, Date.now());
@@ -624,7 +626,7 @@ export function Paper({ n }: { n: Note }) {
     const next = store.s.notes.filter(x => !x.deleted).sort((a, b) => b.updated - a.updated)[0] ?? newNote();
     store.open(next.id);
     store.change();
-    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); store.open(n.id); store.change(); } });
+    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); fillHole(store.s, n.id, Date.now()); store.open(n.id); store.change(); } });
   }
   const setItems = (items: Item[]) => { n.items = items; touch(); };
   const moreActs: Act[] = [

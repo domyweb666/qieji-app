@@ -1,7 +1,7 @@
 // 目錄自由擺放（2026-11-03，多米：「清單定死位置，沒法像主畫面想放哪就放哪」）：座位表裡的空位
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fixOrder, intoFolder, isBreak, isHole, newHole, reseat, seatedLayout } from '../src/lib/model.ts';
+import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, reseat, seatedLayout } from '../src/lib/model.ts';
 
 const note = (id, o = {}) => ({ id, type: 'check', title: id, body: '', bin: [], color: 'yellow', items: [], pinned: false, deleted: false, created: 1, updated: 1, b: true, ...o });
 const state = (notes, order, folders) => ({ sort: 'updated', notes, garden: { days: {}, tot: { f: 0, e: 0 } }, order, folders });
@@ -82,4 +82,74 @@ test('intoFolder：疊進資料夾，原本那格留空位（後面還有格子�
   assert.ok(isHole(s.order[1]));
   assert.equal(s.order[2], 'c');
   assert.deepEqual(s.folders[0].ids, ['a', 'b']);
+});
+
+// 2026-11-03 多米：「刪除、拿出資料夾也改成留空位」
+const del = (s, id) => { const n = s.notes.find(x => x.id === id); markDeleted(n, 5); leaveHole(s, id, 5); };
+const restore = (s, id) => { const n = s.notes.find(x => x.id === id); markRestored(n); return fillHole(s, id, 6); };
+
+test('刪除：那格留空位，別張不往前補', () => {
+  const s = state([note('a'), note('x'), note('b')], ['a', 'x', 'b']);
+  del(s, 'x');
+  assert.deepEqual(cells(seatedLayout(s)), ['a', '_', 'b']);
+  assert.ok(s.order.includes(holeFor('x')));
+});
+
+test('刪除頁尾那張：後面沒有格子，不留空位', () => {
+  const s = state([note('a'), note('x')], ['a', 'x']);
+  del(s, 'x');
+  assert.deepEqual(s.order, ['a', 'x']);
+});
+
+test('還原：它的空位還在就拿掉，站回原本那格、別張不動', () => {
+  const s = state([note('a'), note('x'), note('y'), note('b')], ['a', 'x', 'y', 'b']);
+  del(s, 'x');
+  del(s, 'y'); // 中間隔著別張最近刪除的也算挨著
+  assert.equal(restore(s, 'x'), true);
+  assert.deepEqual(cells(seatedLayout(s)), ['a', 'x', '_', 'b']);
+  assert.ok(!s.order.includes(holeFor('x')));
+});
+
+test('還原：空位已經被別張用掉，紙照座位回來（不出錯）', () => {
+  const s = state([note('a'), note('x'), note('b'), note('c')], ['a', 'x', 'b', 'c']);
+  del(s, 'x');
+  // c 搬進 x 留下的那格：空位跟 c 對調，跑到最後面＝頁尾，不存
+  reseat(s, ['a', 'c', 'b'], 6);
+  assert.ok(!s.order.includes(holeFor('x')));
+  assert.equal(restore(s, 'x'), false);
+  assert.ok(cells(seatedLayout(s)).includes('x'));
+});
+
+test('刪除資料夾裡的：不留空位（資料夾裡緊排）', () => {
+  const s = state([note('a'), note('b'), note('c')], ['f1', 'c'], [{ id: 'f1', name: '新資料夾', ids: ['a', 'b'] }]);
+  markDeleted(s.notes[0], 5);
+  assert.equal(leaveHole(s, 'a', 5), false);
+  assert.deepEqual(s.order, ['f1', 'c']);
+});
+
+test('拿出資料夾：給了空位就放進那格，別張不往後推', () => {
+  const s = state([note('a'), note('b'), note('c'), note('d')], ['f1', 'c', '.1', 'd'], [{ id: 'f1', name: '新資料夾', ids: ['a', 'b', 'c2'] }]);
+  s.notes.push(note('c2'));
+  outOfFolder(s, 'a', 5, { hole: '.1' });
+  assert.deepEqual(cells(seatedLayout(s)), ['f1', 'c', 'a', 'd']);
+});
+
+test('拿出資料夾：給了「排在哪格後面」就排在那後面；沒給就排在資料夾後面', () => {
+  const mk = () => state([note('a'), note('b'), note('e'), note('c'), note('d')], ['f1', 'c', 'd'], [{ id: 'f1', name: '新資料夾', ids: ['a', 'b', 'e'] }]);
+  const s1 = mk();
+  outOfFolder(s1, 'a', 5, { after: 'd' });
+  assert.deepEqual(cells(seatedLayout(s1)), ['f1', 'c', 'd', 'a']);
+  const s2 = mk();
+  outOfFolder(s2, 'a', 5);
+  assert.deepEqual(cells(seatedLayout(s2)), ['f1', 'a', 'c', 'd']);
+});
+
+test('從資料夾拖出來直接疊到別張：不多出空位，後面的不被推', () => {
+  // 資料夾 f1 裡 a、b；目錄 f1、c、d。把 a 拖出來疊到 d 上（目錄照放手時的做法：先拿出來，再開新資料夾、放進去，不留空位）
+  const s = state([note('a'), note('b'), note('c'), note('d')], ['f1', 'c', 'd'], [{ id: 'f1', name: '新資料夾', ids: ['a', 'b'] }]);
+  outOfFolder(s, 'a', 5);
+  const f2 = newFolder(s, 'd', 5, 'f2');
+  intoFolder(s, 'a', f2.id, 5, false);
+  assert.deepEqual(cells(seatedLayout(s)), ['b', 'c', 'f2']);
+  assert.ok(!s.order.some(isHole));
 });

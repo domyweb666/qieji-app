@@ -227,6 +227,10 @@ export const newBreak = () => BRK + uid();
 export const HOLE = '.';
 export const isHole = (id: unknown): id is string => typeof id === 'string' && id.startsWith(HOLE);
 export const newHole = () => HOLE + uid();
+// 刪掉一張（進最近刪除）也留空位（2026-11-03 多米：「刪除、拿出資料夾也改成留空位」）：目錄最上層的紙在座位前面放一個這張專用的空位，
+// 在資料夾裡的不放（資料夾裡緊排）。還原時那個空位還挨著它（中間只隔著別張最近刪除的、別的空位）就拿掉，紙站回原本那格、別張不動；
+// 空位已經被別張用掉、搬走了就不管，紙照座位回來。永久刪除後空位留著（照 iOS：刪掉的 App 那格空著）
+export const holeFor = (noteId: string) => HOLE + noteId;
 
 /* ---------------- 目錄座位表（C1） ---------------- */
 // 改字不換位（公理 2：手記得住不動的位置）。舊存檔沒有座位表時，照 C1 之前目錄的樣子編第一次（釘選的在前、再照 sort），
@@ -417,33 +421,64 @@ export function newFolder(s: State, noteId: string, now: number, id = 'f' + uid(
   fixOrder(s);
   return f;
 }
-// 放進現有的資料夾：排在裡面最後一張
-export function intoFolder(s: State, noteId: string, folderId: string, now: number) {
+// 放進現有的資料夾：排在裡面最後一張。leave＝原本那格留空位（從目錄放進來的；剛從別的資料夾拿出來、臨時排在那裡的不留，給 false）
+export function intoFolder(s: State, noteId: string, folderId: string, now: number, leave = true) {
   fixOrder(s);
   const f = s.folders?.find(x => x.id === folderId);
   if (!f || f.ids.includes(noteId)) return false;
   const from = folderOf(s, noteId);
   if (from) { from.ids = from.ids.filter(x => x !== noteId); dissolveIfOne(s, from); }
   // 原本那格留空位（2026-11-03 自由擺放：疊進資料夾、放進資料夾，別張不往前補，照 iOS）；頁尾的空位 fixOrder 會清掉
-  s.order = s.order!.map(x => (x === noteId ? newHole() : x));
+  s.order = leave ? s.order!.map(x => (x === noteId ? newHole() : x)) : s.order!.filter(x => x !== noteId);
   f.ids.push(noteId);
   touchLayout(s, now);
   fixOrder(s);
   return true;
 }
-// 移出資料夾：排在資料夾後面一格；是最後一張就資料夾拿掉、紙站在資料夾原本的位置；看得到的只剩一張也拆掉（dissolveIfOne）
-export function outOfFolder(s: State, noteId: string, now: number) {
+// 移出資料夾：to.hole＝放進這個空位、to.after＝排在這格後面（2026-11-03 自由擺放：目錄算好那頁第一個空格給進來，別張不往後推）；
+// 沒給、或找不到就排在資料夾後面一格。是最後一張就資料夾拿掉、紙站在資料夾原本的位置；看得到的只剩一張也拆掉（dissolveIfOne）
+export function outOfFolder(s: State, noteId: string, now: number, to?: { hole?: string; after?: string }) {
   fixOrder(s);
   const f = folderOf(s, noteId);
   if (!f) return false;
   f.ids = f.ids.filter(x => x !== noteId);
   const at = s.order!.indexOf(f.id);
-  if (f.ids.length) { s.order!.splice(at + 1, 0, noteId); dissolveIfOne(s, f); }
+  if (f.ids.length) {
+    const h = to?.hole && isHole(to.hole) ? s.order!.indexOf(to.hole) : -1;
+    const a = to?.after ? s.order!.indexOf(to.after) : -1;
+    if (h >= 0) s.order![h] = noteId;
+    else s.order!.splice((a >= 0 ? a : at) + 1, 0, noteId);
+    dissolveIfOne(s, f);
+  }
   else { s.order![at] = noteId; s.folders = s.folders!.filter(x => x !== f); }
   touchLayout(s, now);
   fixOrder(s);
   return true;
 }
+// 刪掉一張（進最近刪除）時呼叫：在它的座位前面放它專用的空位（見 holeFor）。在資料夾裡的、已經有的不放。回傳有沒有放
+export function leaveHole(s: State, noteId: string, now: number) {
+  fixOrder(s);
+  const at = s.order!.indexOf(noteId);
+  if (at < 0 || s.order!.includes(holeFor(noteId))) return false;
+  s.order!.splice(at, 0, holeFor(noteId));
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+// 還原時呼叫：它專用的空位還挨著它（中間只隔著別張最近刪除的、別的空位：空位長得都一樣，連刪幾張時整理座位表會換它們的先後）就拿掉，
+// 紙站回那格、別張不動。回傳有沒有拿掉
+export function fillHole(s: State, noteId: string, now: number) {
+  fixOrder(s);
+  const o = s.order!, at = o.indexOf(noteId), h = o.indexOf(holeFor(noteId));
+  if (at < 0 || h < 0) return false;
+  const between = o.slice(Math.min(at, h) + 1, Math.max(at, h));
+  if (!between.every(id => isHole(id) || s.notes.some(n => n.id === id && n.deleted))) return false;
+  o.splice(h, 1);
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+
 // D4（照 iOS）：把紙放進資料夾的指定位置，也用來在資料夾裡換順序。visible＝放完之後資料夾裡看得到的紙（不含最近刪除）想要的順序，
 // 要包含這張。在最近刪除裡的紙留在原本的位子（跟 reseat 同一個做法）。不在這個資料夾的先拿過來（從目錄或別的資料夾）
 export function placeInFolder(s: State, noteId: string, folderId: string, visible: string[], now: number) {
