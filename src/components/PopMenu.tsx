@@ -12,7 +12,11 @@ import { Sym } from './Sym';
 
 type Group = { head?: string; rows: Act[] };
 
-export function PopMenu({ acts, top, header, onClose }: { acts: Act[]; top: number; header?: ReactNode; onClose: () => void }) {
+// side、lifted（2026-11-02，目錄的長按照虛擬手機原型＝iOS 主畫面）：side 是卡片靠哪邊（預設右）；lifted 是畫在暗幕上面、卡片下面的東西
+// （目錄把被長按的那塊磚浮起來放在原位，選單接在它正下方或正上方）
+export function PopMenu({ acts, top, header, onClose, side = 'right', lifted }: {
+  acts: Act[]; top: number; header?: ReactNode; onClose: () => void; side?: 'left' | 'right'; lifted?: ReactNode;
+}) {
   const c = useColors();
   // 減少動態：放大縮小改成淡入淡出
   const calm = useReducedMotion();
@@ -38,7 +42,8 @@ export function PopMenu({ acts, top, header, onClose }: { acts: Act[]; top: numb
         style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="關閉選單" />
       </Animated.View>
-      <Animated.View entering={cardIn} exiting={cardOut} style={[st.card, { backgroundColor: c.surface, top }]}>
+      {lifted}
+      <Animated.View entering={cardIn} exiting={cardOut} style={[st.card, side === 'left' && st.cardLeft, { backgroundColor: c.surface, top }]}>
         {header}
         {/* 分組照 iOS 設定 app 的「分組清單」：一組一塊圓角底、組裡的項目用從文字起算的髮絲線隔開、組與組之間留一大段（多米 2026-11-01 看了
             每項各自一顆藥丸的版本說太雜，要參考設定 app 的間距） */}
@@ -70,6 +75,7 @@ const st = StyleSheet.create({
   // 280 只用一次：卡的寬度，要放得下一排九個色塊（9 × 26 ＋ 兩邊內距）
   card: { position: 'absolute', right: T.space.m, width: 280, borderRadius: T.shape.radiusCard, padding: T.space.m,
     transformOrigin: 'top right', ...T.shape.shadowSoft, elevation: 12 },
+  cardLeft: { right: undefined, left: T.space.m, transformOrigin: 'top left' },
   // 一組一塊圓角底；組與組之間留 24（設定 app 的分組間距那一級）
   group: { borderRadius: T.shape.radiusCard, overflow: 'hidden' },
   groupGap: { marginTop: T.space.xl },
