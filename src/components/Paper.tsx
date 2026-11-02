@@ -564,6 +564,8 @@ export function Paper({ n }: { n: Note }) {
   const hx = useSharedValue(0);
   const turning = useSharedValue(0); // 已經決定換頁、正在滑過去：這段不再接手指
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: hx.value }] }));
+  // 右下 ＋ 不跟著整頁走（多米 2026-11-02）：反方向抵掉整頁的平移，看起來釘在原地
+  const fabStill = useAnimatedStyle(() => ({ transform: [{ translateX: -hx.value }] }));
   // 滑到定位：換成那張（新的那張不淡入）。那張剛好被別台刪掉了就彈回這張
   function turnTo(id: string) {
     if (!store.s.notes.some(x => x.id === id && !x.deleted)) { turning.value = 0; hx.value = withSpring(0, SNAP_BACK); return; }
@@ -575,26 +577,36 @@ export function Paper({ n }: { n: Note }) {
     if (!n.pinned) store.setLastFree(n.id);
     store.open(id);
   }
+  // 標題區（swap）和紙最下面的空白處（swapBelow，多米 2026-11-02 加）同一套撥法；空白處在打字、輸入框開著、拖行時不接，免得換張把正在打的弄丟
+  const swapMove = (e: { translationX: number }) => {
+    'worklet';
+    if (turning.value) return;
+    const x = e.translationX, end = x < 0 ? !nextId : !prevId;
+    hx.value = end ? x * EDGE_FOLLOW : x;
+  };
+  const swapEnd = (e: { translationX: number; velocityX: number; canceled: boolean }) => {
+    'worklet';
+    if (turning.value) return;
+    const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
+    const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
+    if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
+    if (calm) { scheduleOnRN(openNote, id); return; }
+    turning.value = 1;
+    hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(turnTo, id); });
+  };
   const swap = usePanGesture({
     enabled: !renaming,
     activeOffsetX: [-PG.pullFailX, PG.pullFailX],
     failOffsetY: [-PG.swapFailY, PG.swapFailY],
-    onUpdate: e => {
-      'worklet';
-      if (turning.value) return;
-      const x = e.translationX, end = x < 0 ? !nextId : !prevId;
-      hx.value = end ? x * EDGE_FOLLOW : x;
-    },
-    onDeactivate: e => {
-      'worklet';
-      if (turning.value) return;
-      const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
-      const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
-      if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
-      if (calm) { scheduleOnRN(openNote, id); return; }
-      turning.value = 1;
-      hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(turnTo, id); });
-    },
+    onUpdate: swapMove,
+    onDeactivate: swapEnd,
+  });
+  const swapBelow = usePanGesture({
+    enabled: !renaming && !composing && editing === null && !dragging,
+    activeOffsetX: [-PG.pullFailX, PG.pullFailX],
+    failOffsetY: [-PG.swapFailY, PG.swapFailY],
+    onUpdate: swapMove,
+    onDeactivate: swapEnd,
   });
   // 往下拉（開目錄）跟左右撥（換張）先成立的那個贏，另一個當場作廢
   const head = useCompetingGestures(pull, swap);
@@ -700,7 +712,7 @@ export function Paper({ n }: { n: Note }) {
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled}
-          scrollEnabled={!dragging}>
+          scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
           {/* 空紙：兩行灰字指到右下角的 ＋（茄子插圖多米 2026-11-01 拿掉） */}
           {n.items.length === 0 && (
             <View style={st.empty}>
@@ -730,15 +742,20 @@ export function Paper({ n }: { n: Note }) {
                 onMove={d => move(it.id, d)} drag={dragApi} />
             ))}
           </LayoutAnimationConfig>
-          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次 */}
-          <View style={{ height: 200 + kbPad + insets.bottom }} />
+          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次。行不多時撐滿到底（contentContainerStyle flexGrow），
+              整塊空白都能左右撥換張（swapBelow，多米 2026-11-02） */}
+          <GestureDetector gesture={swapBelow}>
+            <View style={{ flexGrow: 1, minHeight: 200 + kbPad + insets.bottom }} collapsable={false} />
+          </GestureDetector>
         </ScrollView>
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
           2-4 做法 6；多米 2026-11-01 說 ✓ 之後 ＋ 回來的時間點不對：之前等鍵盤完全收完才淡進，比鍵盤晚一拍）。
           鍵盤膠囊（∧ ∨ ＋ ✓）2026-11-01 多米定拿掉：輸入框旁邊就有 ✓，行裡打字要收鍵盤點空白處或空行按 Return */}
-      {!kbUp && !composing && <Fab onPress={addLine} label="新增一行" />}
+      <Animated.View style={[StyleSheet.absoluteFill, fabStill]} pointerEvents="box-none">
+        {!kbUp && !composing && <Fab onPress={addLine} label="新增一行" />}
+      </Animated.View>
 
       {/* 輸入框（多米 2026-11-01，第四版＝乙）：框貼在鍵盤上面、跟著鍵盤一起升降，框與鍵盤同一個時鐘（keyboardFollow）。
           第三版整個畫面鋪了暗幕、點外面不能點到別行，多米真機說「編輯感覺很不好」（2-5：記是主線，不該被包成模態），同日定乙拿掉暗幕：
@@ -771,7 +788,7 @@ export function Paper({ n }: { n: Note }) {
   );
 }
 
-// 左右撥換張時旁邊那張（B4，多米 2026-11-02「整個頁面一起換」）：跟真的紙同一套版面和樣式（標題列、時間列、把手、一行一行、右下 ＋），
+// 左右撥換張時旁邊那張（B4，多米 2026-11-02「整個頁面一起換」）：跟真的紙同一套版面和樣式（標題列、時間列、把手、一行一行；右下 ＋ 不畫，真的那顆釘在原地），
 // 但不能點、不能打字、VoiceOver 不讀。擺在螢幕外左邊（side −1）或右邊（1），跟著整張紙一起滑進來；滑到定位後換成真的那張（turnTo），
 // 兩張要長得一模一樣才不會閃。滑進來只看得到最上面那段，行只畫到一個螢幕放得下的數量。自己聽 store：那張被改了（同步、目錄改色）才重畫。
 // 把手用這張紙的那組頁（set）：換過去之後還是同一組（turnTo 會把現在這張記成 lastFree），頁點前後才一致
@@ -812,7 +829,6 @@ const PagePreview = memo(function PagePreview({ n, side, set }: { n: Note; side:
           <RowFace key={it.id} t={it.t} done={it.done} bg={nc.bg} rule={nc.rule} colors={c} fs={fs} />
         ))}
       </View>
-      <Fab onPress={NOOP} label="新增一行" />
     </View>
   );
 }, (a, b) => a.n === b.n && a.side === b.side && a.set.length === b.set.length && a.set.every((x, i) => x === b.set[i]));
@@ -1160,6 +1176,7 @@ const st = StyleSheet.create({
   timeBox: { paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
   handle: { alignSelf: 'center', flexDirection: 'row', gap: T.shape.handleGap, marginTop: T.space.xs },
+  scrollFill: { flexGrow: 1 },
   seg: { width: T.shape.handleSeg, height: T.shape.handleH, borderRadius: T.shape.pill(T.shape.handleH) },
   segDot: { width: T.shape.handleH, opacity: T.shape.handleOff }, // 不是現在這頁：小圓點（寬＝高）
   timeText: { ...T.font.footnote },

@@ -15,9 +15,10 @@
   - (b) 頁點：現在這頁長條 20、其他是 4 的淡圓點、間距 5
   - 新測試 `tests/swipe.test.mjs` 6 條；全部 83 條、tsc、lint、check-tokens 過；網頁預覽驗了預覽頁與頁點
   - 待驗清單補第十節 75～79
+  - 多米再加兩點：左右撥時右下 ＋ 不動（-hx 抵掉平移、預覽不畫 ＋）；紙最下面的空白處也能左右撥（swapBelow，打字／輸入框／拖行時不接）。待驗 80～82
 
 ## 🚧 還沒做完 / 待決定
-1. **全部都沒在真機上驗**：待驗清單第 0～79 條。測之前請多米從多工畫面把茄記滑掉再開，終端機出現完整的 `iOS Bundled … (2千多 modules)` 才算載入成功。組塊 D 要多米回「D ok」才結案。
+1. **全部都沒在真機上驗**：待驗清單第 0～82 條。測之前請多米從多工畫面把茄記滑掉再開，終端機出現完整的 `iOS Bundled … (2千多 modules)` 才算載入成功。組塊 D 要多米回「D ok」才結案。
 2. 對照表第六節有一條「交給多米選」還沒選：疊成資料夾後要不要打開（現在照多米看錄影定的：不打開，叫「新資料夾」）。
 3. 資料夾背景霧化（expo-blur）：等下次建開發版，跟新 App 圖示一起。
 4. 舊待辦：LICENSE 還是 Expo 範本；送審缺 ascAppId、隱私權政策公開網頁、公開信箱；組塊 D 結案後重跑 `.uiux/08-上架.md` 檢核表。
@@ -37,11 +38,12 @@
 - 程式：`src/components/DirPanel.tsx`（目錄、Dock、換頁標記）、`src/components/Paper.tsx`（換張、PagePreview、SegHandle）、`src/lib/model.ts`（swipeSet、seatedLayout）、`src/lib/store.ts`（setLast、lastFree）
 
 ## ⏭️ 下一步
-1. 真機：請多米滑掉茄記重開、確認完整 Bundled，照待驗清單 0～79 測（多米習慣全做完一次測）。
+1. 真機：請多米滑掉茄記重開、確認完整 Bundled，照待驗清單 0～82 測（多米習慣全做完一次測）。
 2. 多米回報後照條號修；全部過回「D ok」結案，再做帳本「全部做完」那段與上架檢核。
 
 ## 🗑️ 雜訊（別重新討論）
 - 網頁預覽面板沒顯示在畫面上時，動畫跑不完、計時器也變慢；撥頁要等很久或乾脆卡住，不是 app 的問題
+- usePanGesture 的設定物件不能用 `...` 展開（Worklets 外掛報錯、tsc 抓不到），要共用就抽 worklet 函式
 - 用 JS 造 PointerEvent（`pointerId: 1`、`pointerType: 'touch'`）可以撥、可以拖
 - 網頁預覽 localStorage 裡的 n1～n4 是測試假資料
 - tunnel 要多米自己開（`npx expo start --tunnel --port 8083`）
