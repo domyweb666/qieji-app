@@ -1,11 +1,13 @@
 // 網頁／Android 預覽用：iOS 的標題列由系統畫，其他平台用這條代替。
-// GlassBtn（奶油白圓鈕）和 Fab（右下角茄紫＋）清單頁也用，讓兩頁的按鈕長得一樣。
+// GlassBtn（圓鈕）和 Fab（右下角茄紫＋）清單頁也用，讓兩頁的按鈕長得一樣。
+// 2026-11-02 系統元件化：三顆按鈕都是系統材質（Glass）——iOS 26 液態玻璃、舊 iOS 霧面、減少透明度時照舊不透明。
 import type { ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { T, useColors } from '../lib/tokens';
+import { Glass } from './Glass';
 import { Sym } from './Sym';
 
 export const native = Platform.OS === 'ios';
@@ -27,10 +29,12 @@ export function GlassBtn({ icon, onPress, label, on, children }: {
 }) {
   const c = useColors();
   return (
-    <Pressable onPress={onPress} accessibilityLabel={label}
-      style={({ pressed }) => [s.btn, { backgroundColor: c.surface }, pressed && { opacity: T.motion.pressDim }]}>
-      {icon ? <Sym name={icon} size={20} color={on ? c.accent : c.textPrimary} /> : children}
-    </Pressable>
+    <Glass style={s.btn} interactive>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+        style={({ pressed }) => [s.hit, pressed && { opacity: T.motion.pressDim }]}>
+        {icon ? <Sym name={icon} size={20} color={on ? c.accent : c.textPrimary} /> : children}
+      </Pressable>
+    </Glass>
   );
 }
 
@@ -43,10 +47,13 @@ export function Fab({ onPress, label }: { onPress: () => void; label: string }) 
     // 多米 2026-11-01 真機說 ✓ 之後 ＋ 回來的時間點不對）。減少動態本來就是淡入淡出
     <Animated.View entering={FadeIn.duration(T.motion.keyboardFollow.duration)} exiting={FadeOut.duration(T.motion.keyboardFollow.duration)}
       style={[s.fabWrap, { bottom: insets.bottom + T.space.m }]}>
-      <Pressable onPress={onPress} accessibilityLabel={label}
-        style={({ pressed }) => [s.fab, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>
-        <Sym name="plus" size={26} color={c.fabIcon} weight="semibold" />
-      </Pressable>
+      {/* 茄紫上色的玻璃（像系統的 glassProminent 按鈕）；不透明版照舊實心茄紫＋重陰影 */}
+      <Glass style={[s.fab, T.shape.shadowStrong]} tint={c.accent} interactive>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+          style={({ pressed }) => [s.hit, pressed && { opacity: T.motion.pressDim }]}>
+          <Sym name="plus" size={26} color={c.fabIcon} weight="semibold" />
+        </Pressable>
+      </Glass>
     </Animated.View>
   );
 }
@@ -58,10 +65,12 @@ export function DoneBtn({ onPress, label }: { onPress: () => void; label: string
   const c = useColors();
   return (
     <Animated.View entering={FadeIn.duration(T.motion.keyboardFollow.duration)} exiting={FadeOut.duration(T.motion.fade)}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
-        style={({ pressed }) => [s.btn, { backgroundColor: c.accent }, pressed && { opacity: T.motion.pressDim }]}>
-        <Sym name="checkmark" size={20} color={c.fabIcon} weight="semibold" />
-      </Pressable>
+      <Glass style={s.btn} tint={c.accent} interactive>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+          style={({ pressed }) => [s.hit, pressed && { opacity: T.motion.pressDim }]}>
+          <Sym name="checkmark" size={20} color={c.fabIcon} weight="semibold" />
+        </Pressable>
+      </Glass>
     </Animated.View>
   );
 }
@@ -69,9 +78,8 @@ export function DoneBtn({ onPress, label }: { onPress: () => void; label: string
 const s = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', minHeight: T.shape.hitMin },
   large: { ...T.font.largeTitle, marginTop: T.space.xs },
-  btn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), alignItems: 'center', justifyContent: 'center',
-    ...T.shape.shadowSoft },
+  btn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
+  hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fabWrap: { position: 'absolute', right: T.space.l },
-  fab: { width: T.shape.fab, height: T.shape.fab, borderRadius: T.shape.pill(T.shape.fab),
-    alignItems: 'center', justifyContent: 'center', ...T.shape.shadowStrong },
+  fab: { width: T.shape.fab, height: T.shape.fab, borderRadius: T.shape.pill(T.shape.fab) },
 });

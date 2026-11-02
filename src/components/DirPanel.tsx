@@ -13,12 +13,11 @@
 // D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
-import { requireOptionalNativeModule } from 'expo';
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  AccessibilityInfo, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
 } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
@@ -36,6 +35,7 @@ import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Empty } from './Empty';
+import { Glass, useCanBlur } from './Glass';
 import { ui } from './Overlay';
 import { togglePin } from './pin';
 import { PopMenu } from './PopMenu';
@@ -211,21 +211,6 @@ function useDragPan(o: DragOpts) {
       dg.dy.value = withSpring(ty - dg.y0.value, { velocity: e.velocityY, ...LAND_SPRING }, () => scheduleOnRN(onDrop));
     },
   });
-}
-
-// 系統設定「減少透明度」（輔助使用 → 顯示與文字大小）：開著就不霧化，改用不透明一點的底（HIG：Materials）
-// 還沒重建的舊開發版裡沒有霧化的原生碼：畫 BlurView 會壞，那就當成「減少透明度」開著（用不透明的底），不會閃退
-const NO_BLUR = Platform.OS !== 'web' && !requireOptionalNativeModule('ExpoBlur');
-function useReduceTransparency() {
-  const [on, setOn] = useState(NO_BLUR);
-  useEffect(() => {
-    if (Platform.OS !== 'ios' || NO_BLUR) return; // 只有 iOS 有這個設定（網頁預覽沒有這個方法）
-    let live = true;
-    AccessibilityInfo.isReduceTransparencyEnabled().then(v => { if (live) setOn(v); }).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOn);
-    return () => { live = false; sub.remove(); };
-  }, []);
-  return on;
 }
 
 let host: { begin: (move?: string) => void; settle: (open: boolean, velocity?: number, then?: () => void, fade?: boolean) => void } | null = null;
@@ -469,7 +454,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
   const fpagerRef = useRef<ScrollViewInstance>(null);
   const onFolderScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { const i = Math.round(e.nativeEvent.contentOffset.x / fboxW); if (i !== dg.fpg.value) setFpage(i); };
   const folderList = openEntry ? folderNotes(openEntry, drag) : [];
-  const solid = useReduceTransparency();
+  const solid = !useCanBlur(); // 減少透明度、或舊開發版沒有霧化的原生碼（Glass.tsx）
   // 從這個資料夾拿起、已經拖出去：資料夾收起（看不到、點不到），但留著，拿起的那塊磚才不會不見
   const folderHidden = !!(drag && openF && drag.src === openF.id && !drag.inF);
 
@@ -854,17 +839,22 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
   return (
     <View style={[{ flex: 1 }, (!!menu || !!openEntry?.folder) && st.above]} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
-        <View style={[st.search, { backgroundColor: c.page }, editing && { opacity: T.motion.pressDim }]}>
+        {/* 搜尋列照 iOS 的樣子（2026-11-02 系統元件化）：淡灰膠囊、放大鏡、打字時右邊有系統的清除鈕、鍵盤右下是「搜尋」 */}
+        <View style={[st.search, { backgroundColor: c.searchFill }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
           <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
+            returnKeyType="search" enablesReturnKeyAutomatically autoCorrect={false}
             editable={!editing} style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel="搜尋清單" />
         </View>
         {/* 抖動中才有：結束編輯（跟 iOS 主畫面右上的「完成」一樣） */}
         {editing && (
-          <Pressable onPress={() => setEditing(false)} hitSlop={T.space.s} accessibilityRole="button" accessibilityLabel="完成"
-            style={({ pressed }) => [st.done, pressed && { opacity: T.motion.pressDim }]}>
-            <Text style={[st.doneText, { color: c.textPrimary }]}>完成</Text>
-          </Pressable>
+          // iOS 26 主畫面右上的「完成」是一顆玻璃膠囊
+          <Glass style={st.done} interactive>
+            <Pressable onPress={() => setEditing(false)} hitSlop={T.space.s} accessibilityRole="button" accessibilityLabel="完成"
+              style={({ pressed }) => [st.doneHit, pressed && { opacity: T.motion.pressDim }]}>
+              <Text style={[st.doneText, { color: c.textPrimary }]}>完成</Text>
+            </Pressable>
+          </Glass>
         )}
       </View>
 
@@ -1298,11 +1288,12 @@ const st = StyleSheet.create({
   grabBox: { height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
   grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
   top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
-  search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.radiusCard, flexDirection: 'row', alignItems: 'center', gap: T.space.s,
+  search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', gap: T.space.s,
     paddingHorizontal: T.space.m },
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
-  done: { minHeight: T.shape.hitMin, justifyContent: 'center' },
+  done: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
+  doneHit: { flex: 1, justifyContent: 'center', paddingHorizontal: T.space.l },
   doneText: { ...T.font.emphasis },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s, paddingBottom: T.space.l },
   moveHead: { ...T.font.subhead, marginBottom: T.space.s, marginHorizontal: T.space.l + T.space.xs },

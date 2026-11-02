@@ -20,7 +20,8 @@
 ## 🚧 還沒做完 / 待決定
 1. **全部都沒在真機上驗**：待驗清單第 0～82 條。測之前請多米從多工畫面把茄記滑掉再開，終端機出現完整的 `iOS Bundled … (2千多 modules)` 才算載入成功。組塊 D 要多米回「D ok」才結案。
 2. 對照表第六節有一條「交給多米選」還沒選：疊成資料夾後要不要打開（現在照多米看錄影定的：不打開，叫「新資料夾」）。
-3. 資料夾背景霧化（expo-blur）：程式已做（2026-11-02 多米：直接做），**要重建開發版**才看得到（`eas build --platform ios --profile development`）；舊開發版自動退回不霧化，不會閃退。
+3. 系統元件化（2026-11-02 多米選「外觀全換、互動保留」）：`Glass.tsx`（液態玻璃→霧面→不透明三段退路）、`NativeMenu.ios.tsx`（紙的 ⋯ 用 SwiftUI Menu）、PopMenu 換成 iOS 長按選單樣子、最近刪除改分組清單＋系統動作表單；待驗 97～103。推翻 2026-11-01 的 A1「選單全部自繪」。
+4. 資料夾背景霧化（expo-blur）：程式已做（2026-11-02 多米：直接做），**要重建開發版**才看得到（`eas build --platform ios --profile development`）；舊開發版自動退回不霧化，不會閃退。
 4. 舊待辦：LICENSE 還是 Expo 範本；送審缺 ascAppId、隱私權政策公開網頁、公開信箱；組塊 D 結案後重跑 `.uiux/08-上架.md` 檢核表。
 5. 小風險沒處理：Paper.tsx 的 LineRow 還寫著 `const M = T.motion, G = T.gesture` 被 worklet 抓進去（目前無害，照 DirPanel 抄成數字常數較乾淨）。
 

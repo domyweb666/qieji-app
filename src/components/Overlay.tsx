@@ -4,6 +4,7 @@ import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Tex
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, T, useColors } from '../lib/tokens';
+import { Glass, useSurface } from './Glass';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
 type SheetSpec = { title?: string; rows: Row[] };
@@ -56,6 +57,8 @@ export function OverlayHost() {
   const c = useColors();
   // 減少動態：滑入滑出改成淡入淡出（替換，不是關掉）
   const calm = useReducedMotion();
+  // 提示條（2026-11-02 系統元件化）：系統材質的膠囊，字用一般的深字；不透明版照舊深底白字
+  const glassy = useSurface() !== 'solid';
   const sheetIn = calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(T.motion.sheetSlide.in);
   const sheetOut = calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(T.motion.sheetSlide.out);
 
@@ -81,13 +84,15 @@ export function OverlayHost() {
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {toast && (
         <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
-          style={[s.toast, { backgroundColor: c.toastBg, bottom: insets.bottom + 76 }]}>{/* 76 只用一次：toast 離底部的距離 */}
-          <Text style={[s.toastText, { color: c.toastText }]}>{toast.msg}</Text>
-          {toast.action && (
-            <Pressable hitSlop={T.space.m} onPress={() => { toast.action!.fn(); setToast(null); }}>
-              <Text style={[s.toastBtn, { color: c.toastAction }]}>{toast.action.label}</Text>
-            </Pressable>
-          )}
+          style={[s.toastAt, { bottom: insets.bottom + 76 }]} accessibilityLiveRegion="polite">{/* 76 只用一次：toast 離底部的距離 */}
+          <Glass style={s.toast} solid={c.toastBg}>
+            <Text style={[s.toastText, { color: glassy ? c.textPrimary : c.toastText }]}>{toast.msg}</Text>
+            {toast.action && (
+              <Pressable hitSlop={T.space.m} onPress={() => { toast.action!.fn(); setToast(null); }} accessibilityRole="button">
+                <Text style={[s.toastBtn, { color: glassy ? c.accent : c.toastAction }]}>{toast.action.label}</Text>
+              </Pressable>
+            )}
+          </Glass>
         </Animated.View>
       )}
 
@@ -151,8 +156,9 @@ const s = StyleSheet.create({
   acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
   act: { flex: 1, ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
   // 長的提示（例如存檔失敗）要能換行，不能超出螢幕
-  toast: { position: 'absolute', alignSelf: 'center', maxWidth: '90%', paddingVertical: T.space.m, paddingHorizontal: T.space.l,
-    borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', gap: T.space.l, alignItems: 'center', zIndex: 50 },
+  toastAt: { position: 'absolute', alignSelf: 'center', maxWidth: '90%', zIndex: 50 }, // 50 只用一次
+  toast: { paddingVertical: T.space.m, paddingHorizontal: T.space.l,
+    borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', gap: T.space.l, alignItems: 'center' },
   toastText: { ...T.font.subhead, flexShrink: 1 },
   toastBtn: { ...T.font.subheadBold },
 });

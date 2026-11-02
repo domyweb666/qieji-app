@@ -64,6 +64,10 @@ const ALPHA = {
   folderGlassEdge: alpha(0.7, 0.12, 0.8, 0.2), // 資料夾框邊的亮線（白）
   folderVeilBlur: alpha(0.12, 0.25, 0.4, 0.5),  // 有霧化時疊在霧上面的暗幕（黑），淡很多
   folderGlassBlur: alpha(0.55, 0.5, 0.9, 0.9),  // 有霧化時的資料夾框（底下還有一層霧，所以可以更透）
+  // 2026-11-02 系統元件化（多米：外觀全換、互動保留）
+  searchFill: alpha(0.07, 0.14, 0.12, 0.2),     // 搜尋框的底（textPrimary 壓在面板上，iOS 搜尋列那種淡灰）
+  menuVeil: alpha(0.06, 0.18, 0.3, 0.4),        // 長按選單後面：有霧化時只壓一點點黑（iOS 的長按選單是霧掉、不是變暗）
+  menuSep: alpha(0.12, 0.18, 0.3, 0.35),        // 選單裡項目之間的線、組與組之間的粗縫（textPrimary）
 };
 
 function rgba(hex: string, a: number) {
@@ -81,6 +85,7 @@ export type Colors = {
   dotOutline: string; fabIcon: string;
   rowEditingFill: string;
   folderVeil: string; folderGlass: string; folderGlassEdge: string; folderVeilBlur: string; folderGlassBlur: string;
+  searchFill: string; menuVeil: string; menuSep: string;
   mode: Mode;
 };
 const cache: Partial<Record<Mode, Colors>> = {};
@@ -105,6 +110,9 @@ export function colors(mode: Mode): Colors {
     folderGlassEdge: rgba(P.white, ALPHA.folderGlassEdge[mode]),
     folderVeilBlur: rgba(P.black, ALPHA.folderVeilBlur[mode]),
     folderGlassBlur: rgba(COLOR.folderGlass[mode], ALPHA.folderGlassBlur[mode]),
+    searchFill: rgba(COLOR.textPrimary[mode], ALPHA.searchFill[mode]),
+    menuVeil: rgba(P.black, ALPHA.menuVeil[mode]),
+    menuSep: rgba(COLOR.textPrimary[mode], ALPHA.menuSep[mode]),
     mode,
   };
 }
@@ -179,6 +187,9 @@ export const shape = {
   radiusFolder: 38, folderRows: 3, folderDotsH: 14,
   // 霧化強度（expo-blur 的 intensity，1～100）：後面的目錄霧一點就好、看得出輪廓；框本身霧重一點，像 iOS 的檔案夾
   folderBlur: 24, folderBoxBlur: 60,
+  // 系統材質（2026-11-02）：舊 iOS 的霧面按鈕、選單卡霧多重；長按選單照 iOS 的樣子（寬 250、大圓角、組與組之間一條粗縫）
+  materialBlur: 80, menuBlur: 30,
+  menuW: 250, menuWide: 280, radiusMenu: 22, menuGap: 8, // menuWide：最上面有一排九個色塊時（9 × 26 ＋ 兩邊內距放得下）
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋

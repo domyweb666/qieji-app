@@ -31,6 +31,7 @@ import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { Composer } from './Composer';
 import { dirPanel } from './DirPanel';
+import { HAS_NATIVE_MENU, NativeMenu } from './NativeMenu';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
@@ -688,7 +689,10 @@ export function Paper({ n }: { n: Note }) {
         </View>
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
         <Animated.View layout={calm ? undefined : KB_SLIDE}>
-          <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />
+          {/* iOS：真的系統選單（2026-11-02 系統元件化），九個顏色在最上面一排；網頁預覽、舊開發版照舊自己畫的卡片 */}
+          {HAS_NATIVE_MENU
+            ? <NativeMenu acts={moreActs} label="選單" color={n.color} onColor={pickColor} />
+            : <GlassBtn icon="ellipsis" label="選單" onPress={() => { Keyboard.dismiss(); setMenu(true); }} />}
         </Animated.View>
         {/* 在行裡或清單名裡打字時才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。
             看「哪一格在編輯」不看 composing：按輸入框的 ✓ 收起時框先收、鍵盤晚一兩格才開始收，看 composing 會在那幾格閃出一顆 ✓ */}

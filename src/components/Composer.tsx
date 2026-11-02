@@ -10,6 +10,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { T, useColors } from '../lib/tokens';
+import { Glass } from './Glass';
 import { Sym } from './Sym';
 
 const LINE_H = T.font.bodyLine.lineHeight;
@@ -71,7 +72,9 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
     <Animated.View
       entering={calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(KB.duration).easing(KB_EASE)}
       exiting={calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(KB.duration).easing(KB_EASE)}
-      style={[s.card, { backgroundColor: c.surface }]}>
+      >
+      {/* 卡片是系統材質（2026-11-02 系統元件化：iOS 26 液態玻璃、舊 iOS 霧面、減少透明度照舊奶油白） */}
+      <Glass style={s.card}>
       {/* grow 至少 44 高、把字那塊上下置中（一行時字跟 ✓ 在同一條中線）；字那塊由鏡像撐高、最高 maxInput，輸入框鋪滿在上面 */}
       <View style={s.grow}>
         <View style={{ maxHeight: maxInput }}>
@@ -90,13 +93,14 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
         style={({ pressed }) => [s.btn, pressed && { opacity: T.motion.pressDim }]}>
         <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
       </Pressable>
+      </Glass>
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
   // 跟鍵盤膠囊同一家：奶油白、圓角 16、軟陰影。✓ 貼在右端底部，字長高時它留在下面
-  card: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: T.shape.radiusCard, paddingLeft: T.space.l, paddingRight: T.space.xs, paddingVertical: T.space.s, ...T.shape.shadowSoft },
+  card: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: T.shape.radiusMenu, paddingLeft: T.space.l, paddingRight: T.space.xs, paddingVertical: T.space.s },
   // grow：至少跟 ✓ 一樣高（44），字那塊在裡面上下置中；多行時一起長高，上限由 Paper 給（maxH），再多輸入框自己在裡面捲
   grow: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, justifyContent: 'center' },
   input: { ...INPUT_FONT, paddingVertical: 0, paddingHorizontal: 0, textAlignVertical: 'top' },
