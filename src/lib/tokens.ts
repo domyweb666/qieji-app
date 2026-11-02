@@ -45,8 +45,8 @@ const COLOR = {
   toastBg:     P.ink,
   toastText:   four(P.white, '#2E2233', P.white, '#1B1220'),
   toastAction: P.lilac,
-  // 打開的資料夾（2026-11-02 照 iOS）：框是半透明的玻璃、框邊一圈亮線。背景霧化要 expo-blur（下次建開發版一起加），
-  // 加之前暗幕比 scrim 深一點、框也比較不透明，才分得出框和後面的目錄；加了霧化再把兩個都調淡
+  // 打開的資料夾（2026-11-02 照 iOS）：後面的目錄霧化（expo-blur）＋一層淡淡的暗幕，框是霧面玻璃、框邊一圈亮線。
+  // 系統開了「減少透明度」就不霧化，改用深一點的暗幕和比較不透明的框（folderVeil、folderGlass）
   folderGlass: P.cream50,
   fabIcon: four(P.white, P.white, P.white, P.white), // 壓在 accent 上
 };
@@ -62,6 +62,8 @@ const ALPHA = {
   folderVeil: alpha(0.4, 0.5, 0.5, 0.6),     // 打開資料夾時後面的暗幕（黑）
   folderGlass: alpha(0.92, 0.9, 0.97, 0.95),  // 資料夾框（folderGlass 色）
   folderGlassEdge: alpha(0.7, 0.12, 0.8, 0.2), // 資料夾框邊的亮線（白）
+  folderVeilBlur: alpha(0.12, 0.25, 0.4, 0.5),  // 有霧化時疊在霧上面的暗幕（黑），淡很多
+  folderGlassBlur: alpha(0.55, 0.5, 0.9, 0.9),  // 有霧化時的資料夾框（底下還有一層霧，所以可以更透）
 };
 
 function rgba(hex: string, a: number) {
@@ -78,7 +80,7 @@ export type Colors = {
   toastBg: string; toastText: string; toastAction: string;
   dotOutline: string; fabIcon: string;
   rowEditingFill: string;
-  folderVeil: string; folderGlass: string; folderGlassEdge: string;
+  folderVeil: string; folderGlass: string; folderGlassEdge: string; folderVeilBlur: string; folderGlassBlur: string;
   mode: Mode;
 };
 const cache: Partial<Record<Mode, Colors>> = {};
@@ -101,6 +103,8 @@ export function colors(mode: Mode): Colors {
     folderVeil: rgba(P.black, ALPHA.folderVeil[mode]),
     folderGlass: rgba(COLOR.folderGlass[mode], ALPHA.folderGlass[mode]),
     folderGlassEdge: rgba(P.white, ALPHA.folderGlassEdge[mode]),
+    folderVeilBlur: rgba(P.black, ALPHA.folderVeilBlur[mode]),
+    folderGlassBlur: rgba(COLOR.folderGlass[mode], ALPHA.folderGlassBlur[mode]),
     mode,
   };
 }
@@ -173,6 +177,8 @@ export const shape = {
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
   // 打開的資料夾（2026-11-02 照 iOS）：框的圓角、一頁 2 欄 × folderRows 列，滿了往右一頁；框下面頁點那排的高
   radiusFolder: 38, folderRows: 3, folderDotsH: 14,
+  // 霧化強度（expo-blur 的 intensity，1～100）：後面的目錄霧一點就好、看得出輪廓；框本身霧重一點，像 iOS 的檔案夾
+  folderBlur: 24, folderBoxBlur: 60,
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋

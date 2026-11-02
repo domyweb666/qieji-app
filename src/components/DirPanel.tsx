@@ -13,10 +13,12 @@
 // D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
+import { requireOptionalNativeModule } from 'expo';
+import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  AccessibilityInfo, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
 } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
@@ -209,6 +211,21 @@ function useDragPan(o: DragOpts) {
       dg.dy.value = withSpring(ty - dg.y0.value, { velocity: e.velocityY, ...LAND_SPRING }, () => scheduleOnRN(onDrop));
     },
   });
+}
+
+// 系統設定「減少透明度」（輔助使用 → 顯示與文字大小）：開著就不霧化，改用不透明一點的底（HIG：Materials）
+// 還沒重建的舊開發版裡沒有霧化的原生碼：畫 BlurView 會壞，那就當成「減少透明度」開著（用不透明的底），不會閃退
+const NO_BLUR = Platform.OS !== 'web' && !requireOptionalNativeModule('ExpoBlur');
+function useReduceTransparency() {
+  const [on, setOn] = useState(NO_BLUR);
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || NO_BLUR) return; // 只有 iOS 有這個設定（網頁預覽沒有這個方法）
+    let live = true;
+    AccessibilityInfo.isReduceTransparencyEnabled().then(v => { if (live) setOn(v); }).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOn);
+    return () => { live = false; sub.remove(); };
+  }, []);
+  return on;
 }
 
 let host: { begin: (move?: string) => void; settle: (open: boolean, velocity?: number, then?: () => void, fade?: boolean) => void } | null = null;
@@ -452,6 +469,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
   const fpagerRef = useRef<ScrollViewInstance>(null);
   const onFolderScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { const i = Math.round(e.nativeEvent.contentOffset.x / fboxW); if (i !== dg.fpg.value) setFpage(i); };
   const folderList = openEntry ? folderNotes(openEntry, drag) : [];
+  const solid = useReduceTransparency();
   // 從這個資料夾拿起、已經拖出去：資料夾收起（看不到、點不到），但留著，拿起的那塊磚才不會不見
   const folderHidden = !!(drag && openF && drag.src === openF.id && !drag.inF);
 
@@ -834,7 +852,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
   const ghostFace = dragged ? (drag!.src ? <TileFace n={dragged.note!} w={innerW} cur={false} /> : face(dragged, tileW)) : null;
 
   return (
-    <View style={[{ flex: 1 }, !!menu && st.above]} collapsable={false}>
+    <View style={[{ flex: 1 }, (!!menu || !!openEntry?.folder) && st.above]} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
         <View style={[st.search, { backgroundColor: c.page }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
@@ -925,20 +943,24 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
       {/* 打開的資料夾（D1；2026-11-02 照 iOS，多米原型對過）：後面一層暗幕、名字大字靠左在框上面、框是半透明的玻璃。
           一頁 2 欄 × FROWS 列，滿了往右一頁：不抖時左右撥換頁、框下面有頁點；拖著到框的左右邊停一下也會翻（folderFlip）。
           所有張畫在同一層、用位置排到各頁：拖的那張換頁時不會換到別的容器重掛（重掛手勢就斷了）。
-          背景霧化要 expo-blur，下次建開發版一起加（多米 2026-11-02 定）。框的位置用 onLayout 量（外層從螢幕頂端開始，量到的就是螢幕座標） */}
+          後面的目錄用 expo-blur 霧化、框本身也是霧面（2026-11-02 多米：直接做）；系統「減少透明度」開著就不霧化（solid）。框的位置用 onLayout 量（外層從螢幕頂端開始，量到的就是螢幕座標） */}
       {openEntry?.folder && (() => {
         const fpages = Math.max(1, Math.ceil(folderList.length / FPER));
         const fr = new Map(openEntry.notes.map((n, r) => [n.id, r]));
         const fRank = (id: string, k: number) => fr.get(id) ?? openEntry.notes.length + k;
         const gridH = FROWS * (TILE + GAP) - GAP;
         return (
-          <View style={[StyleSheet.absoluteFill, st.folderWrap, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}
+          <View style={[StyleSheet.absoluteFill, { bottom: -T.shape.hitMin }, st.folderWrap, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}
             accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}>
-            <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.folderVeil }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
+            {!solid && <BlurView style={StyleSheet.absoluteFill} intensity={T.shape.folderBlur} tint="default" pointerEvents="none" />}
+            <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: solid ? c.folderVeil : c.folderVeilBlur }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
               accessibilityRole="button" accessibilityLabel="收起資料夾" />
             <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
-            <View style={[st.folderBox, { width: fboxW, backgroundColor: c.folderGlass, borderColor: c.folderGlassEdge }]}
+            <View style={[st.folderBox, { width: fboxW, backgroundColor: solid ? c.folderGlass : 'transparent', borderColor: c.folderGlassEdge }]}
               onLayout={e => { const l = e.nativeEvent.layout; dg.bx.value = l.x; dg.by.value = l.y; dg.bw.value = l.width; dg.bh.value = l.height; }}>
+              {!solid && (
+                <BlurView style={[StyleSheet.absoluteFill, { backgroundColor: c.folderGlassBlur }]} intensity={T.shape.folderBoxBlur} tint="default" pointerEvents="none" />
+              )}
               <ScrollView ref={fpagerRef} key={openEntry.folder.id} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={!editing && !drag && fpages > 1}
                 keyboardShouldPersistTaps="handled" onScroll={onFolderScroll} onMomentumScrollEnd={onFolderScroll} scrollEventThrottle={T.timing.pageScroll}>
                 <View style={{ width: fpages * fboxW, height: gridH + FPAD * 2 }}>
@@ -1315,7 +1337,8 @@ const st = StyleSheet.create({
     borderRadius: T.shape.pill(T.shape.minusBadge), alignItems: 'center', justifyContent: 'center' },
   // 打開的資料夾（2026-11-02 照 iOS）：毛玻璃般的半透明大圓角盒子，名字大字、靠左、放在盒子上面
   folderBox: { alignSelf: 'center', borderRadius: T.shape.radiusFolder, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...T.shape.shadowSoft },
-  folderName: { ...T.font.largeTitle, textAlign: 'left', paddingVertical: T.space.m, paddingHorizontal: T.space.l + T.space.l },
+  // position relative：網頁預覽裡輸入框預設不是 relative，會被前面 absolute 的霧蓋住（iOS 本來就照順序疊）
+  folderName: { position: 'relative', ...T.font.largeTitle, textAlign: 'left', paddingVertical: T.space.m, paddingHorizontal: T.space.l + T.space.l },
   fdots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: T.space.s, height: T.shape.folderDotsH, marginBottom: T.space.s },
   fslot: { position: 'absolute' },
 });
