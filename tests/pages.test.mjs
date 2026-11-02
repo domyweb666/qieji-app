@@ -1,4 +1,4 @@
-// 目錄換頁標記與 Dock（2026-11-02，多米：照虛擬手機原型，釘選做成 Dock、拖到最後一頁邊緣開新的一頁）
+// 目錄換頁標記（2026-11-02，多米：拖到最後一頁邊緣開新的一頁）。Dock 同一天拿掉了，釘選的跟一般的一起排
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixOrder, reseat, seatedLayout, seatedEntries, isBreak, newBreak, placeTop, newFolder } from '../src/lib/model.ts';
@@ -20,25 +20,27 @@ test('fixOrder 留住兩格之間的標記，拿掉最前面、最後面、連�
   assert.deepEqual(s.order, ['a', '|1', 'b', '|3', 'c']);
 });
 
-test('fixOrder：標記隔開的那頁只剩最近刪除或釘選的紙＝那頁不存在，標記拿掉', () => {
-  const s = state([note('a'), note('x', { deleted: true }), note('p', { pinned: true }), note('b')], ['a', '|1', 'x', 'p', '|2', 'b']);
+test('fixOrder：標記隔開的那頁只剩最近刪除的紙＝那頁不存在，標記拿掉', () => {
+  const s = state([note('a'), note('x', { deleted: true }), note('b')], ['a', '|1', 'x', '|2', 'b']);
   fixOrder(s);
-  assert.deepEqual(s.order, ['a', '|1', 'x', 'p', 'b']);
+  assert.deepEqual(s.order, ['a', '|1', 'x', 'b']);
 });
 
-test('seatedLayout：釘選的不在格子（在 Dock），標記插在兩格之間', () => {
+test('fixOrder：釘選的紙算看得到（Dock 拿掉了），隔開它的標記留著', () => {
+  const s = state([note('a'), note('p', { pinned: true }), note('b')], ['a', '|1', 'p', '|2', 'b']);
+  fixOrder(s);
+  assert.deepEqual(s.order, ['a', '|1', 'p', '|2', 'b']);
+});
+
+test('seatedLayout：釘選的跟一般的一起排在格子裡，標記插在兩格之間', () => {
   const s = state([note('a'), note('p', { pinned: true }), note('b'), note('c')], ['a', 'p', '|1', 'b', 'c']);
-  assert.deepEqual(ids(seatedLayout(s)), ['a', '|', 'b', 'c']);
-  // seatedEntries 不變（VoiceOver 往前移等照舊用它）
+  assert.deepEqual(ids(seatedLayout(s)), ['a', 'p', '|', 'b', 'c']);
   assert.deepEqual(seatedEntries(s).map(e => e.id), ['a', 'p', 'b', 'c']);
 });
 
-test('seatedLayout：資料夾裡釘選的那張不算進資料夾；全是釘選的資料夾不出現', () => {
+test('seatedLayout：資料夾裡釘選的那張照樣算在資料夾裡', () => {
   const s = state([note('a'), note('b', { pinned: true }), note('c')], ['f1', 'c'], [{ id: 'f1', name: '新資料夾', ids: ['a', 'b'] }]);
-  const l = seatedLayout(s);
-  assert.deepEqual(l[0].notes.map(n => n.id), ['a']);
-  const s2 = state([note('a', { pinned: true }), note('c')], ['f1', 'c'], [{ id: 'f1', name: '新資料夾', ids: ['a'] }]);
-  assert.deepEqual(ids(seatedLayout(s2)), ['c']);
+  assert.deepEqual(seatedLayout(s)[0].notes.map(n => n.id), ['a', 'b']);
 });
 
 test('reseat：拖到新的一頁（visible 多一個新標記）→ 標記和那張接在最後，一張不少', () => {
@@ -61,7 +63,7 @@ test('reseat：搬走之後那頁空了 → 標記自己消失，頁合回去', 
   assert.deepEqual(s.order, ['b', 'a']);
 });
 
-test('placeTop：從 Dock 拖回格子（取消釘選後放到指定位置）', () => {
+test('placeTop：放到指定位置', () => {
   const s = state([note('a'), note('b'), note('p')], ['a', 'b', 'p']);
   s.notes[2].pinned = false;
   placeTop(s, 'p', ['p', 'a', 'b'], 5);

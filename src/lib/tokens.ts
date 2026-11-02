@@ -45,6 +45,9 @@ const COLOR = {
   toastBg:     P.ink,
   toastText:   four(P.white, '#2E2233', P.white, '#1B1220'),
   toastAction: P.lilac,
+  // 打開的資料夾（2026-11-02 照 iOS）：框是半透明的玻璃、框邊一圈亮線。背景霧化要 expo-blur（下次建開發版一起加），
+  // 加之前暗幕比 scrim 深一點、框也比較不透明，才分得出框和後面的目錄；加了霧化再把兩個都調淡
+  folderGlass: P.cream50,
   fabIcon: four(P.white, P.white, P.white, P.white), // 壓在 accent 上
 };
 const ALPHA = {
@@ -56,6 +59,9 @@ const ALPHA = {
   pressedFill: 0.08, // 按住卡片／選單項目（accent）
   scrim: 0.3,        // 選單、表單後面的暗幕（黑）
   toastBg: 0.94,
+  folderVeil: alpha(0.4, 0.5, 0.5, 0.6),     // 打開資料夾時後面的暗幕（黑）
+  folderGlass: alpha(0.92, 0.9, 0.97, 0.95),  // 資料夾框（folderGlass 色）
+  folderGlassEdge: alpha(0.7, 0.12, 0.8, 0.2), // 資料夾框邊的亮線（白）
 };
 
 function rgba(hex: string, a: number) {
@@ -72,6 +78,7 @@ export type Colors = {
   toastBg: string; toastText: string; toastAction: string;
   dotOutline: string; fabIcon: string;
   rowEditingFill: string;
+  folderVeil: string; folderGlass: string; folderGlassEdge: string;
   mode: Mode;
 };
 const cache: Partial<Record<Mode, Colors>> = {};
@@ -91,6 +98,9 @@ export function colors(mode: Mode): Colors {
     dotOutline: rgba(COLOR.textPrimary[mode], ALPHA.dotOutline[mode]),
     fabIcon: COLOR.fabIcon[mode],
     rowEditingFill: rgba(P.white, ALPHA.rowEditing[mode]),
+    folderVeil: rgba(P.black, ALPHA.folderVeil[mode]),
+    folderGlass: rgba(COLOR.folderGlass[mode], ALPHA.folderGlass[mode]),
+    folderGlassEdge: rgba(P.white, ALPHA.folderGlassEdge[mode]),
     mode,
   };
 }
@@ -157,10 +167,12 @@ export const shape = {
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
   tileTag: 40,   // 色磚右下角露出的色圓
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
-  folderMini: 16, // 資料夾磚下面那排小方塊（D1）：裡面每張紙一個，顏色是那張紙的色點，最多四個（folderMinis），更多的寫 +N
-  folderMinis: 4,
+  // 資料夾磚（2026-11-02 多米選 A）：名字跟紙磚一樣大，下面一排兩格預覽（那張紙的顏色＋名字），更多的寫 +N
+  folderPeek: 28, folderPeekRadius: 7, folderPeeks: 2,
+  folderPlusW: 30, // 「+N」那格的寬
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
-  folderMiniRadius: 4,
+  // 打開的資料夾（2026-11-02 照 iOS）：框的圓角、一頁 2 欄 × folderRows 列，滿了往右一頁；框下面頁點那排的高
+  radiusFolder: 38, folderRows: 3, folderDotsH: 14,
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
   shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋
@@ -178,7 +190,8 @@ export const motion = {
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
   launch:        { duration: 260 }, // 2026-11-02 照 iOS 開 App：目錄點一張，那塊磚放大鋪滿面板這麼久，然後面板淡出（dirPanel.reducedFade）。減少動態：不放大
   menuLift:      { scale: 1.04 }, // 2026-11-02 照虛擬手機原型：目錄長按跳選單時，那塊磚在原位浮起來放大這麼多（彈簧用 dragLift 那組）。減少動態：直接到位
-  stackTarget:   { scale: 1.08 }, // D2：拖著停在別張磚正中間夠久，底下那張放大一點＝放手就疊（彈簧用 dragLift 那組）。減少動態：直接變大
+  stackTarget:   { scale: 1.1 }, // D2：準備疊，底下那張放大一點＝放手就縮進去（2026-11-02 照原型 1.08→1.1；彈簧用 dragLift 那組）。減少動態：直接變大
+  sink:          { duration: 260, scale: 0.3 }, // 2026-11-02 照 iOS：疊上去放手，浮著那張滑到底下那張上、縮小淡掉。減少動態：直接消失
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
   swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
   freshGlow:     { delay: 300, duration: 600 }, // 輸入框送出的那行捲回頂端後亮一下再淡掉：delay≈iOS 捲動動畫的時間（亮著等它到），duration＝淡掉（2026-11-01 第八批）
@@ -230,11 +243,10 @@ export const gesture = {
   swapFailY: 12, pageTurnRatio: 0.5, swapFlick: 500, swapEdge: 0.3,
   tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
-  stackZone: 0.3, // D2：拖著那塊的中心離底下那格中心，左右不到磚寬、上下不到磚高的這個比例＝在正中間（停著就疊，不讓位）
-  // 2026-11-02（多米玩過虛擬手機原型說完美，要茄記一樣）：已經瞄準要疊的那張，範圍放寬到這個比例，手稍微晃不會丟掉目標
-  stackZoneHold: 0.42,
-  // 同上：手指在一格裡移超過這麼多（點）就重新等 timing.reflow，停住不動才讓位。拖著經過別張不會把它擠走，左右疊才疊得到（原型實測）
-  reflowStill: 5,
+  // 2026-11-02（多米：磚是寬的，左右上下都難換；原型對過）：看拖著那張跟底下那張「重疊多少」（面積比），不看中心落在哪。
+  // 不到 mergeOverlap 不理；mergeOverlap～swapOverlap 停 timing.stackHover＝準備疊；超過 swapOverlap 停 timing.swapDwell＝互換（只有這兩張動）；
+  // 準備疊之後要掉到 mergeHold 以下才取消。打開的資料夾裡不能疊，超過 folderSwapOverlap 就互換
+  mergeOverlap: 0.2, swapOverlap: 0.5, mergeHold: 0.15, folderSwapOverlap: 0.3,
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
@@ -246,9 +258,8 @@ export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, fr
   cloudOffGrace: 10000,
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
-  reflow: 280,     // D2（多米選照 iOS）：拖著停在別格邊邊或空隙「不動」這麼久，其他磚才讓位；一路滑過不停不讓（2026-11-02 照原型：200→280，手一動就重算，見 gesture.reflowStill）
-  stackHover: 300, // 2026-11-02 照原型 500→300：停在別張正中間這麼久就準備疊
-  folderSpring: 500, // D4（照 iOS）：準備疊到資料夾磚上之後再停這麼久，資料夾自己打開（HIG 的 spring loading），可以放進裡面指定位置
+  swapDwell: 100,  // 2026-11-02：重疊超過一半停這麼久就互換（推過去就換，不用刻意停）
+  stackHover: 250, // 2026-11-02：重疊兩成到一半停這麼久就準備疊。拖到資料夾上不再自己打開（多米：顯示合併就好）
   folderLeave: 350 }; // D4：資料夾開著時手指離開框這麼久，資料夾收起、回到目錄繼續拖 // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */

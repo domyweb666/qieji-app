@@ -257,8 +257,8 @@ export function fixOrder(s: State) {
     .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id) || isBreak(id)) && !seen.has(id) && !!seen.add(id));
   for (const f of folders) if (!seen.has(f.id)) { kept.push(f.id); seen.add(f.id); }
   for (const n of s.notes.filter(n => !seen.has(n.id) && !inFolder.has(n.id)).sort((a, b) => b.updated - a.updated)) kept.push(n.id);
-  // 換頁標記只留「前後兩邊都有看得到的格子」的：最前面、最後面、連在一起、隔開的那頁看不到東西（全在最近刪除或釘在 Dock）的都拿掉
-  const shown = (id: string) => fids.has(id) || s.notes.some(n => n.id === id && !n.deleted && !n.pinned);
+  // 換頁標記只留「前後兩邊都有看得到的格子」的：最前面、最後面、連在一起、隔開的那頁看不到東西（全在最近刪除）的都拿掉
+  const shown = (id: string) => fids.has(id) || s.notes.some(n => n.id === id && !n.deleted);
   const order: string[] = [];
   let since = false; // 上一個標記（或最前面）之後有沒有看得到的格子
   for (const id of kept) {
@@ -330,15 +330,10 @@ export function seatedEntries(s: State): Entry[] {
 }
 export const folderOf = (s: State, noteId: string) => okFolders(s).find(f => f.ids.includes(noteId));
 
-// 目錄格子（2026-11-02）：跟 seatedEntries 一樣，但釘選的紙不在格子裡（住在 Dock，資料夾裡的也不算），
-// 換頁標記照座位表的位置插進來（只插在兩格之間，最前面、連續的不插）
+// 目錄格子（2026-11-02）：seatedEntries 再把換頁標記照座位表的位置插進來（只插在兩格之間，最前面、連續的不插）。
+// 釘選的紙跟一般的一起排（多米 2026-11-02 拿掉 Dock：放下面就不能放資料夾）
 export function seatedLayout(s: State): Entry[] {
-  const all: Entry[] = [];
-  for (const e of seatedEntries(s)) {
-    if (!e.folder) { if (!e.note!.pinned) all.push(e); continue; }
-    const notes = e.notes.filter(n => !n.pinned);
-    if (notes.length) all.push({ ...e, notes });
-  }
+  const all = seatedEntries(s);
   if (!Array.isArray(s.order)) return all;
   const pos = new Map(s.order.map((id, i) => [id, i] as const));
   const breaks = s.order.flatMap((id, i) => (isBreak(id) ? [[id, i] as const] : []));
