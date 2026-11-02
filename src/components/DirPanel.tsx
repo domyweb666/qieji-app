@@ -62,6 +62,7 @@ const FROWS = T.shape.folderRows, FPER = FROWS * 2, FPAD = T.space.l;
 // 彈簧設定抄一份自己的：被抓進 worklet 的物件會被鎖住，不讓 tokens 裡的 M、G 被鎖（規矩檔 2026-11-02）
 const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring }, LIFT_SCALE = M.dragLift.scale;
 const PULL_CLOSE = G.pushCloseRatio, FLICK = G.flick;
+const HELD_SQ = G.tileDragHeld * G.tileDragHeld; // 長按後要拖超過 tileDragHeld 才拿起（比距離的平方，worklet 裡不開根號）
 const MENU_LIFT = M.menuLift.scale; // 長按選單時那塊浮起來放大的比例
 // 抖動中在空白處撥翻頁（PageBack）：跟清單左右撥換張同一組門檻（撥過半頁或甩一下就翻、到頭只跟三成）
 const TURN_RATIO = G.pageTurnRatio, TURN_FLICK = G.swapFlick, EDGE_FOLLOW = G.swapEdge;
@@ -156,21 +157,39 @@ type DragOpts = {
   onStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function useDragPan(o: DragOpts) {
-  const { dg, w, screenW, gw, fw, calm, onStart, onAim, onEdge, onDrop } = o;
+  const { dg, w, screenW, gw, fw, calm, editing, onStart, onAim, onEdge, onDrop } = o; // worklet 只抓拆出來的值，不抓整包 o
+  // 長按到了、還沒拖夠遠（armed）：選單開著，手指再拖 tileDragHeld 才拿起來（2026-11-03 多米真機：長按選單一跳就變拖，前一版改 minDistance 沒用）。
+  // 為什麼不能靠 minDistance：iOS 的 activateAfterLongPress 時間一到拖曳就直接啟動、完全不看移動距離（RNGH apple/Handlers/RNPanHandler.m），
+  // 所以「長按後再拖多遠才拿起」只能自己在 onUpdate 算。網頁版長按也是時間到就啟動，兩邊一樣
+  const armed = useSharedValue(0);
+  // 拿起來：記下磚的左上角（螢幕座標）、歸零這次拖的狀態、浮起，回 JS 寫格子位置（dragStart）
+  const lift = (e: { absoluteX: number; absoluteY: number; x: number; y: number }) => {
+    'worklet';
+    dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
+    dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
+    dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
+    scheduleOnRN(onStart);
+  };
   return usePanGesture({
     enabled: o.enabled,
-    activateAfterLongPress: o.editing ? 0 : G.longPressMs,
-    // 抖動中不用等長按，門檻跟「點一下」的容許一樣；沒抖動時長按後要拖得比長按容許的晃動遠（tokens tileDragHeld 的說明）
-    minDistance: o.editing ? G.tileDragEdit : G.tileDragHeld,
+    // 抖動中不等長按：不給這個值（不是給 0——iOS 上 0＝延遲 0 秒、手指一碰就啟動，抖動中點資料夾永遠變成拖；網頁的 0 才是「不等」）。
+    // 沒給值的欄位不會傳到 iOS，iOS 換設定時先全部清回預設，所以從長按模式切進抖動不會留著舊的長按時間
+    activateAfterLongPress: editing ? undefined : G.longPressMs,
+    // 抖動中手指移超過 tileDragEdit 才拿起（點一下的容許也是這個數，晃幾點還是點）；沒抖動時這個值不起作用（見上面 armed）
+    minDistance: G.tileDragEdit,
     onActivate: e => {
       'worklet';
-      dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
-      dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
-      dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
-      scheduleOnRN(onStart);
+      // 長按到了（沒抖動）：先只開選單，等手指拖夠遠；抖動中是拖過 tileDragEdit 才啟動的，直接拿起
+      armed.value = editing ? 0 : 1;
+      if (!armed.value) lift(e);
     },
     onUpdate: e => {
       'worklet';
+      if (armed.value) {
+        if (e.translationX * e.translationX + e.translationY * e.translationY < HELD_SQ) return;
+        armed.value = 0;
+        lift(e);
+      }
       dg.dx.value = e.translationX; dg.dy.value = e.translationY;
       // JS 還沒把這次的格子位置、資料夾開沒開寫好（dragStart → setD）：只跟手，不算邊緣和瞄哪。
       // 不然用的是上一次拖留下的值：資料夾裡拿起時被當成在目錄某一格，稍微一動放手就被拿出資料夾（多米 2026-11-02 真機記錄 aim:0、fopen:1）
@@ -193,6 +212,7 @@ function useDragPan(o: DragOpts) {
     },
     onDeactivate: e => {
       'worklet';
+      if (armed.value) { armed.value = 0; return; } // 長按了沒拖：只開了選單，磚沒拿起來，什麼都不動
       if (dg.edge.value || dg.fedge.value) { dg.edge.value = 0; dg.fedge.value = 0; scheduleOnRN(onEdge, 0); }
       scheduleOnRN(hapticLand);
       dg.lift.value = calm ? 0 : withSpring(0, LIFT_SPRING);
