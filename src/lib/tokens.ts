@@ -189,6 +189,7 @@ export const shape = {
   folderBlur: 24, folderBoxBlur: 60,
   // 系統材質（2026-11-02）：舊 iOS 的霧面按鈕、選單卡霧多重；長按選單照 iOS 的樣子（寬 250、大圓角、組與組之間一條粗縫）
   materialBlur: 80, menuBlur: 30,
+  barH: 52, // 紙最下面那條（PageBar，2026-11-02 Safari 式底部列）：膠囊與右邊 ＋ 的高
   menuW: 250, menuWide: 280, radiusMenu: 22, menuGap: 8, // menuWide：最上面有一排九個色塊時（9 × 26 ＋ 兩邊內距放得下）
   swatchDot: 26, // ⋯ 選單裡一排九個色塊
   shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
@@ -257,6 +258,8 @@ export const gesture = {
   // 標題區左右撥換張（B4）：左右動超過 pullFailX 才算撥（跟上面往下拉同一個門檻，先動哪個方向就是哪個）；先上下動超過 swapFailY 就不算。
   // 整頁跟著手指走（多米 2026-11-02）：撥過半頁（pageTurnRatio × 螢幕寬）或往同一邊甩超過 swapFlick（點／秒）放手就換，跟 iOS 分頁一樣；
   // 到頭（沒有下一張）整頁只跟手指的 swapEdge 倍（多米原型）
+  // 底部列（PageBar）：手指動超過 barActivate 才算滑，先動的方向定案——橫的多＝換張、往上＝開目錄（看角度，不再兩個門檻比快）
+  barActivate: 10,
   swapFailY: 12, pageTurnRatio: 0.5, swapFlick: 500, swapEdge: 0.3,
   tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁

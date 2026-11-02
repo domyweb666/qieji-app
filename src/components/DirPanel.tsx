@@ -1,5 +1,7 @@
-// 目錄面板（B3，多米 2026-11-01 晚（二）定）：自己做的、從螢幕上面垂下來的面板，取代系統 formSheet。
-// 開：紙的標題區往下拉（跟著手指）、點標題下的把手、行的「搬到…」。收：點下面露出的那截紙、把面板底部把手往上推、點一塊磚。
+// 目錄面板（B3，多米 2026-11-01 晚（二）定）：自己做的面板，取代系統 formSheet。
+// 2026-11-02 晚改（多米選甲「Safari 式底部列」）：從螢幕**下面**升上來（開它的手勢在紙底部的 PageBar 往上滑，方向一致），
+// 上面留一截看得到後面的紙。開：底部列往上滑（跟著手指）或點、行的「搬到…」。收：點上面露出的那截紙、把面板頂端把手往下拉、點一塊磚。
+// 面板裡的東西畫在一層蓋滿整個螢幕的容器裡（全開時容器的座標＝螢幕座標，拖曳、資料夾框的量法都不用換算），面板的底色另外畫一塊。
 // 裡面：搜尋、新的一張、色磚、最近刪除、搬行模式（原本 src/app/directory.tsx 整段搬過來）。
 // C1（2026-11-02）：磚照座位表（State.order）排，改字不換位、新的一張排最後；「已釘選／其他」兩段拿掉，釘選的磚右上角一個圖釘。
 // C3：放不下往右一頁、頁點。C4：長按一塊磚跳選單（顏色、改名字、刪除、編輯目錄），長按後一拖就進抖動、同一頁裡拖換位置；
@@ -59,7 +61,7 @@ const SINK_MS = M.sink.duration, SINK_SCALE = M.sink.scale;
 const FROWS = T.shape.folderRows, FPER = FROWS * 2, FPAD = T.space.l;
 // 彈簧設定抄一份自己的：被抓進 worklet 的物件會被鎖住，不讓 tokens 裡的 M、G 被鎖（規矩檔 2026-11-02）
 const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring }, LIFT_SCALE = M.dragLift.scale;
-const PUSH_CLOSE = G.pushCloseRatio, FLICK = G.flick;
+const PULL_CLOSE = G.pushCloseRatio, FLICK = G.flick;
 const MENU_LIFT = M.menuLift.scale; // 長按選單時那塊浮起來放大的比例
 // 抖動中在空白處撥翻頁（PageBack）：跟清單左右撥換張同一組門檻（撥過半頁或甩一下就翻、到頭只跟三成）
 const TURN_RATIO = G.pageTurnRatio, TURN_FLICK = G.swapFlick, EDGE_FOLLOW = G.swapEdge;
@@ -268,44 +270,45 @@ export function DirPanelHost() {
     return () => { host = null; };
   }, [calm, p]);
 
-  // 面板底部把手往上推：跟著手指收上去，推過一段或往上甩就收起，不然彈回全開。抖動中關掉（C4，審查紀錄 ❓5）
+  // 面板頂端把手往下拉：跟著手指收下去，拉過一段或往下甩就收起，不然彈回全開。抖動中關掉（C4，審查紀錄 ❓5）
   const { h } = dirPanel;
   const settle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
-  // 目錄的長按選單開著：底部把手那截也被暗幕蓋住，點了只收選單、也不能推（2026-11-02）
+  // 目錄的長按選單開著：把手那截也被暗幕蓋住，點了只收選單、也不能拉（2026-11-02）
   const [closeMenu, setCloseMenu] = useState<(() => void) | null>(null);
-  const push = usePanGesture({
+  const pull = usePanGesture({
     enabled: !editing && !closeMenu,
     activeOffsetY: [-G.pullActivate, G.pullActivate],
-    onUpdate: e => { 'worklet'; p.value = Math.min(1, Math.max(0, 1 + e.translationY / h.value)); },
+    onUpdate: e => { 'worklet'; p.value = Math.min(1, Math.max(0, 1 - e.translationY / h.value)); },
     onDeactivate: e => {
       'worklet';
-      const shut = e.translationY < -h.value * PUSH_CLOSE || e.velocityY < -FLICK;
-      scheduleOnRN(settle, !shut, e.velocityY / h.value);
+      const shut = e.translationY > h.value * PULL_CLOSE || e.velocityY > FLICK;
+      scheduleOnRN(settle, !shut, -e.velocityY / h.value);
     },
   });
-  // 點露出的紙、點底部把手：抖動中只結束抖動（跟 iOS 點桌布一樣），不收
+  // 點露出的紙、點頂端把手：抖動中只結束抖動（跟 iOS 點桌布一樣），不收
   const tapOut = () => (closeMenu ? closeMenu() : editing ? setEditing(false) : dirPanel.close());
 
   const { fade } = dirPanel;
   const sheet = useAnimatedStyle(() => (calm || fade.value
     ? { opacity: p.value, transform: [{ translateY: 0 }] }
-    : { opacity: 1, transform: [{ translateY: -H * (1 - p.value) }] }));
+    : { opacity: 1, transform: [{ translateY: H * (1 - p.value) }] }));
   const dim = useAnimatedStyle(() => ({ opacity: p.value }));
 
   if (!shown) return null;
   return (
-    // 停在全開之前（正在拉、正在彈）整層不接觸控：手指還在紙的標題區上拉，不能被蓋上來的暗幕或面板搶走
+    // 停在全開之前（正在拉、正在彈）整層不接觸控：手指還在底部列上拉，不能被蓋上來的暗幕或面板搶走
     <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }, dim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={tapOut}
           accessibilityRole="button" accessibilityLabel={editing ? '完成編輯' : '收起目錄'} />
       </Animated.View>
-      <Animated.View style={[st.sheet, { height: H, backgroundColor: c.surface }, sheet]}
-        accessibilityViewIsModal onAccessibilityEscape={tapOut}>
-        <Directory move={move} padTop={insets.top + T.space.s} panelH={H} editing={editing} setEditing={setEditing}
+      <Animated.View style={[StyleSheet.absoluteFill, sheet]} pointerEvents="box-none" accessibilityViewIsModal onAccessibilityEscape={tapOut}>
+        {/* 面板的底：上緣圓角，從 dirPeek 往下鋪到底（點到面板空白處不會穿過去收起） */}
+        <View style={[st.panel, { top: T.shape.dirPeek, backgroundColor: c.surface }]} />
+        <Directory move={move} padTop={T.shape.dirPeek + T.shape.hitMin} padBottom={insets.bottom} editing={editing} setEditing={setEditing}
           onMenuOpen={fn => setCloseMenu(() => fn)} />
-        <GestureDetector gesture={push}>
-          <Pressable style={st.grabBox} onPress={tapOut} accessibilityRole="button" accessibilityLabel={editing ? '完成編輯' : '收起目錄'}>
+        <GestureDetector gesture={pull}>
+          <Pressable style={[st.grabBox, { top: T.shape.dirPeek }]} onPress={tapOut} accessibilityRole="button" accessibilityLabel={editing ? '完成編輯' : '收起目錄'}>
             <View style={[st.grab, { backgroundColor: c.textSecondary }]} />
           </Pressable>
         </GestureDetector>
@@ -314,13 +317,13 @@ export function DirPanelHost() {
   );
 }
 
-type DirProps = { move?: string; padTop: number; panelH: number; editing: boolean; setEditing: (on: boolean) => void; onMenuOpen: (close: (() => void) | null) => void };
+type DirProps = { move?: string; padTop: number; padBottom: number; editing: boolean; setEditing: (on: boolean) => void; onMenuOpen: (close: (() => void) | null) => void };
 
-function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: DirProps) {
+function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }: DirProps) {
   const s = useStore();
   const c = useColors();
   const calm = useReducedMotion();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [q, setQ] = useState('');
   const searching = !!q.trim();
 
@@ -521,7 +524,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
     haptic('menu');
     const h = (swatches ? T.shape.swatchDot + T.space.l * 2 : 0) + T.shape.menuRow * rowCount + T.space.xs * 2 + T.space.s * 2; // 一排色塊＋幾個項目（PopMenu 的藥丸版）
     const below = y + TILE + T.space.s;
-    const top = below + h <= panelH - T.space.l ? below : Math.max(padTop, y - T.space.s - h);
+    const top = below + h <= height - padBottom - T.space.l ? below : Math.max(padTop, y - T.space.s - h);
     setMenu({ id, top, x, y, w, side: x + w / 2 < width / 2 ? 'left' : 'right' });
   }
   function recolor(n: Note, k: ColorKey) {
@@ -837,8 +840,9 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
   const ghostFace = dragged ? (drag!.src ? <TileFace n={dragged.note!} w={innerW} cur={false} /> : face(dragged, tileW)) : null;
 
   return (
-    <View style={[{ flex: 1 }, (!!menu || !!openEntry?.folder) && st.above]} collapsable={false}>
-      <View style={[st.top, { paddingTop: padTop }]}>
+    // 整個螢幕那麼大（上面 padTop 那段是露出的紙和把手，box-none 讓觸控穿過去）
+    <View style={[StyleSheet.absoluteFill, { paddingBottom: padBottom }, (!!menu || !!openEntry?.folder) && st.above]} collapsable={false} pointerEvents="box-none">
+      <View style={[st.top, { marginTop: padTop }]}>
         {/* 搜尋列照 iOS 的樣子（2026-11-02 系統元件化）：淡灰膠囊、放大鏡、打字時右邊有系統的清除鈕、鍵盤右下是「搜尋」 */}
         <View style={[st.search, { backgroundColor: c.searchFill }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
@@ -940,7 +944,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
         const fRank = (id: string, k: number) => fr.get(id) ?? openEntry.notes.length + k;
         const gridH = FROWS * (TILE + GAP) - GAP;
         return (
-          <View style={[StyleSheet.absoluteFill, { bottom: -T.shape.hitMin }, st.folderWrap, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}
+          <View style={[StyleSheet.absoluteFill, st.folderWrap, folderHidden && st.hidden]} pointerEvents={folderHidden ? 'none' : 'auto'}
             accessibilityViewIsModal onAccessibilityEscape={() => setOpenF(null)}>
             {!solid && <BlurView style={StyleSheet.absoluteFill} intensity={T.shape.folderBlur} tint="default" pointerEvents="none" />}
             <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: solid ? c.folderVeil : c.folderVeilBlur }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
@@ -983,7 +987,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
       {drag && ghostFace && <DragGhost dg={dg} calm={calm}>{ghostFace}</DragGhost>}
 
       {/* 長按選單的暗幕往下多蓋一截，連目錄底部的把手一起蓋住（把手那截點了由面板收掉選單） */}
-      {menu && <View style={[StyleSheet.absoluteFill, { bottom: -T.shape.hitMin }]} pointerEvents="box-none">
+      {menu && <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {menuNote && (
         <PopMenu acts={tileActs(menuNote)} top={menu.top} side={menu.side} onClose={() => setMenu(null)}
           lifted={<Lifted x={menu.x} y={menu.y} calm={calm}><TileFace n={menuNote} w={menu.w} cur={menuNote.id === store.last} /></Lifted>}
@@ -992,7 +996,7 @@ function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: Di
       </View>}
 
       {launch && (
-        <Launch key={launch.n.id} x={launch.x} y={launch.y} w={launch.w} color={launch.n.color} title={label(launch.n)} W={width} H={panelH}
+        <Launch key={launch.n.id} x={launch.x} y={launch.y} w={launch.w} color={launch.n.color} title={label(launch.n)} W={width} H={height}
           onDone={() => dirPanel.close(undefined, true)} />
       )}
     </View>
@@ -1283,9 +1287,9 @@ function FolderName({ f, focus }: { f: Folder; focus: boolean }) {
 }
 
 const st = StyleSheet.create({
-  sheet: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden',
-    borderBottomLeftRadius: T.shape.radiusPanel, borderBottomRightRadius: T.shape.radiusPanel, ...T.shape.shadowSoft },
-  grabBox: { height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
+  panel: { position: 'absolute', left: 0, right: 0, bottom: 0,
+    borderTopLeftRadius: T.shape.radiusPanel, borderTopRightRadius: T.shape.radiusPanel, ...T.shape.shadowSoft },
+  grabBox: { position: 'absolute', left: 0, right: 0, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
   grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
   top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
   search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', gap: T.space.s,

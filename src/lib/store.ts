@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -22,6 +22,8 @@ const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
 const emit = () => box.subs.forEach(f => f());
 const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
+const ROWS_KEY = 'cn.rowsMode'; // 紙上的行用哪一套：系統清單（system）或茄記自己做的（qieji）。2026-11-02 多米要兩套都能試
+export type RowsMode = 'system' | 'qieji';
 const LAST_FREE_KEY = 'cn.lastFree'; // 最近看的那張沒釘選的（左右滑最左邊那頁，swipeSet）
 const CLOUD_OFF_KEY = 'cn.cloudOffSeen'; // 「iCloud 雲碟沒開」提示過了（只跳一次，S5）
 
@@ -72,6 +74,14 @@ export const store = {
     if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
   },
   // 最近看的那張沒釘選的：左右滑時最左邊那頁（swipeSet）。開到沒釘選的那張、或從沒釘選的那張滑走時記
+  // 行的手勢用哪一套（⋯ 選單裡切換，對照用）：預設系統清單（多米 2026-11-02 選「真的系統清單元件」）
+  get rowsMode(): RowsMode { return box.rowsMode ?? 'system'; },
+  setRowsMode(m: RowsMode) {
+    box.rowsMode = m;
+    AsyncStorage.setItem(ROWS_KEY, m).catch(() => {});
+    box.version++;
+    emit();
+  },
   get lastFree() { return box.lastFree ?? null; },
   setLastFree(id: string) {
     if (box.lastFree === id) return;
@@ -100,7 +110,8 @@ export const store = {
 
   async load() {
     if (box.loaded) return;
-    const [raw, hint, last, lastFree] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY)]);
+    const [raw, hint, last, lastFree, rows] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(ROWS_KEY)]);
+    if (rows === 'system' || rows === 'qieji') box.rowsMode = rows;
     if (box.loaded) return;
     const state = parseState(raw);
     // C1 第一次轉成座位表（🔴 動真資料）：先把整份原始存檔原封不動另存一份，只存一次（已經有就不蓋）；另存失敗這次就不轉

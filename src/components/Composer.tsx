@@ -24,8 +24,9 @@ const CHROME = T.space.s * 2;
 const KB = T.motion.keyboardFollow;
 const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
 
-export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
+export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone, onBlur }: {
   calm: boolean;
+  initial?: string; // 改一行（系統清單版點一行，2026-11-02）：框裡先放那行的字，Return＝改好收起
   maxH: number; // 整張卡最高多少（Paper 算：鍵盤頂到清單頂那段），再多在框裡捲
   onChange: (t: string) => void;
   onSubmit: () => boolean; // 回傳有沒有真的送出一行（空的會直接收起，那就不用清空、重新對焦）
@@ -43,7 +44,8 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
   // 第六版（多米 2026-11-01 真機確認「打字部分你搞定了」）：兩邊（iOS、網頁）都由隱形鏡像撐高（onChangeText 每打一個注音都會到，這一點真機量測確認了），輸入框鋪滿；
   // 鏡像與輸入框同字級、同明寫行高（INPUT_FONT），右邊多留一點點給游標；輸入框開著自己的捲動，萬一換行還是差一個字，
   // 游標所在那行也會被它自己捲出來，不會跑到看不見的地方
-  const [txt, setTxt] = useState('');
+  const [txt, setTxt] = useState(initial);
+  const fixing = initial !== '';
   const maxInput = Math.max(LINE_H, maxH - CHROME);
   // 網頁預覽的送出會先失焦（blurOnSubmit），那段期間的失焦不算「收起」；iOS 的 submitBehavior='submit' 不會失焦，這個旗標只是空轉
   const sending = useRef(false);
@@ -79,8 +81,8 @@ export function Composer({ calm, maxH, onChange, onSubmit, onDone, onBlur }: {
       <View style={s.grow}>
         <View style={{ maxHeight: maxInput }}>
           <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
-          <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint="next"
-            {...(WEB ? { blurOnSubmit: true } : null)}
+          <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint={fixing ? 'done' : 'next'}
+            {...(WEB ? { blurOnSubmit: true } : null)} defaultValue={initial}
             placeholder="記一行" placeholderTextColor={c.textMuted}
             style={[s.input, s.fill, { color: c.textPrimary }]}
             accessibilityLabel="輸入框"

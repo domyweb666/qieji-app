@@ -12,10 +12,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
-  AppState, Keyboard, Platform, Pressable, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  AppState, Keyboard, Platform, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
 } from 'react-native';
-import { GestureDetector, ScrollView, useCompetingGestures, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
+import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
@@ -35,7 +35,9 @@ import { HAS_NATIVE_MENU, NativeMenu } from './NativeMenu';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
-import { DoneBtn, Fab, GlassBtn } from './WebBars';
+import { DoneBtn, GlassBtn } from './WebBars';
+import { HAS_NATIVE_ROWS, NativeRows } from './NativeRows';
+import { PageBar } from './PageBar';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
@@ -96,6 +98,11 @@ export function Paper({ n }: { n: Note }) {
   // 底部輸入框（多米 2026-11-01）：按 ＋ 升起、在裡面打；draft＝框裡現在的字（不受控輸入框，送出或收起時才拿）
   const [composing, setComposing] = useState(false);
   const draft = useRef('');
+  // 系統清單版（2026-11-02）：點一行＝輸入框帶著那行的字升起來改（fixId），⋯ →「排順序」＝系統的編輯模式（ordering）
+  const sysRows = HAS_NATIVE_ROWS && store.rowsMode === 'system';
+  const [fixId, setFixId] = useState<string | null>(null);
+  const fixRef = useRef<string | null>(null);
+  const [ordering, setOrdering] = useState(false);
   // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行要經過點一下的手勢才會進來（捲動時手指有移動，手勢不成立）
   const [editing, setEditingState] = useState<string | null>(null);
   const editingRef = useRef<string | null>(null);
@@ -195,8 +202,25 @@ export function Paper({ n }: { n: Note }) {
     requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
-  function addLine() { if (composing) return; haptic('add'); openComposer(); }
+  function addLine() { if (composing) return; haptic('add'); fixRef.current = null; setFixId(null); openComposer(); }
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
+  // 改一行（系統清單版）：框裡先放那行的字；Return 或 ✓ 改好收起；清空了＝刪掉那行（進最近刪除，有復原）
+  function fixLine(id: string) {
+    const it = n.items.find(i => i.id === id);
+    if (!it || composing || ordering) return;
+    fixRef.current = id; setFixId(id);
+    draft.current = it.t;
+    setComposing(true);
+  }
+  function applyFix() {
+    const id = fixRef.current;
+    fixRef.current = null; setFixId(null);
+    const t = draft.current.trim(); draft.current = '';
+    const it = id ? n.items.find(i => i.id === id) : undefined;
+    if (!it) return;
+    if (!t) { remove(it.id); return; }
+    if (t !== it.t) { it.t = t; touch(); }
+  }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行，畫面捲回頂端讓你看到它（多米 2026-11-01 第八批改定：捲在下面記完畫面沒動，別人會以為壞了；
   // 推翻同日早上的「留在原地」）。動畫照 2-4：
@@ -224,6 +248,7 @@ export function Paper({ n }: { n: Note }) {
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
+    if (fixRef.current) { applyFix(); setComposing(false); return false; }
     const t = takeDraft();
     if (!t) { closeComposer(); return false; }
     addFromDraft(t);
@@ -233,6 +258,7 @@ export function Paper({ n }: { n: Note }) {
   // 輸入框卸載時，它自己的鍵盤會跟著收。
   // 乙（2026-11-01，暗幕拿掉後）：點紙上的行也會走到這裡——草稿先送出、焦點進那一行，畫面留在原地
   function closeComposer() {
+    if (fixRef.current) { applyFix(); setComposing(false); return; }
     const t = takeDraft();
     if (t) addFromDraft(t);
     setComposing(false);
@@ -537,25 +563,12 @@ export function Paper({ n }: { n: Note }) {
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
   function openDir() { Keyboard.dismiss(); dirPanel.open(); }
-  // B3：標題區（清單名、時間那行，停在分隔線）往下拉＝目錄跟著手指從上面垂下來。先左右動就不算（交給下面 B4 左右撥換張）；改名時關掉
+  // 開目錄（2026-11-02 起在底部列 PageBar）：往上滑＝目錄跟著手指從下面升起來，放手過門檻或往上甩就打開；點一下也開
   const dirP = dirPanel.p, dirH = dirPanel.h;
   const dirBegin = () => dirPanel.begin();
   const dirSettle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
   const PG = T.gesture;
-  const pull = usePanGesture({
-    enabled: !renaming,
-    activeOffsetY: PG.pullActivate,
-    failOffsetX: [-PG.pullFailX, PG.pullFailX],
-    onActivate: () => { 'worklet'; scheduleOnRN(dirBegin); },
-    // 手勢要往下動 pullActivate 才成立，扣掉它，面板才從 0 開始跟，不會先跳一格
-    onUpdate: e => { 'worklet'; dirP.value = Math.min(1, Math.max(0, (e.translationY - PG.pullActivate) / dirH.value)); },
-    onDeactivate: e => {
-      'worklet';
-      const open = !e.canceled && (e.translationY > dirH.value * PG.pullOpenRatio || e.velocityY > PG.flick);
-      scheduleOnRN(dirSettle, open, e.velocityY / dirH.value);
-    },
-  });
-  // B4：標題區左右撥＝在把手那幾張（swipeSet）之間換，手指往左＝換到右邊那張。整張紙跟著手指走（多米 2026-11-02：像 iOS 分頁一樣整頁一起換，只從標題區撥），
+  // B4：左右撥＝在頁點那幾張（swipeSet）之間換，手指往左＝換到右邊那張。2026-11-02 起只在底部列（PageBar）上撥，標題區、空白處不再接（跟行的左右滑分開）。整張紙跟著手指走（多米 2026-11-02：像 iOS 分頁一樣整頁一起換，只從標題區撥），
   // 旁邊那張的預覽（PagePreview）同時從另一邊滑進來；到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
   // 撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙（turnTo）；不夠就彈回。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
   // 最左邊那頁是 store.lastFree（最近看的那張沒釘選的）；滑走前現在這張沒釘選就先記下，取消釘選後再滑走也回得來
@@ -578,7 +591,6 @@ export function Paper({ n }: { n: Note }) {
     if (!n.pinned) store.setLastFree(n.id);
     store.open(id);
   }
-  // 標題區（swap）和紙最下面的空白處（swapBelow，多米 2026-11-02 加）同一套撥法；空白處在打字、輸入框開著、拖行時不接，免得換張把正在打的弄丟
   const swapMove = (e: { translationX: number }) => {
     'worklet';
     if (turning.value) return;
@@ -595,22 +607,38 @@ export function Paper({ n }: { n: Note }) {
     turning.value = 1;
     hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(turnTo, id); });
   };
-  const swap = usePanGesture({
-    enabled: !renaming,
-    activeOffsetX: [-PG.pullFailX, PG.pullFailX],
-    failOffsetY: [-PG.swapFailY, PG.swapFailY],
-    onUpdate: swapMove,
-    onDeactivate: swapEnd,
+  // 底部列的手勢：手指動超過 barActivate 那一刻看方向定案——橫的多＝換張（整頁跟手）、往上＝拉出目錄（面板跟手）、往下＝不做事。
+  // 以前標題區是「往下拉」和「左右撥」兩個手勢比誰的門檻先到，斜著動結果靠運氣；現在只有一個手勢、看角度，不會兩個都成立
+  const barMode = useSharedValue(0); // 0 沒定、1 換張、2 開目錄、3 往下（不做事）
+  const barPan = usePanGesture({
+    enabled: !renaming && !ordering,
+    minDistance: PG.barActivate,
+    onActivate: () => { 'worklet'; barMode.value = 0; },
+    onUpdate: e => {
+      'worklet';
+      // 方向在手指真的動夠了那一刻定（成立那一刻的位移有的平台還是 0）
+      if (barMode.value === 0) {
+        const ax = Math.abs(e.translationX), ay = Math.abs(e.translationY);
+        if (Math.max(ax, ay) < PG.barActivate) return;
+        barMode.value = ax >= ay ? 1 : e.translationY < 0 ? 2 : 3;
+        if (barMode.value === 2) scheduleOnRN(dirBegin);
+      }
+      if (barMode.value === 1) swapMove(e);
+      // 扣掉起步那段，面板才從 0 開始跟，不會先跳一格
+      else if (barMode.value === 2) dirP.value = Math.min(1, Math.max(0, (-e.translationY - PG.barActivate) / dirH.value));
+    },
+    onDeactivate: e => {
+      'worklet';
+      if (barMode.value === 1) swapEnd(e);
+      else if (barMode.value === 2) {
+        const open = !e.canceled && (-e.translationY > dirH.value * PG.pullOpenRatio || -e.velocityY > PG.flick);
+        scheduleOnRN(dirSettle, open, -e.velocityY / dirH.value);
+      }
+      barMode.value = 0;
+    },
   });
-  const swapBelow = usePanGesture({
-    enabled: !renaming && !composing && editing === null && !dragging,
-    activeOffsetX: [-PG.pullFailX, PG.pullFailX],
-    failOffsetY: [-PG.swapFailY, PG.swapFailY],
-    onUpdate: swapMove,
-    onDeactivate: swapEnd,
-  });
-  // 往下拉（開目錄）跟左右撥（換張）先成立的那個贏，另一個當場作廢
-  const head = useCompetingGestures(pull, swap);
+  // VoiceOver 的上下滑（可調整元素）：直接換到旁邊那張
+  function step(d: -1 | 1) { const id = d > 0 ? nextId : prevId; if (id) openNote(id); }
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
     if (n.color === k) return;
@@ -649,8 +677,23 @@ export function Paper({ n }: { n: Note }) {
         } });
       } },
     ] },
+    // 系統清單版：排順序進系統的編輯模式（右邊 ≡ 拖、左邊紅色 − 刪除），右上 ✓ 結束
+    { label: '排順序', icon: 'line.3.horizontal', hidden: !sysRows || n.items.length < 2, fn: () => { Keyboard.dismiss(); setOrdering(true); } },
+    // 兩套行的手勢都能試（多米 2026-11-02：「我測試後再看看哪個好」），iOS 有系統清單的原生碼才出現
+    { label: '行的操作', icon: 'hand.draw', hidden: !HAS_NATIVE_ROWS, sub: [
+      { label: '系統清單', on: store.rowsMode === 'system', fn: () => { setOrdering(false); store.setRowsMode('system'); } },
+      { label: '茄記版', on: store.rowsMode === 'qieji', fn: () => { setOrdering(false); store.setRowsMode('qieji'); } },
+    ] },
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
+
+  // 空紙：兩行灰字指到右下角的 ＋（茄子插圖多米 2026-11-01 拿掉）
+  const emptyView = (
+    <View style={st.empty}>
+      <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
+      <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
+    </View>
+  );
 
   // 紙底下那行手勢提示（點一下改字 · 右滑劃掉 · 左滑刪除 · 按住更多）2026-11-01 拿掉：第一次安裝放的教學紙（model.ts TUTORIAL）取代它
 
@@ -661,7 +704,6 @@ export function Paper({ n }: { n: Note }) {
       {/* 最上面一行：清單名（⋯ 裡的「改名字」才會變成可以打字，點清單名不會；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
-      <GestureDetector gesture={head}>
       <View collapsable={false}>
       <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
         <View style={st.titleSlide}>
@@ -697,6 +739,8 @@ export function Paper({ n }: { n: Note }) {
         {/* 在行裡或清單名裡打字時才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。
             看「哪一格在編輯」不看 composing：按輸入框的 ✓ 收起時框先收、鍵盤晚一兩格才開始收，看 composing 會在那幾格閃出一顆 ✓ */}
         {kbUp && (editing !== null || renaming) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
+        {/* 系統清單版排順序中：右上 ✓ 結束（跟系統「完成」同一個位置） */}
+        {ordering && !kbUp && <DoneBtn onPress={() => setOrdering(false)} label="排好了" />}
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
@@ -705,25 +749,34 @@ export function Paper({ n }: { n: Note }) {
           <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
         </View>
-        <SegHandle notes={swapSet} cur={n} color={c.textSecondary} onPress={openDir} />
       </View>
       </View>
-      </GestureDetector>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
         onLayout={() => boxRef.current?.measureInWindow((x, y, w, h) => { view.current.top = y; view.current.h = h; below.value = Math.max(0, winH - (y + h)); })}>
-        {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
+        {sysRows ? (
+          n.items.length === 0 ? emptyView : (
+            <NativeRows items={n.items.slice()} colors={c} bg={nc.bg} rule={nc.rule} ordering={ordering}
+              style={{ flex: 1, marginBottom: T.shape.barH + insets.bottom + T.space.s * 2 }}
+              onTap={fixLine} onStrike={strike} onRemove={remove}
+              onMoveTo={id => { Keyboard.dismiss(); dirPanel.open(id); }}
+              onCopy={id => { const it = n.items.find(i => i.id === id); if (it) Clipboard.setStringAsync(it.t).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); }}
+              onMove={(from, dest) => {
+                // 系統給的目的地是「拿掉之前」的位置：往下搬要減一
+                const to = from < dest ? dest - 1 : dest;
+                if (from === to || !n.items[from]) return;
+                const [m] = n.items.splice(from, 1);
+                n.items.splice(to, 0, m);
+                touch();
+              }} />
+          )
+        ) : (
+        /* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled}
           scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
-          {/* 空紙：兩行灰字指到右下角的 ＋（茄子插圖多米 2026-11-01 拿掉） */}
-          {n.items.length === 0 && (
-            <View style={st.empty}>
-              <Text style={[st.emptyText, { color: c.textSecondary }]}>這張還是空的</Text>
-              <Text style={[st.emptyText, { color: c.textSecondary }]}>點右下角的 ＋ 記一行</Text>
-            </View>
-          )}
+          {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             {n.items.map((it, index) => (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
@@ -747,18 +800,19 @@ export function Paper({ n }: { n: Note }) {
             ))}
           </LayoutAnimationConfig>
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次。行不多時撐滿到底（contentContainerStyle flexGrow），
-              整塊空白都能左右撥換張（swapBelow，多米 2026-11-02） */}
-          <GestureDetector gesture={swapBelow}>
-            <View style={{ flexGrow: 1, minHeight: 200 + kbPad + insets.bottom }} collapsable={false} />
-          </GestureDetector>
+              （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
+          <View style={{ flexGrow: 1, minHeight: 200 + kbPad + insets.bottom }} collapsable={false} />
         </ScrollView>
+        )}
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
           2-4 做法 6；多米 2026-11-01 說 ✓ 之後 ＋ 回來的時間點不對：之前等鍵盤完全收完才淡進，比鍵盤晚一拍）。
           鍵盤膠囊（∧ ∨ ＋ ✓）2026-11-01 多米定拿掉：輸入框旁邊就有 ✓，行裡打字要收鍵盤點空白處或空行按 Return */}
       <Animated.View style={[StyleSheet.absoluteFill, fabStill]} pointerEvents="box-none">
-        {!kbUp && !composing && <Fab onPress={addLine} label="新增一行" />}
+        {!kbUp && !composing && !ordering && (
+          <PageBar notes={swapSet} cur={n} name={name} pan={barPan} onOpen={openDir} onStep={step} onAdd={addLine} />
+        )}
       </Animated.View>
 
       {/* 輸入框（多米 2026-11-01，第四版＝乙）：框貼在鍵盤上面、跟著鍵盤一起升降，框與鍵盤同一個時鐘（keyboardFollow）。
@@ -773,7 +827,7 @@ export function Paper({ n }: { n: Note }) {
       {composing && (
         <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
           {/* maxH：框最高長到清單頂（標題列與時間列下面），再多才在框裡捲（多米 2026-11-01：打十幾行也要能沉浸，不要三行就捲） */}
-          <Composer calm={calm} maxH={winH - Math.max(kbPad, insets.bottom) - view.current.top - T.space.s * 2}
+          <Composer key={fixId ?? 'new'} initial={fixId ? (n.items.find(i => i.id === fixId)?.t ?? '') : ''} calm={calm} maxH={winH - Math.max(kbPad, insets.bottom) - view.current.top - T.space.s * 2}
             onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
         </Animated.View>
       )}
@@ -821,7 +875,6 @@ const PagePreview = memo(function PagePreview({ n, side, set }: { n: Note; side:
           <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
         </View>
-        <SegHandle notes={set} cur={n} color={c.textSecondary} onPress={NOOP} />
       </View>
       <View style={st.previewBody}>
         {n.items.length === 0 ? (
@@ -873,20 +926,6 @@ type LineProps = {
   onEdit: (caret?: number, y?: number) => void; // caret＝游標要落在第幾個字（點一下的位置換算來的）；沒給就落在行尾。y＝點在這行的哪個高度
   drag: { start: (id: string) => void; end: () => void };
 };
-
-// 標題區下面的分段把手（B2）：一段＝標題區換得到的一張；現在這張拉長成一條，其他是淡的小圓點（多米 2026-11-02，像番茄鐘 App 的頁點）。
-// 點了開目錄（往下拉是 B3 的捷徑，這裡是看得見的入口）
-function SegHandle({ notes, cur, color, onPress }: { notes: Note[]; cur: Note; color: string; onPress: () => void }) {
-  return (
-    <Pressable style={({ pressed }) => [st.handle, pressed && { opacity: T.motion.pressDim }]} onPress={onPress}
-      hitSlop={T.shape.handleSlop} accessibilityRole="button" accessibilityLabel="全部清單" accessibilityHint="打開目錄">
-      {notes.map(x => (
-        <View key={x.id} style={[st.seg, { backgroundColor: color },
-          notes.length === 1 ? { width: T.shape.handleSolo } : x === cur ? { width: T.shape.handleSeg } : st.segDot]} />
-      ))}
-    </Pressable>
-  );
-}
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
 // 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
@@ -1179,10 +1218,7 @@ const st = StyleSheet.create({
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
   timeBox: { paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  handle: { alignSelf: 'center', flexDirection: 'row', gap: T.shape.handleGap, marginTop: T.space.xs },
   scrollFill: { flexGrow: 1 },
-  seg: { width: T.shape.handleSeg, height: T.shape.handleH, borderRadius: T.shape.pill(T.shape.handleH) },
-  segDot: { width: T.shape.handleH, opacity: T.shape.handleOff }, // 不是現在這頁：小圓點（寬＝高）
   timeText: { ...T.font.footnote },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）
