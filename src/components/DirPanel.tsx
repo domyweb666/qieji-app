@@ -30,7 +30,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
-  col, dropNotes, folderOf, intoFolder, isEmpty, label, markDeleted, markRestored, moveItem, newBreak, newFolder, outOfFolder, placeInFolder,
+  col, dropNotes, folderOf, intoFolder, isBreak, isEmpty, isHole, label, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
   placeTop, renameFolder, reseat, searchLines, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
@@ -68,11 +68,17 @@ const MENU_LIFT = M.menuLift.scale; // 長按選單時那塊浮起來放大的�
 const TURN_RATIO = G.pageTurnRatio, TURN_FLICK = G.swapFlick, EDGE_FOLLOW = G.swapEdge;
 function slotX(k: number, w: number) { 'worklet'; return (k % 2) * (w + GAP); }
 function slotY(k: number) { 'worklet'; return Math.floor(k / 2) * (TILE + GAP); }
-// 一個點（相對格子左上角）落在第幾格：兩欄、磚高 TILE、間距 GAP（D4 起拖曳都用螢幕座標算）
-function slotIn(lx: number, ly: number, w: number, count: number) {
+// 一個點（相對格子左上角）落在第幾格：兩欄、磚高 TILE、間距 GAP（D4 起拖曳都用螢幕座標算）；在格子上面回 −1
+function cellAt(lx: number, ly: number, w: number) {
   'worklet';
-  const k = Math.max(0, Math.floor(ly / (TILE + GAP))) * 2 + (lx < w + GAP / 2 ? 0 : 1);
-  return Math.min(Math.max(0, count - 1), k);
+  if (ly < 0) return -1;
+  return Math.floor(ly / (TILE + GAP)) * 2 + (lx < w + GAP / 2 ? 0 : 1);
+}
+// 這頁第 k 格是不是空位（holes 是位元表：第 k 格是空位，第 k 位就是 1）。位元運算是 32 位元，只記得前 HOLE_BITS 格，手機一頁不會那麼多格
+const HOLE_BITS = 31;
+function holeAt(holes: number, k: number) {
+  'worklet';
+  return k >= 0 && k < HOLE_BITS && ((holes >> k) & 1) === 1;
 }
 // 拖著那塊（左上 ax、ay）跟一塊磚（左上 bx、by）一樣大（w×TILE），重疊的面積佔一塊磚的幾成
 function overlap(ax: number, ay: number, bx: number, by: number, w: number) {
@@ -87,22 +93,23 @@ function overlap(ax: number, ay: number, bx: number, by: number, w: number) {
 // fopen＝資料夾開著在對準；bx…bh＝資料夾框；svx、svy＝框裡格子那層的位置；fsy＝框裡捲下去多少；fcount、flast＝資料夾裡幾格、讓出來的是第幾格；
 // ready＝這次拿起後 JS 把格子位置、資料夾開沒開寫好了（拿起那一刻手勢先跑、JS 晚一步，寫好之前不算瞄哪）；
 // gcap＝這頁最多幾格；fold＝拖的是資料夾（不能疊）；fpg＝打開的資料夾現在在第幾頁；fedge＝在資料夾框的左右邊（停一下翻頁）；
-// sink＝疊上去放手時縮小淡掉（0→1）（2026-11-02）
+// sink＝疊上去放手時縮小淡掉（0→1）（2026-11-02）；holes＝這頁哪幾格是空位（位元表，見 holeAt；2026-11-03 自由擺放）
 type DG = Record<'x0' | 'y0' | 'dx' | 'dy' | 'sw' | 'lift' | 'edge' | 'aim' | 'stackK' | 'gx' | 'gy' | 'gcount' | 'glast' | 'gcap' | 'fold'
-  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink', SharedValue<number>>;
+  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink' | 'holes', SharedValue<number>>;
 function useDG(): DG {
   return {
-    gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0),
+    gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0), holes: useSharedValue(0),
     x0: useSharedValue(0), y0: useSharedValue(0), dx: useSharedValue(0), dy: useSharedValue(0), sw: useSharedValue(0), lift: useSharedValue(0),
     edge: useSharedValue(0), aim: useSharedValue(0), stackK: useSharedValue(-1), gx: useSharedValue(0), gy: useSharedValue(0),
     gcount: useSharedValue(1), glast: useSharedValue(-1), fopen: useSharedValue(0), bx: useSharedValue(0), by: useSharedValue(0),
     bw: useSharedValue(0), bh: useSharedValue(0), fcount: useSharedValue(1), flast: useSharedValue(0), ready: useSharedValue(0),
   };
 }
-// aim 的編碼（2026-11-02 改成看重疊）：k≥0＝跟這頁第 k 格那張互換；−k−1＝準備疊到第 k 格那張；END_AIM＝這頁最後一張後面的空格（排到最後）；
+// aim 的編碼（2026-11-02 改成看重疊）：k≥0＝跟這頁第 k 格那張互換；−k−1＝準備疊到第 k 格那張；CELL_AIM−k＝放進這頁第 k 格的空格
+// （空位，或最後一張後面、這頁還放得下的格子；2026-11-03 自由擺放，取代原本的「排到最後」）；
 // FOLDER_AIM＋i＝跟資料夾裡第 i 張互換；FOLDER_END＝資料夾這頁的空格（排到最後）；AIM_OUT＝資料夾開著、手指在框外（停一下收起）；
 // AIM_NONE＝什麼都不做（重疊太少、還沒量好）
-const FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000, END_AIM = -300000, FOLDER_END = -400000;
+const FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000, FOLDER_END = -400000, CELL_AIM = -500000;
 // 打開的資料夾裡第 i 張的左上角（螢幕座標，扣掉翻到第幾頁）
 function folderSlot(i: number, dg: DG, fw: number) {
   'worklet';
@@ -133,9 +140,13 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
     const kk = Math.max(0, Math.min(FROWS - 1, Math.floor((cy - dg.by.value - FPAD) / (TILE + GAP)))) * 2 + (cx - dg.bx.value - FPAD < fw + GAP / 2 ? 0 : 1);
     return first + kk >= dg.fcount.value ? FOLDER_END : AIM_NONE;
   }
+  // 中心落在空格（這頁的空位，或最後一張後面、這頁還放得下的格子）：放進那格（2026-11-03 自由擺放，照 iOS 放哪停哪）。
+  // 先看這個：中心在空格裡就是要放這裡，旁邊那張被蓋到一點也不算疊
+  const c = cellAt(cx - dg.gx.value, cy - dg.gy.value, gw);
+  if (c >= 0 && c !== dg.glast.value && (c < dg.gcount.value ? holeAt(dg.holes.value, c) : c < dg.gcap.value)) return CELL_AIM - c;
   let best = -1, br = 0;
   for (let k = 0; k < dg.gcount.value; k++) {
-    if (k === dg.glast.value) continue;
+    if (k === dg.glast.value || holeAt(dg.holes.value, k)) continue; // 空位沒東西，不能疊、不用換
     const r = overlap(ax, ay, dg.gx.value + slotX(k, gw), dg.gy.value + slotY(k), gw);
     if (r > br) { br = r; best = k; }
   }
@@ -144,13 +155,8 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
     // 已經準備疊這張：掉到 MERGE_HOLD 以下才取消，手晃一下不會丟掉
     const holding = dg.aim.value === -best - 1;
     if (!dg.fold.value && (br >= MERGE || (holding && br >= MERGE_HOLD))) return -best - 1;
-    if (br >= MERGE) return AIM_NONE;
   }
-  // 中心落在這頁最後一張後面的空格：排到最後
-  const ly = cy - dg.gy.value;
-  if (ly < 0) return AIM_NONE;
-  const k = Math.floor(ly / (TILE + GAP)) * 2 + (cx - dg.gx.value < gw + GAP / 2 ? 0 : 1);
-  return k >= dg.gcount.value && k < dg.gcap.value ? END_AIM : AIM_NONE;
+  return AIM_NONE;
 }
 
 // 目錄的磚、資料夾裡的磚共用的拖（D4）：長按後一拖（抖動中直接拖）拿起來；手指每動一格算一次瞄著哪，變了才回 JS 計時讓位／疊／開關資料夾；
@@ -363,15 +369,17 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // 打開的資料夾裡兩欄：框左右各留 l、框裡再留 l
   const innerW = (width - T.space.l * 4 - T.space.m) / 2;
 
-  // 拖的那塊（C4、C5、D4）：id＝拖的紙或資料夾；src＝從哪個資料夾拿起（null＝目錄）；page＝現在看的那頁；
-  // to＝目錄裡讓出來那格（整排的第幾個）；from＝拿起時在目錄的第幾個；inF＝現在對準哪個打開的資料夾（null＝對準目錄）；
-  // fto＝資料夾裡讓出來那格；k0＝從資料夾拿起時在第幾格。
-  // 2026-11-02：brk＝拖到最後一頁右邊緣開的新一頁（新換頁標記的 id，拖的那張排在它後面）；
-  // order、forder＝拖的途中互換過之後，目錄、資料夾裡其他格的順序（互換：只有那兩張動，不是插隊，多米 2026-11-02）
+  // 拖的那塊（C4、C5、D4）：id＝拖的紙或資料夾；src＝從哪個資料夾拿起（null＝目錄）；page＝現在看的那頁；inF＝現在對準哪個打開的資料夾（null＝對準目錄）；
+  // fto＝資料夾裡讓出來那格；k0＝從資料夾拿起時在第幾格；forder＝拖的途中互換過之後，資料夾裡其他格的順序（互換：只有那兩張動，多米 2026-11-02）。
+  // cells＝目錄這一排的格子表（2026-11-03 自由擺放，取代原本的 to、from、order、brk）：紙、資料夾、空位、換頁標記的 id 照格子排，拖的那張在 ME 那格。
+  // 拖的那張永遠只佔一格：放到空格＝跟那個空位對調（原本那格變空位，別張不往前補，照 iOS）；放到別張上＝兩張對調（11/02 定的互換）；
+  // 拖到最後一頁右邊緣＝原本那格變空位、最後面接換頁標記和這張（新的一頁）。從資料夾拿起、手指還在資料夾裡時是 null（目錄不多一格）。
   // home＝從格子拿起時在第幾頁：拖的那塊磚身上有手勢，換到別頁時不能跟著搬（搬了就重掛、手勢斷掉，放手沒反應），所以它一直留在這頁（藏起來、不佔位），
   // 別頁只畫一個空位（2026-11-02 網頁實測抓到：拖到別頁放手沒反應）
-  type Drag = { id: string; src: string | null; page: number; to: number; from: number; inF: string | null; fto: number; k0: number; brk?: string | null; home?: number;
-    order?: string[]; forder?: string[] };
+  type Drag = { id: string; src: string | null; page: number; cells: string[] | null; inF: string | null; fto: number; k0: number; home?: number; forder?: string[] };
+  // 格子表裡代表「拖的那張」的那格；cell＝這格在格子表裡記成什麼（資料夾拿出來只剩一張、先畫成那張時，格子表裡還是記資料夾）
+  const ME = '@';
+  type GEntry = Entry & { cell?: string };
   // 照 ids 的先後排 list（ids 裡沒有的排最後、維持原本先後）
   const byOrder = <X extends { id: string }>(list: X[], ids?: string[]) => {
     if (!ids) return list;
@@ -389,31 +397,30 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     const n = store.s.notes.find(x => x.id === d.id);
     return n ? { id: n.id, note: n, notes: [n] } : undefined;
   };
-  // 拖的時候目錄這一排：拖的那張先從原本的地方拿掉（資料夾裡的從那格資料夾拿掉，拿光了資料夾那格也拿掉），
-  // 再放進讓出來的那格。從資料夾拿起、手指還在資料夾裡時，目錄不多一格
-  const flatOf = (d: Drag, list = entriesRef.current): Entry[] => {
-    const base: Entry[] = [];
-    for (const e of list) {
-      if (e.id === d.id) continue;
+  // 拖的時候目錄這一排：照格子表排（拖的那張在 ME 那格）；格子表是 null（從資料夾拿起、手指還在資料夾裡）就照原本的排法、目錄不多一格。
+  // 從資料夾拿起的：那格資料夾拿掉這張，拿出來只剩一張就先畫成那張（放手時 model 的 dissolveIfOne 也這樣拆，照 iOS）。
+  // 最後面的空位、換頁標記不算（那頁空了就不畫，例如新開的一頁又被拖回去）
+  const flatOf = (d: Drag, list = entriesRef.current): GEntry[] => {
+    const byId = new Map(list.map(e => [e.id, e] as const));
+    const me = dragEntryOf(d, list);
+    const out: GEntry[] = [];
+    for (const id of d.cells ?? list.map(e => e.id)) {
+      if (id === ME) { if (me) out.push(me); continue; }
+      const e: Entry | undefined = byId.get(id) ?? (isHole(id) ? { id, notes: [], hole: true } : isBreak(id) ? { id, notes: [], brk: true } : undefined);
+      if (!e || e.id === d.id) continue;
       if (e.folder && e.id === d.src) {
         const rest = e.notes.filter(n => n.id !== d.id);
-        // 拖出資料夾、只剩一張：資料夾那格先變回那張（放手時 model 的 dissolveIfOne 也這樣拆，照 iOS）
-        if (rest.length === 1 && !d.inF) base.push({ id: rest[0].id, note: rest[0], notes: rest });
-        else if (rest.length) base.push({ ...e, notes: rest });
+        if (rest.length === 1 && !d.inF) out.push({ id: rest[0].id, note: rest[0], notes: rest, cell: e.id });
+        else if (rest.length) out.push({ ...e, notes: rest });
         continue;
       }
-      base.push(e);
+      out.push(e);
     }
-    const sorted = byOrder(base, d.order);
-    base.splice(0, base.length, ...sorted);
-    if (d.src && d.inF) return base;
-    const me = dragEntryOf(d, list);
-    if (!me) return base;
-    // 新的一頁：換頁標記接在最後，拖的那張是那頁唯一一張
-    if (d.brk) { base.push({ id: d.brk, notes: [], brk: true }, me); return base; }
-    base.splice(Math.min(d.to, base.length), 0, me);
-    return base;
+    while (out.length && (out[out.length - 1].hole || out[out.length - 1].brk)) out.pop();
+    return out;
   };
+  // 排好的這一排換回格子表（拖的那張記成 ME）
+  const cellsOf = (d: Drag, F: GEntry[]) => F.map(e => (e.id === d.id ? ME : e.cell ?? e.id));
   // 打開的資料夾裡排出來的紙：拖進來的放在讓出來那格；從這個資料夾拿起、已經拖到外面的留在原位不顯示（那塊磚身上有手勢，不能拿掉）
   const folderNotes = (e: Entry, d: Drag | null): Note[] => {
     if (!d) return e.notes;
@@ -448,15 +455,30 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const pages: Entry[][] = pageIdx.map(pg => pg.map(i => gridList[i]));
   const pageCount = useRef(pages.length);
   pageCount.current = pages.length;
-  // 拖到第 pg 頁第 k 格，拖的那張要插在（拿掉它之後的）整排第幾個：那格有別張＝插在那張的位置（從前面來的會排到它後面、它往前讓）；
-  // 那頁最後一張後面＝接在最後一張後面。跟原本「頁首＋k」一樣的意思，只是頁首改成看換頁標記
-  function toFor(d: Drag, pg: number, k: number) {
+  // 第 pg 頁最多幾格（第一頁最上面一列是「新的一張」）
+  const capOf = (pg: number) => (pg === 0 ? (rows - 1) * 2 : rows * 2);
+  // 拖的那張放進第 pg 頁第 k 格（2026-11-03 自由擺放）：那格是空位＝跟空位對調（原本那格變空位）；那格有別張＝兩張對調（11/02 定的互換）；
+  // 那頁最後一張後面、這頁還放得下的格子＝中間補空位再放進去，原本那格變空位。放不進去（同一格、超過這頁、那頁不存在）回 null
+  function placeAt(d: Drag, pg: number, k: number): string[] | null {
     const F = flatOf(d), P = paginate(F)[pg] ?? [];
-    const me = F.findIndex(e => e.id === d.id && !e.brk);
-    if (k < P.length) return P[k];
-    if (!P.length) return d.to;
-    const j = P[P.length - 1] + 1;
-    return me >= 0 && j > me ? j - 1 : j;
+    const cells = cellsOf(d, F), m = cells.indexOf(ME);
+    if (m < 0) return null;
+    if (k < P.length) {
+      const j = P[k];
+      if (j === m) return null;
+      [cells[m], cells[j]] = [cells[j], cells[m]];
+      return cells;
+    }
+    if (!P.length || k >= capOf(pg)) return null;
+    const end = P[P.length - 1] + 1;
+    cells[m] = newHole();
+    cells.splice(end, 0, ...Array.from({ length: k - P.length }, () => newHole()), ME);
+    return cells;
+  }
+  // 第 pg 頁第一個空格：空位，或最後一張後面（這頁還放得下）。沒有回 −1
+  function firstEmpty(F: GEntry[], P: number[], pg: number) {
+    const i = P.findIndex(j => F[j].hole);
+    return i >= 0 ? i : P.length < capOf(pg) ? P.length : -1;
   }
   // 第 i 頁格子左上角的螢幕位置：頁的上緣留白 s、第一頁多一列「新的一張」、格子的 marginTop m
   const gyOf = (i: number) => pagerY.current + T.space.s + (i === 0 ? TILE : 0) + T.space.m;
@@ -507,10 +529,11 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     const flat = flatOf(d), P = paginate(flat)[d.page] ?? [];
     dg.gy.value = gyOf(d.page);
     dg.gcount.value = Math.max(1, P.length);
-    dg.gcap.value = d.page === 0 ? (rows - 1) * 2 : rows * 2;
+    dg.gcap.value = capOf(d.page);
     dg.fold.value = dragEntryOf(d)?.folder ? 1 : 0;
-    // 讓出來那格在這頁第幾格（拖的那張在不在這頁）
-    dg.glast.value = P.findIndex(i => flat[i].id === d.id && !flat[i].brk);
+    // 拖的那張在這頁第幾格（不在這頁＝−1）；這頁哪幾格是空位
+    dg.glast.value = P.findIndex(i => flat[i].id === d.id);
+    dg.holes.value = P.reduce((bits, i, k) => (flat[i].hole && k < HOLE_BITS ? bits | (1 << k) : bits), 0);
     const fe = d.inF ? entriesRef.current.find(e => e.id === d.inF) : undefined;
     if (fe) { dg.fcount.value = Math.max(1, folderNotes(fe, d).length); dg.flast.value = d.fto; }
   }
@@ -606,9 +629,12 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     haptic('menu');
     setEditing(true);
   }
-  // VoiceOver 的「往前移／往後移」：拖不了時的替代路徑（行的排順序也這樣做）。D1：資料夾磚也算一格
+  // VoiceOver 的「往前移／往後移」：拖不了時的替代路徑（行的排順序也這樣做）。D1：資料夾磚也算一格。
+  // 2026-11-03 起照整排格子換（含空位）：前後那格是空位就搬進去、原本那格變空位；換頁標記跳過（reseat 要整排，見 model）
   function moveBy(n: { id: string }, d: -1 | 1) {
-    const ids = seatedEntries(store.s).map(x => x.id), i = ids.indexOf(n.id), to = i + d;
+    const ids = seatedLayout(store.s).map(x => x.id), i = ids.indexOf(n.id);
+    let to = i + d;
+    while (to >= 0 && to < ids.length && isBreak(ids[to])) to += d;
     if (i < 0 || to < 0 || to >= ids.length) return;
     [ids[i], ids[to]] = [ids[to], ids[i]];
     reseat(store.s, ids); store.change();
@@ -619,8 +645,8 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     setMenu(null); setEditing(true);
     entered.current = true;
     dg.gx.value = T.space.l; dg.fopen.value = 0;
-    const at = pageIdx[pg]?.[k] ?? k; // 這張在整排（含換頁標記）的第幾個
-    setD({ id, src: null, page: pg, to: at, from: at, inF: null, fto: -1, k0: -1, home: pg });
+    // 格子表照現在的排法，拖的那張那格記成 ME（k、pg 只用來記從哪頁拿起）
+    setD({ id, src: null, page: pg, cells: entries.map(e => (e.id === id ? ME : e.id)), inF: null, fto: -1, k0: -1, home: pg });
     dg.ready.value = 1; // 格子位置寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
@@ -629,7 +655,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     setMenu(null); Keyboard.dismiss(); setEditing(true);
     entered.current = true;
     dg.gx.value = T.space.l; dg.fopen.value = 1;
-    setD({ id: n.id, src: fid, page, to: 0, from: -1, inF: fid, fto: k, k0: k });
+    setD({ id: n.id, src: fid, page, cells: null, inF: fid, fto: k, k0: k });
     dg.ready.value = 1; // 資料夾開著、格數寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
@@ -637,22 +663,26 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     if (dg.stackK.value >= 0) dg.stackK.value = -1;
     if (stackRef.current) setStackOn(null);
   }
-  // 手指離開資料夾框夠久：資料夾收起，回到目錄繼續拖。從資料夾拿起的先排在資料夾後面一格（拿光了就排在資料夾原本的位置）
+  // 手指離開資料夾框夠久：資料夾收起，回到目錄繼續拖。從資料夾拿起的先放到這頁第一個空格（2026-11-03 自由擺放：空位或最後一張後面），
+  // 這頁滿了才排在資料夾後面一格（後面的往後推）
   function springClose() {
     leaveT.current = undefined;
     const d = dragRef.current;
     if (!d || !d.inF) return;
     dg.fopen.value = 0;
-    let to = d.to;
+    let cells = d.cells;
     if (d.src) {
-      const i = entriesRef.current.findIndex(e => e.id === d.src);
-      const rest = (entriesRef.current[i]?.notes.length ?? 1) - 1;
-      to = rest > 0 ? i + 1 : Math.max(0, i);
+      const out = { ...d, inF: null, cells: null };
+      const F = flatOf(out), P = paginate(F)[d.page] ?? [], k = firstEmpty(F, P, d.page);
+      cells = cellsOf(out, F);
+      if (k >= 0 && k < P.length) cells[P[k]] = ME;
+      else if (k >= 0 && P.length) cells.splice(P[P.length - 1] + 1, 0, ME);
+      else { const i = cells.indexOf(d.src); cells.splice(i >= 0 ? i + 1 : cells.length, 0, ME); }
     } else {
       setOpenF(null);
       dg.bw.value = 0;
     }
-    setD({ ...d, inF: null, to });
+    setD({ ...d, inF: null, cells });
     haptic('dragPass');
     // 手指不動也先對一次目錄的格子
     // 資料夾剛收起（fopen 0），只對目錄的格子，用不到手指的位置；給磚的中心就好
@@ -662,7 +692,8 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     onAim(a);
   }
   // 瞄的地方變了（2026-11-02 改成看重疊，原型對過）：先取消還在等的互換／疊、縮回放大的那塊。
-  // 目錄：重疊過半停 swapDwell＝跟那張互換；兩成到一半停 stackHover＝那張放大（放手就縮進去；資料夾不打開）；空格停 swapDwell＝排到最後。
+  // 目錄：重疊過半停 swapDwell＝跟那張互換；兩成到一半停 stackHover＝那張放大（放手就縮進去；資料夾不打開）；
+  // 中心在空格裡停 swapDwell＝放進那格（2026-11-03 自由擺放：原本那格留空位）。
   // 資料夾裡：重疊過三成停 swapDwell＝互換；框外停 folderLeave＝收起
   function onAim(a: number) {
     clearTimeout(aimT.current);
@@ -694,27 +725,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       }, T.timing.swapDwell);
       return;
     }
-    if (d.brk) return; // 新開的那頁只有它自己
-    if (a === END_AIM) {
+    if (a <= CELL_AIM || a >= 0) {
+      // 放進空格（CELL_AIM−k）或跟第 a 格那張互換（多米 2026-11-02：拖的那張跟底下那張對調，其他都不動）：都是 placeAt
+      const k = a >= 0 ? a : CELL_AIM - a;
       aimT.current = setTimeout(() => {
         const cur = dragRef.current;
-        if (!cur || cur.brk) return;
-        const P = paginate(flatOf(cur))[cur.page] ?? [];
-        const to = toFor(cur, cur.page, P.length);
-        if (to !== cur.to) { setD({ ...cur, to }); haptic('dragPass'); }
-      }, T.timing.swapDwell);
-      return;
-    }
-    if (a >= 0) {
-      aimT.current = setTimeout(() => {
-        const cur = dragRef.current;
-        if (!cur || cur.brk) return;
-        // 互換（多米 2026-11-02）：拖的那張跟底下那張對調，其他都不動
-        const F = flatOf(cur), j = (paginate(F)[cur.page] ?? [])[a], m = F.findIndex(e => e.id === cur.id && !e.brk);
-        if (j === undefined || m < 0 || j === m) return;
-        const sw = F.slice();
-        [sw[m], sw[j]] = [sw[j], sw[m]];
-        setD({ ...cur, order: sw.filter(e => e.id !== cur.id).map(e => e.id), to: j });
+        const cells = cur?.cells ? placeAt(cur, cur.page, k) : null;
+        if (!cur || !cells) return;
+        setD({ ...cur, cells });
         haptic('dragPass');
       }, T.timing.swapDwell);
       return;
@@ -731,28 +749,38 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     edgeT.current = setTimeout(function flip() {
       const d = dragRef.current;
       const np = d ? d.page + z : -1;
-      if (!d || d.inF || np < 0 || dg.edge.value !== z) return;
+      if (!d || d.inF || !d.cells || np < 0 || dg.edge.value !== z) return;
       clearTimeout(aimT.current);
       unstack();
+      const F = flatOf(d);
       if (np >= pageCount.current) {
-        // 最後一頁再往右（2026-11-02，多米選照 iOS）：這頁還有別張才開新的一頁，拖的那張是新頁唯一一張；新頁裡已經是自己了就不再開
-        const F = flatOf(d), here = (paginate(F)[d.page] ?? []).filter(i => F[i].id !== d.id);
-        if (!here.length || d.brk) return;
+        // 最後一頁再往右（2026-11-02，多米選照 iOS）：這頁還有別張才開新的一頁（空位不算），拖的那張是新頁唯一一張；新頁裡已經是自己了就不再開。
+        // 原本那格留空位（2026-11-03 自由擺放）
+        const here = (paginate(F)[d.page] ?? []).filter(i => F[i].id !== d.id && !F[i].hole);
+        const cells = cellsOf(d, F), m = cells.indexOf(ME);
+        if (!here.length || m < 0) return;
+        cells[m] = newHole();
+        cells.push(newBreak(), ME);
         setPage(np);
-        setD({ ...d, page: np, brk: newBreak() });
-        dg.aim.value = 0;
+        setD({ ...d, page: np, cells });
+        dg.aim.value = AIM_NONE;
         requestAnimationFrame(() => pagerRef.current?.scrollTo({ x: np * width, animated: !calm }));
         haptic('dragPass');
         return;
       }
       pagerRef.current?.scrollTo({ x: np * width, animated: !calm });
       setPage(np);
-      // 從新開的那頁翻回來：新頁收掉，回到原本的排法
-      const back = { ...d, page: np, brk: null };
-      setD(back);
-      const cx = dg.x0.value + dg.dx.value + dg.sw.value / 2, cy = dg.y0.value + dg.dy.value + TILE / 2;
-      const k = slotIn(cx - dg.gx.value, cy - dg.gy.value, tileW, dg.gcount.value);
-      setD({ ...back, to: toFor(back, np, k) });
+      // 翻過去（2026-11-03 自由擺放）：拖的那張不在這頁，就放進手指下面那格（空著的話），不然放到這頁第一個空格，放手才會落在這頁；
+      // 這頁滿了先不動（手上還拿著，停到空格上才放）。從新開的那頁翻回來：放好之後新頁空了，flatOf 不畫，新頁就收掉
+      const at = { ...d, page: np }, P = paginate(F)[np] ?? [];
+      let cells: string[] | null = null;
+      if (!P.some(i => F[i].id === d.id)) {
+        const cx = dg.x0.value + dg.dx.value + dg.sw.value / 2, cy = dg.y0.value + dg.dy.value + TILE / 2;
+        const u = cellAt(cx - dg.gx.value, cy - gyOf(np), tileW);
+        const k = u >= 0 && (u < P.length ? F[P[u]].hole : u < capOf(np)) ? u : firstEmpty(F, P, np);
+        if (k >= 0) cells = placeAt(at, np, k);
+      }
+      setD(cells ? { ...at, cells } : at);
       dg.aim.value = AIM_NONE;
       haptic('dragPass');
       edgeT.current = setTimeout(flip, T.timing.edgeFlip);
@@ -807,10 +835,11 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       if (onto.folder) { intoFolder(store.s, d.id, onto.id, now); into = onto.id; }
       else { into = newFolder(store.s, onto.id, now).id; intoFolder(store.s, d.id, into, now); }
       store.change();
-    } else if (d) {
-      const ids = flat.map(x => x.id);
+    } else if (d && d.cells) {
+      // 整排（含空位、換頁標記）照放手當下的格子存回座位表；從資料夾拿出來的先拿出來（placeTop）
+      const ids = flat.map(x => x.id), before = entriesRef.current.map(x => x.id);
       if (d.src) { placeTop(store.s, d.id, ids, now); store.change(); }
-      else if (d.to !== d.from || d.brk) { reseat(store.s, ids, now); store.change(); }
+      else if (ids.length !== before.length || ids.some((id, i) => id !== before[i])) { reseat(store.s, ids, now); store.change(); }
     }
     setStackOn(null); dg.stackK.value = -1; dg.fopen.value = 0;
     setD(null);
@@ -835,6 +864,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     ? <FolderFace f={e.folder} notes={e.notes} w={w} cur={e.notes.some(n => n.id === store.last)} />
     : <TileFace n={e.note!} w={w} cur={e.id === store.last} />);
   const tile = (e: Entry, k: number, pg: number, parked = false, placed = false) => {
+    if (e.hole || e.brk) return null; // 空位佔一格但不畫東西（k 照算，後面的磚位置不變）
     const f = e.folder, n = e.note;
     const common = {
       w: tileW, sw: width, fw: innerW, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, dg, parked, placed,

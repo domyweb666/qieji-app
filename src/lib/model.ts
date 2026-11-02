@@ -221,6 +221,12 @@ export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | '
 export const BRK = '|';
 export const isBreak = (id: unknown): id is string => typeof id === 'string' && id.startsWith(BRK);
 export const newBreak = () => BRK + uid();
+// 空位（2026-11-03，多米：「清單定死位置，沒法像主畫面想放哪就放哪」，照 iOS 主畫面自由擺放）：座位表裡「.」開頭的 id 佔一格、畫成空的。
+// 拖走一張，原本那格變空位、別張不往前補；放到空格就停在那格。每頁最後面的空位、整頁都是空位的不存（fixOrder）。資料夾裡不留空位。
+// 舊版讀到會在 fixOrder 丟掉（只是格子合回去，紙不會少）
+export const HOLE = '.';
+export const isHole = (id: unknown): id is string => typeof id === 'string' && id.startsWith(HOLE);
+export const newHole = () => HOLE + uid();
 
 /* ---------------- 目錄座位表（C1） ---------------- */
 // 改字不換位（公理 2：手記得住不動的位置）。舊存檔沒有座位表時，照 C1 之前目錄的樣子編第一次（釘選的在前、再照 sort），
@@ -254,15 +260,23 @@ export function fixOrder(s: State) {
   const inFolder = new Set(folders.flatMap(f => f.ids)), fids = new Set(folders.map(f => f.id));
   const seen = new Set<string>();
   const kept = (Array.isArray(s.order) ? s.order : firstSeats(s))
-    .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id) || isBreak(id)) && !seen.has(id) && !!seen.add(id));
+    .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id) || isBreak(id) || isHole(id)) && !seen.has(id) && !!seen.add(id));
   for (const f of folders) if (!seen.has(f.id)) { kept.push(f.id); seen.add(f.id); }
   for (const n of s.notes.filter(n => !seen.has(n.id) && !inFolder.has(n.id)).sort((a, b) => b.updated - a.updated)) kept.push(n.id);
-  // 換頁標記只留「前後兩邊都有看得到的格子」的：最前面、最後面、連在一起、隔開的那頁看不到東西（全在最近刪除）的都拿掉
+  // 換頁標記只留「前後兩邊都有看得到的格子」的：最前面、最後面、連在一起、隔開的那頁看不到東西（全在最近刪除）的都拿掉。
+  // 空位只留「後面同一頁還有看得到的格子」的：頁尾的空位（下一個換頁標記前、最後面）不存，整頁只有空位的連空位一起拿掉
   const shown = (id: string) => fids.has(id) || s.notes.some(n => n.id === id && !n.deleted);
   const order: string[] = [];
   let since = false; // 上一個標記（或最前面）之後有沒有看得到的格子
+  let held: string[] = []; // 這一頁裡還沒等到後面有看得到的格子的空位
   for (const id of kept) {
-    if (!isBreak(id)) { order.push(id); if (shown(id)) since = true; continue; }
+    if (isHole(id)) { held.push(id); continue; }
+    if (!isBreak(id)) {
+      if (shown(id)) { order.push(...held); held = []; since = true; }
+      order.push(id);
+      continue;
+    }
+    held = [];
     if (since) { order.push(id); since = false; }
   }
   // 最後一個標記後面沒有看得到的格子：拿掉
@@ -278,16 +292,23 @@ export function fixOrder(s: State) {
   return true;
 }
 
-// 拖完換座位（C4）：visible＝目錄裡看得到的紙排好的新順序。座位表裡「看得到的紙」那些位子依序換成新順序，
-// 看不到的（最近刪除）留在原位，還原時照樣回到附近。C2：有換到位置就記下親手排的時間（比照抄來的那份新，同步時才贏）
+// 拖完換座位（C4）：visible＝目錄裡看得到的格子排好的新順序（紙、資料夾、空位、換頁標記，照 seatedLayout 的樣子）。座位表裡「看得到的格子」那些位子
+// 依序換成新順序，看不到的（最近刪除）留在原位，還原時照樣回到附近。C2：有換到位置就記下親手排的時間（比照抄來的那份新，同步時才贏）。
+// 2026-11-03 自由擺放：空位、換頁標記不看在不在 visible 裡都算「看得到的位子」——拖的時候會補新的空位、用掉舊的空位，舊的沒用到就不留；
+// 所以 visible 一定要是整排（含空位和換頁標記），只給紙的順序會把換頁標記吃掉
 export function reseat(s: State, visible: string[], now = Date.now()) {
   fixOrder(s);
   const set = new Set(visible);
   let k = 0;
   const old = s.order!;
-  s.order = old.map(id => (set.has(id) ? visible[k++] : id));
-  // visible 比座位表裡的多（剛開新的一頁：多一個換頁標記）：多出來的接在最後
-  if (k < visible.length) s.order.push(...visible.slice(k));
+  const next: string[] = [];
+  for (const id of old) {
+    if (!set.has(id) && !isHole(id) && !isBreak(id)) { next.push(id); continue; }
+    if (k < visible.length) next.push(visible[k++]);
+  }
+  // visible 比座位表裡的多（剛開新的一頁、補了空位）：多出來的接在最後
+  if (k < visible.length) next.push(...visible.slice(k));
+  s.order = next;
   if (s.order.length !== old.length || s.order.some((id, i) => id !== old[i])) s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1);
   fixOrder(s);
 }
@@ -328,8 +349,8 @@ export function searchLines(s: State, q: string): LineHit[] {
 
 /* ---------------- 資料夾（D1） ---------------- */
 // 目錄最上層的一格：一張紙，或一個資料夾（notes＝裡面看得到的紙，照資料夾裡的順序）。一張都看不到的資料夾（全在最近刪除）不出現
-// brk＝換頁標記那一格（seatedLayout 才有，2026-11-02）：不畫成磚，排頁時從它後面開新的一頁
-export type Entry = { id: string; note?: Note; folder?: Folder; notes: Note[]; brk?: true };
+// brk＝換頁標記那一格（seatedLayout 才有，2026-11-02）：不畫成磚，排頁時從它後面開新的一頁。hole＝空位那一格（2026-11-03）：佔一格、畫成空的
+export type Entry = { id: string; note?: Note; folder?: Folder; notes: Note[]; brk?: true; hole?: true };
 export function seatedEntries(s: State): Entry[] {
   const owner = new Map<string, Folder>();
   for (const f of okFolders(s)) for (const id of f.ids) if (!owner.has(id)) owner.set(id, f);
@@ -348,20 +369,25 @@ export function seatedEntries(s: State): Entry[] {
 export const folderOf = (s: State, noteId: string) => okFolders(s).find(f => f.ids.includes(noteId));
 
 // 目錄格子（2026-11-02）：seatedEntries 再把換頁標記照座位表的位置插進來（只插在兩格之間，最前面、連續的不插）。
-// 釘選的紙跟一般的一起排（多米 2026-11-02 拿掉 Dock：放下面就不能放資料夾）
+// 釘選的紙跟一般的一起排（多米 2026-11-02 拿掉 Dock：放下面就不能放資料夾）。
+// 2026-11-03 空位也照座位表的位置插進來，只插在同一頁後面還有格子的地方（頁尾的、整頁都是空位的不插，跟 fixOrder 同一套）
 export function seatedLayout(s: State): Entry[] {
   const all = seatedEntries(s);
   if (!Array.isArray(s.order)) return all;
   const pos = new Map(s.order.map((id, i) => [id, i] as const));
-  const breaks = s.order.flatMap((id, i) => (isBreak(id) ? [[id, i] as const] : []));
+  const marks = s.order.flatMap((id, i) => (isBreak(id) || isHole(id) ? [[id, i] as const] : []));
   const out: Entry[] = [];
   let b = 0;
   for (const e of all) {
     const p = pos.get(e.id) ?? Infinity;
     let cut: string | null = null;
-    while (b < breaks.length && breaks[b][1] < p) cut = breaks[b++][0];
+    let held: Entry[] = []; // 這格前面、同一頁的空位（碰到換頁標記就作廢：那是上一頁頁尾的）
+    while (b < marks.length && marks[b][1] < p) {
+      const id = marks[b++][0];
+      if (isBreak(id)) { cut = id; held = []; } else held.push({ id, notes: [], hole: true });
+    }
     if (cut && out.length) out.push({ id: cut, notes: [], brk: true });
-    out.push(e);
+    out.push(...held, e);
   }
   return out;
 }
@@ -398,7 +424,8 @@ export function intoFolder(s: State, noteId: string, folderId: string, now: numb
   if (!f || f.ids.includes(noteId)) return false;
   const from = folderOf(s, noteId);
   if (from) { from.ids = from.ids.filter(x => x !== noteId); dissolveIfOne(s, from); }
-  s.order = s.order!.filter(x => x !== noteId);
+  // 原本那格留空位（2026-11-03 自由擺放：疊進資料夾、放進資料夾，別張不往前補，照 iOS）；頁尾的空位 fixOrder 會清掉
+  s.order = s.order!.map(x => (x === noteId ? newHole() : x));
   f.ids.push(noteId);
   touchLayout(s, now);
   fixOrder(s);
