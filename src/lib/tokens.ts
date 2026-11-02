@@ -176,6 +176,7 @@ export const motion = {
   snapBack:      { spring: { duration: 250, dampingRatio: 1 } }, // 沒滑夠放手彈回。減少動態：直接回位
   dragShift:     { spring: { duration: 200, dampingRatio: 1 } }, // 排順序時其他行讓位。減少動態：直接讓位
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
+  launch:        { duration: 260 }, // 2026-11-02 照 iOS 開 App：目錄點一張，那塊磚放大鋪滿面板這麼久，然後面板淡出（dirPanel.reducedFade）。減少動態：不放大
   menuLift:      { scale: 1.04 }, // 2026-11-02 照虛擬手機原型：目錄長按跳選單時，那塊磚在原位浮起來放大這麼多（彈簧用 dragLift 那組）。減少動態：直接到位
   stackTarget:   { scale: 1.08 }, // D2：拖著停在別張磚正中間夠久，底下那張放大一點＝放手就疊（彈簧用 dragLift 那組）。減少動態：直接變大
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影

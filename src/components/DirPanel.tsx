@@ -21,14 +21,14 @@ import {
 } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, {
-  cancelAnimation, LinearTransition, makeMutable, scrollTo, useAnimatedRef, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, LinearTransition, makeMutable, scrollTo, useAnimatedRef, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
   type AnimatedRef, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
-  col, dropNotes, folderOf, intoFolder, isEmpty, label, markDeleted, markRestored, moveItem, newFolder, outOfFolder, placeInFolder, placeTop, renameFolder, reseat,
-  seatedEntries, seatedNotes, type ColorKey, type Entry, type Folder, type Note,
+  col, dropNotes, folderOf, intoFolder, isEmpty, label, markDeleted, markRestored, moveItem, newBreak, newFolder, outOfFolder, PIN_MAX, pinnedNotes, placeInFolder,
+  placeTop, renameFolder, reseat, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -72,12 +72,15 @@ function slotIn(lx: number, ly: number, w: number, count: number) {
 // gx、gy＝這頁格子的左上角；gcount＝這頁幾格；glast＝讓出來的那格在這頁第幾格（−1＝不在這頁）；
 // fopen＝資料夾開著在對準；bx…bh＝資料夾框；svx、svy＝框裡格子那層的位置；fsy＝框裡捲下去多少；fcount、flast＝資料夾裡幾格、讓出來的是第幾格；
 // ready＝這次拿起後 JS 把格子位置、資料夾開沒開寫好了（拿起那一刻手勢先跑、JS 晚一步，寫好之前不算瞄哪）；
-// ax、ay＝讓位計時從哪個點開始算（手指離開這點超過 STILL 就重新計時，2026-11-02）
+// ax、ay＝讓位計時從哪個點開始算（手指離開這點超過 STILL 就重新計時，2026-11-02）；
+// dkx、dky、dkh＝Dock 那條的位置（dkh＝0：沒有 Dock，例如搜尋中）；dslot＝放進 Dock 會落在第幾格（−1＝不放進 Dock）
 type DG = Record<'x0' | 'y0' | 'dx' | 'dy' | 'sw' | 'lift' | 'edge' | 'aim' | 'stackK' | 'gx' | 'gy' | 'gcount' | 'glast'
-  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'svx' | 'svy' | 'fsy' | 'fcount' | 'flast' | 'ready' | 'ax' | 'ay', SharedValue<number>>;
+  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'svx' | 'svy' | 'fsy' | 'fcount' | 'flast' | 'ready' | 'ax' | 'ay'
+  | 'dkx' | 'dky' | 'dkh' | 'dslot', SharedValue<number>>;
 function useDG(): DG {
   return {
     ax: useSharedValue(0), ay: useSharedValue(0),
+    dkx: useSharedValue(0), dky: useSharedValue(0), dkh: useSharedValue(0), dslot: useSharedValue(-1),
     x0: useSharedValue(0), y0: useSharedValue(0), dx: useSharedValue(0), dy: useSharedValue(0), sw: useSharedValue(0), lift: useSharedValue(0),
     edge: useSharedValue(0), aim: useSharedValue(0), stackK: useSharedValue(-1), gx: useSharedValue(0), gy: useSharedValue(0),
     gcount: useSharedValue(1), glast: useSharedValue(-1), fopen: useSharedValue(0), bx: useSharedValue(0), by: useSharedValue(0),
@@ -87,7 +90,10 @@ function useDG(): DG {
 }
 // aim 的編碼：k＝目錄這頁第 k 格（停一下讓位）；−k−1＝停在第 k 格那張的正中間（停著就疊）；FOLDER_AIM＋k＝資料夾裡第 k 格；
 // AIM_OUT＝資料夾開著、手指在框外（停一下收起）；AIM_NONE＝不對準（資料夾剛打開、框還沒量好）
-const FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000;
+// DOCK_AIM＝對準底下的 Dock（2026-11-02，放手＝釘選）
+const FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000, DOCK_AIM = -300000;
+const DOCK = '__dock'; // Drag.src：從 Dock 拿起（不是資料夾 id）
+const DOCK_PAD = T.space.s; // Dock 那條的內距（磚離 Dock 上緣、左右；Dock 本身左右各留 s，加起來跟格子的 l 對齊）
 function aimOf(cx: number, cy: number, dg: DG, gw: number, fw: number) {
   'worklet';
   if (dg.fopen.value) {
@@ -97,6 +103,8 @@ function aimOf(cx: number, cy: number, dg: DG, gw: number, fw: number) {
     // 框裡捲下去了，格子跟著往上：加回捲的距離才對得到第幾格（2026-11-02 程式審查）
     return FOLDER_AIM + slotIn(cx - dg.bx.value - dg.svx.value, cy - dg.by.value - dg.svy.value - GAP + dg.fsy.value, fw, dg.fcount.value);
   }
+  // 手指（拖的那塊中心）落在 Dock 那條上
+  if (dg.dkh.value && cy >= dg.dky.value && cy <= dg.dky.value + dg.dkh.value) return DOCK_AIM;
   const lx = cx - dg.gx.value, ly = cy - dg.gy.value;
   const k = slotIn(lx, ly, gw, dg.gcount.value);
   const ox = lx - slotX(k, gw) - gw / 2, oy = ly - slotY(k) - TILE / 2;
@@ -134,7 +142,8 @@ function useDragPan(o: DragOpts) {
       if (!dg.ready.value) return;
       const cx = dg.x0.value + e.translationX + dg.sw.value / 2, cy = dg.y0.value + e.translationY + TILE / 2;
       // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候不算
-      const z = dg.fopen.value ? 0 : cx < EDGE ? -1 : cx > screenW - EDGE ? 1 : 0;
+      const inDock = dg.dkh.value > 0 && cy >= dg.dky.value; // 在 Dock 那條上不翻頁
+      const z = dg.fopen.value || inDock ? 0 : cx < EDGE ? -1 : cx > screenW - EDGE ? 1 : 0;
       if (z !== dg.edge.value) { dg.edge.value = z; scheduleOnRN(onEdge, z); }
       const a = aimOf(cx, cy, dg, gw, fw);
       if (a === dg.aim.value) {
@@ -160,6 +169,10 @@ function useDragPan(o: DragOpts) {
         // 落點也扣掉框裡捲下去的距離
         if (dg.aim.value >= FOLDER_AIM) { tx = dg.bx.value + dg.svx.value + slotX(dg.flast.value, fw); ty = dg.by.value + dg.svy.value + GAP + slotY(dg.flast.value) - dg.fsy.value; }
         else slide = false;
+      } else if (slide && dg.aim.value === DOCK_AIM) {
+        // 放進 Dock：滑到 Dock 裡那格；Dock 不接（滿了、是資料夾）就不滑，交給 JS 放回原位
+        if (dg.dslot.value < 0) slide = false;
+        else { tx = dg.dkx.value + slotX(dg.dslot.value, gw); ty = dg.dky.value + DOCK_PAD; }
       } else if (slide) {
         const k = dg.stackK.value >= 0 ? dg.stackK.value : dg.glast.value;
         if (k < 0) slide = false;
@@ -172,17 +185,18 @@ function useDragPan(o: DragOpts) {
   });
 }
 
-let host: { begin: (move?: string) => void; settle: (open: boolean, velocity?: number, then?: () => void) => void } | null = null;
+let host: { begin: (move?: string) => void; settle: (open: boolean, velocity?: number, then?: () => void, fade?: boolean) => void } | null = null;
 export const dirPanel = {
   p: makeMutable(0), // 0＝收起、1＝全開。紙的標題區往下拉時在 UI 執行緒逐格寫
   h: makeMutable(1), // 面板高度（螢幕高 − dirPeek），拉的距離除以它就是 p
   calm: makeMutable(false), // 減少動態：面板不滑，改淡入淡出（紙那邊放手時要知道）
+  fade: makeMutable(0), // 1＝這次收起用淡出不往上滑（2026-11-02：點一張從磚放大打開，鋪滿之後面板淡出露出那張紙）
   // 準備打開：掛上內容、收鍵盤、告訴 store 面板開著（控制中心「記一行」、新的一張的輸入框都等它收完）
   begin: (move?: string) => host?.begin(move),
   // 放手或點了之後：彈到全開或收起。velocity 是手指放開的速度換成 p 的單位
   settle: (open: boolean, velocity?: number, then?: () => void) => host?.settle(open, velocity, then),
   open: (move?: string) => { host?.begin(move); host?.settle(true); },
-  close: (then?: () => void) => host?.settle(false, 0, then),
+  close: (then?: () => void, fade?: boolean) => host?.settle(false, 0, then, fade),
 };
 
 export function DirPanelHost() {
@@ -204,11 +218,12 @@ export function DirPanelHost() {
     host = {
       begin: m => {
         Keyboard.dismiss();
+        dirPanel.fade.value = 0;
         setMove(m);
         setShown(true);
         store.panelOpened();
       },
-      settle: (toOpen, velocity = 0, then) => {
+      settle: (toOpen, velocity = 0, then, fade) => {
         if (!toOpen) { Keyboard.dismiss(); setOpen(false); }
         const done = () => {
           if (toOpen) { setOpen(true); return; }
@@ -217,7 +232,8 @@ export function DirPanelHost() {
           then?.();
         };
         const target = toOpen ? 1 : 0;
-        p.value = calm ? withTiming(target, { duration: M.dirPanel.reducedFade }, f => { if (f) scheduleOnRN(done); })
+        if (fade && !toOpen) dirPanel.fade.value = 1;
+        p.value = calm || (fade && !toOpen) ? withTiming(target, { duration: M.dirPanel.reducedFade }, f => { if (f) scheduleOnRN(done); })
           : withSpring(target, { velocity, ...M.dirPanel.spring }, f => { if (f) scheduleOnRN(done); });
       },
     };
@@ -227,8 +243,10 @@ export function DirPanelHost() {
   // 面板底部把手往上推：跟著手指收上去，推過一段或往上甩就收起，不然彈回全開。抖動中關掉（C4，審查紀錄 ❓5）
   const { h } = dirPanel;
   const settle = (toOpen: boolean, v: number) => dirPanel.settle(toOpen, v);
+  // 目錄的長按選單開著：底部把手那截也被暗幕蓋住，點了只收選單、也不能推（2026-11-02）
+  const [closeMenu, setCloseMenu] = useState<(() => void) | null>(null);
   const push = usePanGesture({
-    enabled: !editing,
+    enabled: !editing && !closeMenu,
     activeOffsetY: [-G.pullActivate, G.pullActivate],
     onUpdate: e => { 'worklet'; p.value = Math.min(1, Math.max(0, 1 + e.translationY / h.value)); },
     onDeactivate: e => {
@@ -238,9 +256,10 @@ export function DirPanelHost() {
     },
   });
   // 點露出的紙、點底部把手：抖動中只結束抖動（跟 iOS 點桌布一樣），不收
-  const tapOut = () => (editing ? setEditing(false) : dirPanel.close());
+  const tapOut = () => (closeMenu ? closeMenu() : editing ? setEditing(false) : dirPanel.close());
 
-  const sheet = useAnimatedStyle(() => (calm
+  const { fade } = dirPanel;
+  const sheet = useAnimatedStyle(() => (calm || fade.value
     ? { opacity: p.value, transform: [{ translateY: 0 }] }
     : { opacity: 1, transform: [{ translateY: -H * (1 - p.value) }] }));
   const dim = useAnimatedStyle(() => ({ opacity: p.value }));
@@ -255,7 +274,8 @@ export function DirPanelHost() {
       </Animated.View>
       <Animated.View style={[st.sheet, { height: H, backgroundColor: c.surface }, sheet]}
         accessibilityViewIsModal onAccessibilityEscape={tapOut}>
-        <Directory move={move} padTop={insets.top + T.space.s} panelH={H} editing={editing} setEditing={setEditing} />
+        <Directory move={move} padTop={insets.top + T.space.s} panelH={H} editing={editing} setEditing={setEditing}
+          onMenuOpen={fn => setCloseMenu(() => fn)} />
         <GestureDetector gesture={push}>
           <Pressable style={st.grabBox} onPress={tapOut} accessibilityRole="button" accessibilityLabel={editing ? '完成編輯' : '收起目錄'}>
             <View style={[st.grab, { backgroundColor: c.textSecondary }]} />
@@ -266,9 +286,9 @@ export function DirPanelHost() {
   );
 }
 
-type DirProps = { move?: string; padTop: number; panelH: number; editing: boolean; setEditing: (on: boolean) => void };
+type DirProps = { move?: string; padTop: number; panelH: number; editing: boolean; setEditing: (on: boolean) => void; onMenuOpen: (close: (() => void) | null) => void };
 
-function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
+function Directory({ move, padTop, panelH, editing, setEditing, onMenuOpen }: DirProps) {
   const s = useStore();
   const c = useColors();
   const calm = useReducedMotion();
@@ -279,7 +299,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   // 多米 2026-11-01：排序選項與顏色篩選拿掉（太雜）；C1 起照座位表排，搜尋也照座位（審查紀錄 2026-11-01 晚、晚（三））
   const notes = seatedNotes(s, q);
   // D1：不搜尋時目錄最上層一格一格是紙或資料夾；搜尋時直接列紙（資料夾裡的也列）
-  const entries: Entry[] = searching ? notes.map(n => ({ id: n.id, note: n, notes: [n] })) : seatedEntries(s);
+  // 2026-11-02：不搜尋時用 seatedLayout（釘選的住在 Dock、不在格子裡；換頁標記照座位插進來）
+  const entries: Entry[] = searching ? notes.map(n => ({ id: n.id, note: n, notes: [n] })) : seatedLayout(s);
+  // Dock（2026-11-02，多米選照 iOS 主畫面底下那排）：釘選的紙（最多 PIN_MAX 張）固定在格子下面，每一頁都看得到。照建立先後排（跟左右撥換張同一組）
+  const pinned = searching ? [] : s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => a.created - b.created);
   const trashed = s.notes.filter(n => n.deleted).length;
   // 兩欄：整頁左右各留 16，中間留 12
   const tileW = (width - T.space.l * 2 - T.space.m) / 2;
@@ -288,8 +311,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
 
   // 拖的那塊（C4、C5、D4）：id＝拖的紙或資料夾；src＝從哪個資料夾拿起（null＝目錄）；page＝現在看的那頁；
   // to＝目錄裡讓出來那格（整排的第幾個）；from＝拿起時在目錄的第幾個；inF＝現在對準哪個打開的資料夾（null＝對準目錄）；
-  // fto＝資料夾裡讓出來那格；k0＝從資料夾拿起時在第幾格
-  type Drag = { id: string; src: string | null; page: number; to: number; from: number; inF: string | null; fto: number; k0: number };
+  // fto＝資料夾裡讓出來那格；k0＝從資料夾拿起時在第幾格。
+  // 2026-11-02：src＝DOCK＝從 Dock 拿起；inDock＝現在對準 Dock（放手＝釘選）；brk＝拖到最後一頁右邊緣開的新一頁（新換頁標記的 id，拖的那張排在它後面）
+  // home＝從格子拿起時在第幾頁：拖的那塊磚身上有手勢，換到別頁時不能跟著搬（搬了就重掛、手勢斷掉，放手沒反應），所以它一直留在這頁（藏起來、不佔位），
+  // 別頁只畫一個空位（2026-11-02 網頁實測抓到：拖到別頁放手沒反應）
+  type Drag = { id: string; src: string | null; page: number; to: number; from: number; inF: string | null; fto: number; k0: number; inDock?: boolean; brk?: string | null; home?: number };
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef(drag);
   const entriesRef = useRef(entries);
@@ -297,7 +323,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const dg = useDG();
   // 拖的那張（從資料夾拿起的是一張紙，目錄裡的可能是紙或資料夾）
   const dragEntryOf = (d: Drag, list = entriesRef.current): Entry | undefined => {
-    if (!d.src) return list.find(e => e.id === d.id);
+    if (!d.src) return list.find(e => e.id === d.id && !e.brk);
     const n = store.s.notes.find(x => x.id === d.id);
     return n ? { id: n.id, note: n, notes: [n] } : undefined;
   };
@@ -316,9 +342,13 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       }
       base.push(e);
     }
-    if (d.src && d.inF) return base;
+    // 從 Dock 拿起、還對著 Dock：格子不多一格。從格子拿起拖到 Dock 上：格子裡那格留著（那塊磚身上有手勢，不能拿掉），放手才拿走
+    if ((d.src && d.inF) || (d.inDock && d.src === DOCK)) return base;
     const me = dragEntryOf(d, list);
-    if (me) base.splice(Math.min(d.to, base.length), 0, me);
+    if (!me) return base;
+    // 新的一頁：換頁標記接在最後，拖的那張是那頁唯一一張
+    if (d.brk) { base.push({ id: d.brk, notes: [], brk: true }, me); return base; }
+    base.splice(Math.min(d.to, base.length), 0, me);
     return base;
   };
   // 打開的資料夾裡排出來的紙：拖進來的放在讓出來那格；從這個資料夾拿起、已經拖到外面的留在原位不顯示（那塊磚身上有手勢，不能拿掉）
@@ -340,12 +370,31 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   // 一頁 R 列＝上緣 s ＋ grid 的 marginTop m ＋ R 塊磚 ＋ (R−1) 個間距 m＝s ＋ R ×（磚＋m）；第一頁的「新的一張」那列也是一塊磚高＋m
   const rows = Math.max(1, Math.floor((boxH - T.space.s) / (T.shape.tile + T.space.m)));
   const gridList = drag && !searching ? flatOf(drag, entries) : entries;
-  const pages: Entry[][] = [];
-  for (let i = 0, take = (rows - 1) * 2; i < gridList.length || !pages.length; i += take, take = rows * 2) pages.push(gridList.slice(i, i + take));
+  // 排頁（2026-11-02 起有換頁標記）：一頁放滿就換下一頁，碰到換頁標記也換（那頁還空著就不換）。回傳每頁是 list 裡的第幾個（不含標記）
+  function paginate(list: Entry[]): number[][] {
+    const out: number[][] = [[]];
+    list.forEach((e, i) => {
+      if (e.brk) { if (out[out.length - 1].length) out.push([]); return; }
+      if (out[out.length - 1].length >= (out.length === 1 ? (rows - 1) * 2 : rows * 2)) out.push([]);
+      out[out.length - 1].push(i);
+    });
+    if (out.length > 1 && !out[out.length - 1].length) out.pop();
+    return out;
+  }
+  const pageIdx = paginate(gridList);
+  const pages: Entry[][] = pageIdx.map(pg => pg.map(i => gridList[i]));
   const pageCount = useRef(pages.length);
   pageCount.current = pages.length;
-  const pageStart = (i: number) => (i === 0 ? 0 : (rows - 1) * 2 + (i - 1) * rows * 2);
-  const cap = (i: number) => (i === 0 ? (rows - 1) * 2 : rows * 2);
+  // 拖到第 pg 頁第 k 格，拖的那張要插在（拿掉它之後的）整排第幾個：那格有別張＝插在那張的位置（從前面來的會排到它後面、它往前讓）；
+  // 那頁最後一張後面＝接在最後一張後面。跟原本「頁首＋k」一樣的意思，只是頁首改成看換頁標記
+  function toFor(d: Drag, pg: number, k: number) {
+    const F = flatOf(d), P = paginate(F)[pg] ?? [];
+    const me = F.findIndex(e => e.id === d.id && !e.brk);
+    if (k < P.length) return P[k];
+    if (!P.length) return d.to;
+    const j = P[P.length - 1] + 1;
+    return me >= 0 && j > me ? j - 1 : j;
+  }
   // 第 i 頁格子左上角的螢幕位置：頁的上緣留白 s、第一頁多一列「新的一張」、格子的 marginTop m
   const gyOf = (i: number) => pagerY.current + T.space.s + (i === 0 ? TILE : 0) + T.space.m;
 
@@ -355,7 +404,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const [menu, setMenu] = useState<Menu | null>(null);
   const menuNote = menu ? s.notes.find(n => n.id === menu.id && !n.deleted) : undefined;
   const menuFolder = menu && !menuNote ? s.folders?.find(f => f.id === menu.id) : undefined;
-  const menuEntry = menuFolder ? seatedEntries(s).find(e => e.id === menuFolder.id) : undefined;
+  const menuEntry = menuFolder ? seatedLayout(s).find(e => e.id === menuFolder.id) : undefined;
+  useEffect(() => { onMenuOpen(menu ? () => setMenu(null) : null); }, [!!menu]); // eslint-disable-line react-hooks/exhaustive-deps
   // 打開的資料夾（D1）：哪一個、名字是不是正在打（新資料夾、選單的改名字一打開就能打）。裡面一張都看不到了就自己收起
   const [openF, setOpenF] = useState<{ id: string; naming: boolean } | null>(null);
   // 不搜尋時 entries 就是 seatedEntries(s)，不用再算一次
@@ -379,16 +429,27 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const pagerRef = useAnimatedRef<Animated.ScrollView>(); // 抖動中在空白處撥翻頁時，手勢在 UI 執行緒直接捲它（scrollTo）
   const edgeT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // Dock 這時候排出來的紙（照建立先後）：對準 Dock 的插進來；從 Dock 拿起的一直留著（那塊磚身上有手勢，拖出去也留著空位）
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  function dockList(d: Drag | null): Note[] {
+    const base = pinnedRef.current.filter(n => n.id !== d?.id);
+    if (!d || (!d.inDock && d.src !== DOCK)) return base;
+    const me = store.s.notes.find(x => x.id === d.id);
+    return me ? [...base, me].sort((a, b) => a.created - b.created) : base;
+  }
   // 換拖曳狀態一律走這裡：同時把手勢要讀的格子位置、格數、讓出來那格寫進 shared value（不等重畫）
   function setD(d: Drag | null) {
     dragRef.current = d;
     setDrag(d);
     if (!d) return;
-    const flat = flatOf(d);
+    const flat = flatOf(d), P = paginate(flat)[d.page] ?? [];
     dg.gy.value = gyOf(d.page);
-    dg.gcount.value = Math.max(1, Math.min(cap(d.page), flat.length - pageStart(d.page)));
-    const idx = d.src && d.inF ? -1 : d.to - pageStart(d.page);
-    dg.glast.value = idx >= 0 && idx < cap(d.page) ? idx : -1;
+    dg.gcount.value = Math.max(1, P.length);
+    // 讓出來那格在這頁第幾格（拖的那張在不在這頁）
+    dg.glast.value = P.findIndex(i => flat[i].id === d.id && !flat[i].brk);
+    // Dock 裡拖的那張會落在第幾格（照建立先後），不對準 Dock 或放不下＝−1
+    dg.dslot.value = d.inDock ? dockList(d).findIndex(n => n.id === d.id) : -1;
     const fe = d.inF ? entriesRef.current.find(e => e.id === d.inF) : undefined;
     if (fe) { dg.fcount.value = Math.max(1, folderNotes(fe, d).length); dg.flast.value = d.fto; }
   }
@@ -396,7 +457,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   // 搬行模式：來源是現在這張紙、要搬的那一行。行已經不在了（例如同時被刪）就當普通目錄用
   const from = move ? s.notes.find(n => n.id === store.last && !n.deleted) : undefined;
   const moving = from?.items.find(i => i.id === move);
-  function pick(n: Note) {
+  // 打開一張（2026-11-02，照 iOS 開 App）：x、y、w＝點的那塊磚在螢幕上的位置和寬。那塊磚放大鋪滿面板，鋪滿了面板淡出、露出後面已經換好的那張紙。
+  // 減少動態、搬行模式、不知道磚在哪（VoiceOver）：照舊直接收起
+  const [launch, setLaunch] = useState<{ n: Note; x: number; y: number; w: number } | null>(null);
+  function pick(n: Note, x?: number, y?: number, w?: number) {
     if (from && moving) {
       const name = label(n);
       if (moveItem(from, n, moving.id)) { n.updated = from.updated = Date.now(); store.change(); ui.toast(`已搬到「${name}」`); }
@@ -404,7 +468,9 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       return;
     }
     store.open(n.id);
-    dirPanel.close();
+    if (calm || x === undefined || y === undefined || w === undefined) { dirPanel.close(); return; }
+    setMenu(null);
+    setLaunch({ n, x, y, w });
   }
   // 新的一張：黃色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
   function add() {
@@ -468,6 +534,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const tileActs = (n: Note): Act[] => {
     const inside = !!folderOf(s, n.id);
     return [
+      // 快捷動作（2026-11-02，照 iOS 長按 App 最上面那排捷徑）：換到這張、目錄收起、直接升起輸入框記一行（跟控制中心「記一行」同一條路）
+      { label: '記一行', icon: 'square.and.pencil', fn: () => { store.open(n.id); dirPanel.close(() => store.requestCompose()); } },
       { label: '改名字', icon: 'pencil', fn: () => rename(n) },
       // 釘選跟紙的 ⋯ 同一套（多米 2026-11-02 晚：在這裡找不到釘選）。放進、移出資料夾照 iOS 只用拖的，不放文字選項（多米 2026-11-02 晚）；
       // VoiceOver 的「放進資料夾」「移出資料夾」動作留著，給不能拖的人（HIG）
@@ -493,8 +561,8 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     setMenu(null); setEditing(true);
     entered.current = true;
     dg.gx.value = T.space.l; dg.fopen.value = 0;
-    const at = pageStart(pg) + k;
-    setD({ id, src: null, page: pg, to: at, from: at, inF: null, fto: -1, k0: -1 });
+    const at = pageIdx[pg]?.[k] ?? k; // 這張在整排（含換頁標記）的第幾個
+    setD({ id, src: null, page: pg, to: at, from: at, inF: null, fto: -1, k0: -1, home: pg });
     dg.ready.value = 1; // 格子位置寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
@@ -505,6 +573,15 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     dg.gx.value = T.space.l; dg.fopen.value = 1;
     setD({ id: n.id, src: fid, page, to: 0, from: -1, inF: fid, fto: k, k0: k });
     dg.ready.value = 1; // 資料夾開著、格數寫好了，手勢從下一格開始算瞄哪
+    haptic('dragStart');
+  }
+  // 從 Dock 拿起（2026-11-02）：一開始對準 Dock；拖到格子裡放手＝取消釘選、放在那格
+  function dragStartDock(n: Note) {
+    setMenu(null); setEditing(true);
+    entered.current = true;
+    dg.gx.value = T.space.l; dg.fopen.value = 0;
+    setD({ id: n.id, src: DOCK, page, to: entriesRef.current.length, from: -1, inF: null, fto: -1, k0: -1, inDock: true });
+    dg.ready.value = 1;
     haptic('dragStart');
   }
   function unstack() {
@@ -559,6 +636,29 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     }
     clearTimeout(leaveT.current);
     leaveT.current = undefined;
+    // Dock（2026-11-02）：資料夾不能釘；Dock 滿了（從格子拖來的）就不接。從 Dock 拿起的回到 Dock 馬上就算
+    if (a === DOCK_AIM) {
+      const me = dragEntryOf(d);
+      if (d.inDock || me?.folder || (d.src !== DOCK && pinnedRef.current.length >= PIN_MAX)) return;
+      const go = () => {
+        const cur = dragRef.current;
+        if (!cur) return;
+        // 從新開的那頁拖進 Dock：新頁收掉，回到前一頁
+        const pg = cur.brk ? Math.max(0, cur.page - 1) : cur.page;
+        if (cur.brk) { setPage(pg); pagerRef.current?.scrollTo({ x: pg * width, animated: !calm }); }
+        setD({ ...cur, inDock: true, brk: null, page: pg });
+        haptic('dragPass');
+      };
+      if (d.src === DOCK) go(); else aimT.current = setTimeout(go, T.timing.reflow);
+      return;
+    }
+    // 離開 Dock 回到格子：先排在手指底下那格，格子才不會一下子跳到最後
+    if (d.inDock) {
+      const k = a >= 0 ? a : -a - 1;
+      const out = { ...d, inDock: false, to: entriesRef.current.length };
+      setD({ ...out, to: toFor(out, out.page, k) });
+      return;
+    }
     if (a >= FOLDER_AIM) {
       entered.current = true;
       const k = a - FOLDER_AIM;
@@ -569,11 +669,11 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const me = dragEntryOf(d);
     const k = a >= 0 ? a : -a - 1;
     if (a >= 0 || me?.folder) {
-      if (pageStart(d.page) + k === d.to) return;
-      aimT.current = setTimeout(() => { const cur = dragRef.current; if (cur) { setD({ ...cur, to: pageStart(cur.page) + k }); haptic('dragPass'); } }, T.timing.reflow);
+      if (d.brk || toFor(d, d.page, k) === d.to) return; // 新開的那頁只有它自己，不用讓位
+      aimT.current = setTimeout(() => { const cur = dragRef.current; if (cur && !cur.brk) { setD({ ...cur, to: toFor(cur, cur.page, k) }); haptic('dragPass'); } }, T.timing.reflow);
       return;
     }
-    const under = flatOf(d)[pageStart(d.page) + k];
+    const F = flatOf(d), under = F[(paginate(F)[d.page] ?? [])[k] ?? -1];
     if (!under || under.id === d.id) return;
     aimT.current = setTimeout(() => {
       dg.stackK.value = k; setStackOn(under.id); haptic('dragStart');
@@ -587,15 +687,28 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     edgeT.current = setTimeout(function flip() {
       const d = dragRef.current;
       const np = d ? d.page + z : -1;
-      if (!d || d.inF || np < 0 || np >= pageCount.current || dg.edge.value !== z) return;
+      if (!d || d.inF || d.inDock || np < 0 || dg.edge.value !== z) return;
       clearTimeout(aimT.current);
       unstack();
+      if (np >= pageCount.current) {
+        // 最後一頁再往右（2026-11-02，多米選照 iOS）：這頁還有別張才開新的一頁，拖的那張是新頁唯一一張；新頁裡已經是自己了就不再開
+        const F = flatOf(d), here = (paginate(F)[d.page] ?? []).filter(i => F[i].id !== d.id);
+        if (!here.length || d.brk) return;
+        setPage(np);
+        setD({ ...d, page: np, brk: newBreak() });
+        dg.aim.value = 0;
+        requestAnimationFrame(() => pagerRef.current?.scrollTo({ x: np * width, animated: !calm }));
+        haptic('dragPass');
+        return;
+      }
       pagerRef.current?.scrollTo({ x: np * width, animated: !calm });
       setPage(np);
-      setD({ ...d, page: np });
+      // 從新開的那頁翻回來：新頁收掉，回到原本的排法
+      const back = { ...d, page: np, brk: null };
+      setD(back);
       const cx = dg.x0.value + dg.dx.value + dg.sw.value / 2, cy = dg.y0.value + dg.dy.value + TILE / 2;
       const k = slotIn(cx - dg.gx.value, cy - dg.gy.value, tileW, dg.gcount.value);
-      setD({ ...dragRef.current!, to: pageStart(np) + k });
+      setD({ ...back, to: toFor(back, np, k) });
       dg.aim.value = k;
       haptic('dragPass');
       edgeT.current = setTimeout(flip, T.timing.edgeFlip);
@@ -622,17 +735,23 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
         const n = store.s.notes.find(x => x.id === d.id);
         if (n) takeOut(n);
       } else keepOpen = !!d.src;
+    } else if (d && d.inDock) {
+      // 放進 Dock＝釘選（從 Dock 拿起又放回去：什麼都不改）。紙在座位表、資料夾裡的位置不動，取消釘選時回到原處
+      const n = store.s.notes.find(x => x.id === d.id);
+      if (n && !n.pinned && d.src !== DOCK && pinnedNotes(store.s).length < PIN_MAX) { n.pinned = true; n.updated = now; store.change(); }
     } else if (d && onto) {
       // 疊成新資料夾不打開，名字先叫「新資料夾」，要改再點開或長按改（照 iOS，多米 2026-11-02 看錄影選）。
       // 從資料夾拿出來的先拿出來：只剩一張的資料夾先拆掉，底下那張才站在原本那格（疊上去的就是它）
+      if (d.src === DOCK) unpin(d.id, now);
       if (d.src) outOfFolder(store.s, d.id, now);
       if (onto.folder) intoFolder(store.s, d.id, onto.id, now);
       else intoFolder(store.s, d.id, newFolder(store.s, onto.id, now).id, now);
       store.change();
     } else if (d) {
       const ids = flat.map(x => x.id);
+      if (d.src === DOCK) unpin(d.id, now); // 從 Dock 拖到格子＝取消釘選、放在那格
       if (d.src) { placeTop(store.s, d.id, ids, now); store.change(); }
-      else if (d.to !== d.from) { reseat(store.s, ids, now); store.change(); }
+      else if (d.to !== d.from || d.brk) { reseat(store.s, ids, now); store.change(); }
     }
     setStackOn(null); dg.stackK.value = -1; dg.fopen.value = 0;
     setD(null);
@@ -640,6 +759,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     if (!keepOpen && d && (d.src || d.inF)) setOpenF(null);
   }
   const shown = (i: number) => pages[i];
+  function unpin(id: string, now: number) {
+    const n = store.s.notes.find(x => x.id === id);
+    if (n?.pinned) { n.pinned = false; n.updated = now; }
+  }
 
   const noteA11y = (n: Note) => (name: string) => {
     if (name === 'activate') pick(n);
@@ -655,10 +778,10 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
   const face = (e: Entry, w: number) => (e.folder
     ? <FolderFace f={e.folder} notes={e.notes} w={w} cur={e.notes.some(n => n.id === store.last)} />
     : <TileFace n={e.note!} w={w} cur={e.id === store.last} />);
-  const tile = (e: Entry, k: number, pg: number) => {
+  const tile = (e: Entry, k: number, pg: number, parked = false) => {
     const f = e.folder, n = e.note;
     const common = {
-      w: tileW, sw: width, fw: innerW, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, dg,
+      w: tileW, sw: width, fw: innerW, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, dg, parked,
       onDragStart: () => dragStartGrid(e.id, pg, k), onAim, onEdge, onDrop: drop, target: stackOn === e.id,
     };
     if (f) {
@@ -678,17 +801,29 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
     const inside = !!folderOf(s, n!.id);
     return (
       <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={() => pick(n!)} onMenu={(x, y) => openMenu(n!.id, x, y, tileW, true, inside ? 3 : 4)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
+        onPick={(x, y) => pick(n!, x, y, tileW)} onMenu={(x, y) => openMenu(n!.id, x, y, tileW, true, inside ? 4 : 5)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
         {face(e, tileW)}
       </Tile>
     );
   };
+  // Dock 裡的一張（2026-11-02）：跟格子的紙磚同一套手勢；拿起來拖到格子＝取消釘選
+  const dockTile = (n: Note, k: number) => (
+    <Tile key={n.id} w={tileW} sw={width} fw={innerW} k={k} editing={editing} calm={calm} canDrag={!searching} ghost={drag?.id === n.id} dg={dg}
+      onDragStart={() => dragStartDock(n)} onAim={onAim} onEdge={onEdge} onDrop={drop} target={false}
+      label={`${noteLabel(n)}，在 Dock`} selected={n.id === store.last} acts={NOTE_A11Y}
+      onPick={(x, y) => pick(n, x, y, tileW)} onMenu={(x, y) => openMenu(n.id, x, y, tileW, true, 5)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}>
+      <TileFace n={n} w={tileW} cur={n.id === store.last} />
+    </Tile>
+  );
+  const dockShown = searching ? [] : dockList(drag);
+  // 拖著格子裡的紙、Dock 還有位置：Dock 裡露出一格虛線空位，看得出放得進去
+  const dockRoom = !!drag && !drag.inDock && drag.src !== DOCK && !dragEntryOf(drag)?.folder && dockShown.length < PIN_MAX;
   // 浮起那塊的樣子：從資料夾拿起的用資料夾裡的寬
   const dragged = drag ? dragEntryOf(drag, entries) : undefined;
   const ghostFace = dragged ? (drag!.src ? <TileFace n={dragged.note!} w={innerW} cur={false} /> : face(dragged, tileW)) : null;
 
   return (
-    <View style={{ flex: 1 }} collapsable={false}>
+    <View style={[{ flex: 1 }, !!menu && st.above]} collapsable={false}>
       <View style={[st.top, { paddingTop: padTop }]}>
         <View style={[st.search, { backgroundColor: c.page }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
@@ -737,7 +872,14 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                   )}
                   <View style={st.grid} pointerEvents="box-none">
                     {/* 拖的時候要放的位置留隱形佔位，其他磚照佔位讓開；浮起那塊畫在目錄最上層（DragGhost） */}
-                    {shown(i).map((n, k) => tile(n, k, i))}
+                    {/* 拖的那塊被排到別頁去了：它還是留在拿起的這頁（藏起來、不佔位），別頁只畫空位，手勢才不會斷。
+                        要跟其他磚放在同一個陣列裡（同一串 key），React 才認得是同一塊、不重掛 */}
+                    {[
+                      ...shown(i).map((n, k) => (drag && n.id === drag.id && !drag.src && drag.home !== i
+                        ? <View key={`${n.id}-spot`} style={{ width: tileW, height: TILE }} />
+                        : tile(n, k, i))),
+                      ...(drag && !drag.src && drag.home === i && dragged && !shown(i).some(n => n.id === drag.id) ? [tile(dragged, 0, i, true)] : []),
+                    ]}
                   </View>
                 </View>
               ))}
@@ -752,6 +894,27 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
           {pages.map((_, i) => (
             <View key={i} style={[st.dot, { backgroundColor: c.textSecondary, opacity: i === Math.min(page, pages.length - 1) ? 1 : T.shape.handleOff }]} />
           ))}
+        </View>
+      )}
+
+      {/* Dock（2026-11-02，多米選照 iOS）：釘選的清單住這裡，每一頁都看得到。拖進來＝釘選、拖出去＝取消釘選；最多 PIN_MAX 張。
+          位置量起來給拖曳用（外層從螢幕頂端開始，量到的就是螢幕座標）；高度固定一塊磚，空的時候也一樣高，拖的時候才不會跳 */}
+      {!searching && (
+        <View style={[st.dock, { backgroundColor: c.page }]} collapsable={false}
+          onLayout={e => { const l = e.nativeEvent.layout; dg.dkx.value = l.x + DOCK_PAD; dg.dky.value = l.y; dg.dkh.value = l.height; }}>
+          {dockShown.length || dockRoom ? (
+            <View style={st.dockRow}>
+              {dockShown.map((n, k) => (n.id === drag?.id && drag.src !== DOCK
+                ? <View key={n.id} style={{ width: tileW, height: TILE }} />
+                : dockTile(n, k)))}
+              {dockRoom && <View style={[st.tile, st.dockSlot, { width: tileW, borderColor: c.separator }]} />}
+            </View>
+          ) : (
+            <View style={[st.tile, st.dockEmpty, { borderColor: c.separator }]}>
+              <Sym name="pin" size={15} color={c.textSecondary} />
+              <Text style={[st.dockHint, { color: c.textSecondary }]}>把清單拖到這裡＝釘選</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -786,7 +949,7 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
                 {folderList.map((n, k) => (
                   <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={drag?.id === n.id}
                     dg={dg} screenW={width} gw={tileW}
-                    label={noteLabel(n)} onPick={() => pick(n)} onMenu={(x, y) => openMenu(n.id, x, y, innerW, true, 3)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
+                    label={noteLabel(n)} onPick={(x, y) => pick(n, x, y, innerW)} onMenu={(x, y) => openMenu(n.id, x, y, innerW, true, 4)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
                     onDragStart={() => dragStartFolder(n, openEntry.id, k)} onAim={onAim} onEdge={onEdge} onDrop={drop} />
                 ))}
               </View>
@@ -798,14 +961,22 @@ function Directory({ move, padTop, panelH, editing, setEditing }: DirProps) {
       {/* 拿起來的那張：浮在最上層跟著手指（目錄、資料夾都一樣），手勢還在原本那塊磚上 */}
       {drag && ghostFace && <DragGhost dg={dg}>{ghostFace}</DragGhost>}
 
-      {menu && menuNote && (
+      {/* 長按選單的暗幕往下多蓋一截，連目錄底部的把手一起蓋住（把手那截點了由面板收掉選單） */}
+      {menu && <View style={[StyleSheet.absoluteFill, { bottom: -T.shape.hitMin }]} pointerEvents="box-none">
+      {menuNote && (
         <PopMenu acts={tileActs(menuNote)} top={menu.top} side={menu.side} onClose={() => setMenu(null)}
           lifted={<Lifted x={menu.x} y={menu.y} calm={calm}><TileFace n={menuNote} w={menu.w} cur={menuNote.id === store.last} /></Lifted>}
           header={<Swatches current={menuNote.color} onPick={k => recolor(menuNote, k)} />} />
       )}
-      {menu && menuFolder && (
+      {menuFolder && (
         <PopMenu acts={folderActs(menuFolder)} top={menu.top} side={menu.side} onClose={() => setMenu(null)}
           lifted={<Lifted x={menu.x} y={menu.y} calm={calm}>{menuEntry ? face(menuEntry, menu.w) : null}</Lifted>} />
+      )}
+      </View>}
+
+      {launch && (
+        <Launch key={launch.n.id} x={launch.x} y={launch.y} w={launch.w} color={launch.n.color} title={label(launch.n)} W={width} H={panelH}
+          onDone={() => dirPanel.close(undefined, true)} />
       )}
     </View>
   );
@@ -815,8 +986,9 @@ type TileProps = {
   w: number; sw: number; fw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; dg: DG;
   label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
   tapInEdit?: boolean; // 抖動中點一下也算（資料夾磚：iOS 抖動中點檔案夾會打開）
+  parked?: boolean; // 拖的那塊被排到別頁：留在原本那頁、疊在左上角不佔位（看不見，只為了手勢不斷）
   onMinus?: () => void; // 抖動中左上角的「−」（只有紙磚；資料夾磚沒有，照 iOS）
-  onPick: () => void; onMenu: (x: number, y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
+  onPick: (x: number, y: number) => void; onMenu: (x: number, y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
   onA11y: (name: string) => void;
 };
 
@@ -839,7 +1011,7 @@ function Tile(p: TileProps) {
     maxDistance: G.longPressMove,
     onBegin: () => { pressed.value = 1; },
     onFinalize: () => { pressed.value = 0; },
-    onActivate: () => onPick(),
+    onActivate: e => onPick(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標），打開時從這裡放大
   });
   const hold = useLongPressGesture({
     runOnJS: true,
@@ -876,7 +1048,7 @@ function Tile(p: TileProps) {
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View style={style} layout={calm ? undefined : TILE_MOVE}
+      <Animated.View style={[style, p.parked && st.parked]} layout={calm ? undefined : TILE_MOVE}
         accessible accessibilityRole="button" accessibilityLabel={p.label}
         accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
@@ -938,7 +1110,7 @@ function Minus({ onPress }: { onPress: () => void }) {
 // 跟目錄的磚分開寫是因為長相、點的規則不同；拖跟目錄共用 useDragPan
 type FolderTileProps = {
   n: Note; k: number; w: number; calm: boolean; editing: boolean; cur: boolean; ghost: boolean; dg: DG; screenW: number; gw: number; label: string;
-  onPick: () => void; onMenu: (x: number, y: number) => void; onA11y: (name: string) => void; onMinus: () => void;
+  onPick: (x: number, y: number) => void; onMenu: (x: number, y: number) => void; onA11y: (name: string) => void; onMinus: () => void;
   onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function FolderTile(p: FolderTileProps) {
@@ -951,7 +1123,7 @@ function FolderTile(p: FolderTileProps) {
     maxDistance: G.longPressMove,
     onBegin: () => { pressed.value = 1; },
     onFinalize: () => { pressed.value = 0; },
-    onActivate: () => onPick(),
+    onActivate: e => onPick(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標），打開時從這裡放大
   });
   const hold = useLongPressGesture({
     runOnJS: true,
@@ -998,6 +1170,28 @@ function Lifted({ x, y, calm, children }: { x: number; y: number; calm: boolean;
   return <Animated.View pointerEvents="none" style={[st.ghost, { left: x, top: y }, style]}>{children}</Animated.View>;
 }
 
+// 點一張打開（2026-11-02，照 iOS 開 App）：一塊紙色從那塊磚的位置放大到鋪滿面板（W×H），名字跟著淡掉；鋪滿了 onDone（面板淡出）。
+// worklet 裡只用拆出來的數字（規矩檔：不准抓物件）
+type LaunchProps = { x: number; y: number; w: number; color: ColorKey; title: string; W: number; H: number; onDone: () => void };
+function Launch({ x, y, w, color, title, W, H, onDone }: LaunchProps) {
+  const c = useColors();
+  const nc = useNoteColors(color);
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withTiming(1, { duration: M.launch.duration, easing: Easing.out(Easing.cubic) }, f => { if (f) scheduleOnRN(onDone); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const R = T.shape.radiusCard;
+  const box = useAnimatedStyle(() => ({
+    left: x * (1 - t.value), top: y * (1 - t.value), width: w + (W - w) * t.value, height: TILE + (H - TILE) * t.value, borderRadius: R * (1 - t.value),
+  }));
+  const text = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[st.launch, { backgroundColor: nc.bg, borderColor: nc.rule }, box]}>
+      <Animated.Text style={[st.tileText, { color: c.textPrimary }, text]} numberOfLines={2}>{title}</Animated.Text>
+    </Animated.View>
+  );
+}
+
 // 拿起來的那張（D4 起目錄、資料夾共用）：畫在目錄最上層，從拿起那格的位置跟著手指平移，浮起一點（放大＋陰影）。不接觸控，手勢還在原本那塊上
 function DragGhost({ dg, children }: { dg: DG; children: ReactNode }) {
   const style = useAnimatedStyle(() => ({
@@ -1021,24 +1215,32 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
   );
 }
 
-// 資料夾磚（D1，多米 2026-11-02 選）：跟紙磚一樣大，上面資料夾名，下面一排小方塊＝裡面紙的色點（最多四個，更多的寫 +N）。
-// 底用整頁底色、框用分隔線色，跟紙磚的紙色分得開；正在看的紙在裡面就用 accent 框
+// 資料夾磚（D1，多米 2026-11-02 選）：跟紙磚一樣大，上面資料夾名。2026-11-02（照 iOS 檔案夾圖示是裡面 App 的縮圖）：
+// 下面 2×2 小磚預覽裡面的紙（紙色底＋名字），超過四張最後一格寫 +N。底用整頁底色、框用分隔線色，跟紙磚的紙色分得開；正在看的紙在裡面就用 accent 框
 function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number; cur: boolean }) {
   const c = useColors();
-  const more = notes.length - T.shape.folderMinis;
+  const max = T.shape.folderMinis, over = notes.length > max;
+  // 一格寬：扣掉左右內距、中間的縫、框線（選中時框比較粗，照粗的算才不會擠成一欄）
+  const pw = Math.floor((w - T.space.m * 2 - T.space.xs - T.shape.borderSelected * 2) / 2);
+  const shown = notes.slice(0, over ? max - 1 : max);
   return (
     <View style={[st.tile, { width: w, backgroundColor: c.page, borderColor: cur ? c.accent : c.separator, borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
       <Text style={[st.tileText, { color: c.textPrimary }]} numberOfLines={1}>{f.name}</Text>
-      <View style={st.minis}>
-        {notes.slice(0, T.shape.folderMinis).map(n => <Mini key={n.id} color={n.color} />)}
-        {more > 0 && <Text style={[st.more, { color: c.textSecondary }]}>+{more}</Text>}
+      <View style={st.peeks}>
+        {shown.map(n => <Peek key={n.id} n={n} w={pw} />)}
+        {over && <View style={[st.peek, { width: pw, borderColor: c.separator }]}><Text style={[st.peekText, { color: c.textSecondary }]}>+{notes.length - shown.length}</Text></View>}
       </View>
     </View>
   );
 }
-function Mini({ color }: { color: ColorKey }) {
-  const nc = useNoteColors(color);
-  return <View style={[st.mini, { backgroundColor: nc.hd }]} />;
+function Peek({ n, w }: { n: Note; w: number }) {
+  const c = useColors();
+  const nc = useNoteColors(n.color);
+  return (
+    <View style={[st.peek, { width: w, backgroundColor: nc.bg, borderColor: nc.rule }]}>
+      <Text style={[st.peekText, { color: c.textPrimary }]} numberOfLines={1}>{label(n)}</Text>
+    </View>
+  );
 }
 
 // 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名
@@ -1083,9 +1285,20 @@ const st = StyleSheet.create({
   trashRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin, marginHorizontal: T.space.l,
     paddingVertical: T.space.m, borderTopWidth: StyleSheet.hairlineWidth },
   trashText: { ...T.font.body },
-  minis: { position: 'absolute', left: T.space.m, bottom: T.space.m, flexDirection: 'row', alignItems: 'center', gap: T.space.xs },
-  mini: { width: T.shape.folderMini, height: T.shape.folderMini, borderRadius: T.shape.folderMiniRadius },
-  more: { ...T.font.footnote },
+  // 資料夾磚下面的 2×2 預覽（2026-11-02）
+  peeks: { position: 'absolute', left: T.space.m, right: T.space.m, bottom: T.space.m, flexDirection: 'row', flexWrap: 'wrap', gap: T.space.xs },
+  peek: { height: T.shape.folderMini, borderRadius: T.shape.folderMiniRadius, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center',
+    paddingHorizontal: T.space.xs, overflow: 'hidden' },
+  peekText: { ...T.font.caption, lineHeight: T.shape.folderMini - 2 * StyleSheet.hairlineWidth },
+  above: { zIndex: 1 },
+  parked: { position: 'absolute', left: 0, top: 0 }, // 長按選單開著：目錄整塊蓋在底部把手上面（暗幕才蓋得到把手那截）
+  // Dock（2026-11-02）：左右各留 s、裡面再留 s，磚的位置跟格子對齊（s＋s＝l）
+  dock: { marginHorizontal: T.space.s, marginBottom: T.space.s, padding: DOCK_PAD, borderRadius: T.shape.radiusPanel },
+  dockRow: { flexDirection: 'row', gap: T.space.m },
+  dockSlot: { borderStyle: 'dashed', backgroundColor: 'transparent' },
+  dockEmpty: { borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: T.space.s },
+  dockHint: { ...T.font.footnote },
+  launch: { position: 'absolute', borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   folderWrap: { justifyContent: 'center' },
   // 「−」壓在磚的左上角、一半露在外面（像 iOS）
   minus: { position: 'absolute', top: -T.space.s, left: -T.space.s, width: T.shape.minusBadge, height: T.shape.minusBadge,

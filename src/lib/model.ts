@@ -210,6 +210,13 @@ export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | '
   return notes;
 }
 
+/* ---------------- 換頁標記（2026-11-02，多米選照 iOS：拖到最後一頁右邊緣停一下＝開新的一頁） ---------------- */
+// 座位表裡用「|」開頭的 id 當換頁標記：它後面的格子從新的一頁開始排。紙和資料夾的 id 不會有「|」。
+// 還沒更新的舊版讀到會在 fixOrder 丟掉（只是頁合回去，紙不會少）
+export const BRK = '|';
+export const isBreak = (id: unknown): id is string => typeof id === 'string' && id.startsWith(BRK);
+export const newBreak = () => BRK + uid();
+
 /* ---------------- 目錄座位表（C1） ---------------- */
 // 改字不換位（公理 2：手記得住不動的位置）。舊存檔沒有座位表時，照 C1 之前目錄的樣子編第一次（釘選的在前、再照 sort），
 // 打開新版看到的順序才會跟以前一模一樣；在最近刪除裡的紙接在後面（看不到，座位留著，還原就回原位）
@@ -241,10 +248,23 @@ export function fixOrder(s: State) {
   const folders = fixFolders(s.folders, ids);
   const inFolder = new Set(folders.flatMap(f => f.ids)), fids = new Set(folders.map(f => f.id));
   const seen = new Set<string>();
-  const order = (Array.isArray(s.order) ? s.order : firstSeats(s))
-    .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id)) && !seen.has(id) && !!seen.add(id));
-  for (const f of folders) if (!seen.has(f.id)) { order.push(f.id); seen.add(f.id); }
-  for (const n of s.notes.filter(n => !seen.has(n.id) && !inFolder.has(n.id)).sort((a, b) => b.updated - a.updated)) order.push(n.id);
+  const kept = (Array.isArray(s.order) ? s.order : firstSeats(s))
+    .filter(id => typeof id === 'string' && ((ids.has(id) && !inFolder.has(id)) || fids.has(id) || isBreak(id)) && !seen.has(id) && !!seen.add(id));
+  for (const f of folders) if (!seen.has(f.id)) { kept.push(f.id); seen.add(f.id); }
+  for (const n of s.notes.filter(n => !seen.has(n.id) && !inFolder.has(n.id)).sort((a, b) => b.updated - a.updated)) kept.push(n.id);
+  // 換頁標記只留「前後兩邊都有看得到的格子」的：最前面、最後面、連在一起、隔開的那頁看不到東西（全在最近刪除或釘在 Dock）的都拿掉
+  const shown = (id: string) => fids.has(id) || s.notes.some(n => n.id === id && !n.deleted && !n.pinned);
+  const order: string[] = [];
+  let since = false; // 上一個標記（或最前面）之後有沒有看得到的格子
+  for (const id of kept) {
+    if (!isBreak(id)) { order.push(id); if (shown(id)) since = true; continue; }
+    if (since) { order.push(id); since = false; }
+  }
+  // 最後一個標記後面沒有看得到的格子：拿掉
+  for (let i = order.length - 1; i >= 0; i--) {
+    if (isBreak(order[i])) { order.splice(i, 1); break; }
+    if (shown(order[i])) break;
+  }
   const old = s.order;
   const sameFolders = JSON.stringify(folders) === JSON.stringify(s.folders ?? []);
   if (Array.isArray(old) && old.length === order.length && old.every((id, i) => id === order[i]) && sameFolders) return false;
@@ -261,7 +281,10 @@ export function reseat(s: State, visible: string[], now = Date.now()) {
   let k = 0;
   const old = s.order!;
   s.order = old.map(id => (set.has(id) ? visible[k++] : id));
-  if (s.order.some((id, i) => id !== old[i])) s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1);
+  // visible 比座位表裡的多（剛開新的一頁：多一個換頁標記）：多出來的接在最後
+  if (k < visible.length) s.order.push(...visible.slice(k));
+  if (s.order.length !== old.length || s.order.some((id, i) => id !== old[i])) s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1);
+  fixOrder(s);
 }
 
 // 座位攤平：資料夾那一格換成它裡面的紙（D1，搜尋時資料夾裡的紙就排在資料夾的位置）
@@ -283,7 +306,8 @@ export function seatedNotes(s: State, q: string) {
 
 /* ---------------- 資料夾（D1） ---------------- */
 // 目錄最上層的一格：一張紙，或一個資料夾（notes＝裡面看得到的紙，照資料夾裡的順序）。一張都看不到的資料夾（全在最近刪除）不出現
-export type Entry = { id: string; note?: Note; folder?: Folder; notes: Note[] };
+// brk＝換頁標記那一格（seatedLayout 才有，2026-11-02）：不畫成磚，排頁時從它後面開新的一頁
+export type Entry = { id: string; note?: Note; folder?: Folder; notes: Note[]; brk?: true };
 export function seatedEntries(s: State): Entry[] {
   const owner = new Map<string, Folder>();
   for (const f of okFolders(s)) for (const id of f.ids) if (!owner.has(id)) owner.set(id, f);
@@ -300,6 +324,30 @@ export function seatedEntries(s: State): Entry[] {
   return out;
 }
 export const folderOf = (s: State, noteId: string) => okFolders(s).find(f => f.ids.includes(noteId));
+
+// 目錄格子（2026-11-02）：跟 seatedEntries 一樣，但釘選的紙不在格子裡（住在 Dock，資料夾裡的也不算），
+// 換頁標記照座位表的位置插進來（只插在兩格之間，最前面、連續的不插）
+export function seatedLayout(s: State): Entry[] {
+  const all: Entry[] = [];
+  for (const e of seatedEntries(s)) {
+    if (!e.folder) { if (!e.note!.pinned) all.push(e); continue; }
+    const notes = e.notes.filter(n => !n.pinned);
+    if (notes.length) all.push({ ...e, notes });
+  }
+  if (!Array.isArray(s.order)) return all;
+  const pos = new Map(s.order.map((id, i) => [id, i] as const));
+  const breaks = s.order.flatMap((id, i) => (isBreak(id) ? [[id, i] as const] : []));
+  const out: Entry[] = [];
+  let b = 0;
+  for (const e of all) {
+    const p = pos.get(e.id) ?? Infinity;
+    let cut: string | null = null;
+    while (b < breaks.length && breaks[b][1] < p) cut = breaks[b++][0];
+    if (cut && out.length) out.push({ id: cut, notes: [], brk: true });
+    out.push(e);
+  }
+  return out;
+}
 
 // 建資料夾、放進、移出、改名都算親手排（C2：同步時後排的那台為準）
 const touchLayout = (s: State, now: number) => { s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1); };
