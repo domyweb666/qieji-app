@@ -261,7 +261,10 @@ export const gesture = {
   // 底部列（PageBar）：手指動超過 barActivate 才算滑，先動的方向定案——橫的多＝換張、往上＝開目錄（看角度，不再兩個門檻比快）
   barActivate: 10,
   swapFailY: 12, pageTurnRatio: 0.5, swapFlick: 500, swapEdge: 0.3,
-  tileDrag: 6, // 目錄的磚（C4）：長按之後（抖動中不用等）手指移超過這麼多就拿起來拖
+  // 目錄的磚什麼時候算拿起來拖（2026-11-03 多米真機：長按清單選單一跳出來就變成拖、抖動中點資料夾打不開）：
+  // 長按後（選單已跳出）要拖超過 tileDragHeld 才拿起——比長按容許的晃動（longPressMove 10）大，手指按著晃一下不會一跳選單就變拖；
+  // 抖動中拖超過 tileDragEdit 才拿起，點一下的容許也用同一個數，手指點下去晃幾點不會被當成拖
+  tileDragHeld: 18, tileDragEdit: 12,
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
   // 2026-11-02（多米：磚是寬的，左右上下都難換；原型對過）：看拖著那張跟底下那張「重疊多少」（面積比），不看中心落在哪。
   // 不到 mergeOverlap 不理；mergeOverlap～swapOverlap 停 timing.stackHover＝準備疊；超過 swapOverlap 停 timing.swapDwell＝互換（只有這兩張動）；

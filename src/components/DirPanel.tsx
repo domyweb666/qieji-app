@@ -160,8 +160,8 @@ function useDragPan(o: DragOpts) {
   return usePanGesture({
     enabled: o.enabled,
     activateAfterLongPress: o.editing ? 0 : G.longPressMs,
-    // 抖動中不用等長按，門檻跟「點一下」的容許一樣（多米 2026-11-02 錄影：門檻 6 點時，抖動中點資料夾手指一晃就被當成拖，打不開）
-    minDistance: o.editing ? G.longPressMove : G.tileDrag,
+    // 抖動中不用等長按，門檻跟「點一下」的容許一樣；沒抖動時長按後要拖得比長按容許的晃動遠（tokens tileDragHeld 的說明）
+    minDistance: o.editing ? G.tileDragEdit : G.tileDragHeld,
     onActivate: e => {
       'worklet';
       dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
@@ -176,13 +176,15 @@ function useDragPan(o: DragOpts) {
       // 不然用的是上一次拖留下的值：資料夾裡拿起時被當成在目錄某一格，稍微一動放手就被拿出資料夾（多米 2026-11-02 真機記錄 aim:0、fopen:1）
       if (!dg.ready.value) return;
       const ax = dg.x0.value + e.translationX, ay = dg.y0.value + e.translationY;
-      const cx = ax + dg.sw.value / 2, cy = ay + TILE / 2;
-      // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候看框的左右邊（翻資料夾的頁，2026-11-02），框外是收起資料夾
-      const z = dg.fopen.value ? 0 : cx < EDGE ? -1 : cx > screenW - EDGE ? 1 : 0;
+      const cy = ay + TILE / 2;
+      // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候看框的左右邊（翻資料夾的頁，2026-11-02），框外是收起資料夾。
+      // 看的是手指，不是磚的中心（2026-11-03 多米真機：拖不到隔壁頁）：磚很寬，抓著右半邊往右拖，手指到螢幕邊了磚的中心還差五十幾點，永遠到不了邊緣
+      const fx = e.absoluteX;
+      const z = dg.fopen.value ? 0 : fx < EDGE ? -1 : fx > screenW - EDGE ? 1 : 0;
       if (z !== dg.edge.value) { dg.edge.value = z; scheduleOnRN(onEdge, z); }
       const inBoxY = cy >= dg.by.value && cy <= dg.by.value + dg.bh.value;
       const fz = !dg.fopen.value || !dg.bw.value || !inBoxY ? 0
-        : cx < dg.bx.value + EDGE && cx >= dg.bx.value - GAP ? -1 : cx > dg.bx.value + dg.bw.value - EDGE && cx <= dg.bx.value + dg.bw.value + GAP ? 1 : 0;
+        : fx < dg.bx.value + EDGE && fx >= dg.bx.value - GAP ? -1 : fx > dg.bx.value + dg.bw.value - EDGE && fx <= dg.bx.value + dg.bw.value + GAP ? 1 : 0;
       if (fz !== dg.fedge.value) { dg.fedge.value = fz; scheduleOnRN(onEdge, fz * 2); }
       const a = aimOf(ax, ay, dg, gw, fw);
       if (a === dg.aim.value) return;
@@ -1038,7 +1040,8 @@ function Tile(p: TileProps) {
   const tap = useTapGesture({
     runOnJS: true,
     enabled: !p.editing || !!p.tapInEdit,
-    maxDistance: G.longPressMove,
+    // 抖動中點資料夾：容許的晃動跟拿起來拖的門檻一樣（tileDragEdit），晃幾點不會被當成拖
+    maxDistance: p.editing ? G.tileDragEdit : G.longPressMove,
     onBegin: () => { pressed.value = 1; },
     onFinalize: () => { pressed.value = 0; },
     onActivate: e => onPick(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標），打開時從這裡放大
