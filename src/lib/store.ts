@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; fresh?: string | null; seek?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -98,6 +98,14 @@ export const store = {
   },
   get fresh() { return box.fresh ?? null; },
   clearFresh() { box.fresh = null; },
+  // 搜尋筆記點了某一行（2026-11-03）：換到那張（已經是那張就重畫一次），紙捲到那行亮一下。是那張紙的行才拿走、拿一次就清掉
+  openAt(id: string, line: string) { box.seek = line; store.open(id); },
+  takeSeek(mine: (line: string) => boolean) {
+    const l = box.seek ?? null;
+    if (!l || !mine(l)) return null;
+    box.seek = null;
+    return l;
+  },
   // 目錄長按選單「改名字」（C4）：要那張紙的清單名變成可以打字。紙還沒掛上就先留著，掛上來時自己拿（同 requestCompose）
   requestRename(id: string) { box.rename = id; box.renameSubs?.forEach(f => f()); },
   takeRename(id: string) { if (box.rename !== id) return false; box.rename = null; return true; },

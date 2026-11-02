@@ -5,6 +5,9 @@
 // - 左邊玻璃膠囊：目錄圖示＋這張的名字＋頁點。在膠囊上左右滑＝換張（整張紙跟著手指走，跟以前一樣）；往上滑或點一下＝目錄從下面升起
 // - 右邊茄紫玻璃圓鈕：＋ 記一行（核心動作，固定在右下角，跟以前同一個位置）
 // 手勢由 Paper 傳進來（要用到整頁平移、目錄面板的進度）。VoiceOver：膠囊是「可調整」的元素，上下滑換張、點兩下開目錄
+// 2026-11-03 多米：左右換張時 ＋ 要一直停在原地。以前底部列畫在紙裡面，換張＝整張紙重掛，列跟著重掛（玻璃重新長出來會閃一下）；
+// 改成紙只把「列要用的東西」交給 barSlot，列本身由根畫面的 PageBarHost 畫在紙外面，換張時列從頭到尾是同一個、不動
+import { useSyncExternalStore } from 'react';
 import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -15,6 +18,23 @@ import { Glass } from './Glass';
 import { Sym } from './Sym';
 
 const KB = T.motion.keyboardFollow.duration;
+
+type BarProps = { notes: Note[]; cur: Note; name: string; pan: PanGesture; onOpen: () => void; onStep: (d: -1 | 1) => void; onAdd: () => void };
+// 現在這張紙交過來的列內容；show＝要不要畫（鍵盤、輸入框、排順序時收起）
+let slot: { props: BarProps; show: boolean } | null = null;
+const subs = new Set<() => void>();
+export const barSlot = {
+  set(props: BarProps, show: boolean) { slot = { props, show }; subs.forEach(f => f()); },
+};
+const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
+const snap = () => slot;
+
+// 根畫面畫在紙與目錄面板之間：紙換了列不重掛，目錄升起時蓋過它
+export function PageBarHost() {
+  const s = useSyncExternalStore(subscribe, snap, snap);
+  if (!s?.show) return null;
+  return <PageBar {...s.props} />;
+}
 
 export function PageBar({ notes, cur, name, pan, onOpen, onStep, onAdd }: {
   notes: Note[]; cur: Note; name: string;

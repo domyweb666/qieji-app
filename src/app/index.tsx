@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { LayoutAnimationConfig } from 'react-native-reanimated';
 import { DirPanelHost } from '../components/DirPanel';
+import { PageBarHost } from '../components/PageBar';
 import { Paper } from '../components/Paper';
 import { newNote, store, useStore } from '../lib/store';
 import { useColors } from '../lib/tokens';
@@ -21,6 +22,8 @@ export default function Home() {
   return (
     <View style={{ flex: 1, overflow: 'hidden' }}>
       <LayoutAnimationConfig skipEntering><Paper key={n.id} n={n} /></LayoutAnimationConfig>
+      {/* 底部列（換張、開目錄、右下 ＋）在紙外面：換張時不跟著紙重掛，＋ 一直停在原地（2026-11-03）；目錄面板蓋在它上面 */}
+      <PageBarHost />
       <DirPanelHost />
     </View>
   );

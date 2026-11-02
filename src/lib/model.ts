@@ -309,6 +309,23 @@ export function seatedNotes(s: State, q: string) {
     .sort((a, b) => (seat.get(a.id) ?? end) - (seat.get(b.id) ?? end) || b.updated - a.updated);
 }
 
+// 搜尋筆記（多米 2026-11-03：「搜尋清單」其實早就找得到每一行，但結果只列整張磚、看不出是哪一行，改成直接列出符合的行）：
+// 照目錄的座位順序，每張列出名字有沒有中、中了哪幾行（劃掉的也算，還在紙上）。舊的文字筆記（body）沒有行，整段當一行看
+export type LineHit = { note: Note; title: boolean; lines: { id: string; t: string; done: boolean }[] };
+export function searchLines(s: State, q: string): LineHit[] {
+  const k = q.trim().toLowerCase();
+  if (!k) return [];
+  const has = (t: string) => t.toLowerCase().includes(k);
+  return seatedNotes(s, k).map(n => ({
+    note: n,
+    title: has(n.title),
+    lines: [
+      ...n.items.filter(i => has(i.t)).map(i => ({ id: i.id, t: i.t, done: !!i.done })),
+      ...(n.body && has(n.body) ? [{ id: '', t: n.body, done: false }] : []),
+    ],
+  }));
+}
+
 /* ---------------- 資料夾（D1） ---------------- */
 // 目錄最上層的一格：一張紙，或一個資料夾（notes＝裡面看得到的紙，照資料夾裡的順序）。一張都看不到的資料夾（全在最近刪除）不出現
 // brk＝換頁標記那一格（seatedLayout 才有，2026-11-02）：不畫成磚，排頁時從它後面開新的一頁

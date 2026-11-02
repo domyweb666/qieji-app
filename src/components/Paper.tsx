@@ -37,7 +37,7 @@ import { Swatches } from './Swatches';
 import { Sym } from './Sym';
 import { DoneBtn, GlassBtn } from './WebBars';
 import { HAS_NATIVE_ROWS, NativeRows } from './NativeRows';
-import { PageBar } from './PageBar';
+import { barSlot } from './PageBar';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
@@ -233,6 +233,19 @@ export function Paper({ n }: { n: Note }) {
   // （不用 ScrollView 的 maintainVisibleContentPosition：它會記住最上面那行，拖曳動到頂端幾行時自己挪捲動又捲回頂端，2026-11-01 第七批拿掉）
   const newRow = useRef<string | null>(null);
   const [freshId, setFreshId] = useState<string | null>(null);
+  // 從搜尋筆記點某一行過來（2026-11-03）：捲到那行、亮一下。每次畫都看一次（點的可能就是正在看的這張，紙不會重掛）；
+  // 那行還沒量好位置（剛換過來）就等 onLayoutRow，量好了就畫完直接捲（下面的 effect）。系統清單版捲不到，只換到這張
+  const seekRow = useRef<string | null>(null);
+  const sk = store.takeSeek(l => n.items.some(i => i.id === l));
+  if (sk && !sysRows) seekRow.current = sk;
+  // 每次畫完都看（沒有相依陣列是故意的）；拿到一次就清掉 seekRow，不會一直重畫
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+    const id = seekRow.current, l = id && layouts.current[id];
+    if (!id || !l) return;
+    seekRow.current = null;
+    scrollTo(Math.max(0, l.y - view.current.h / 3), !calm);
+    setFreshId(id);
+  });
   function addFromDraft(t: string) {
     const id = uid();
     newRow.current = id;
@@ -578,8 +591,6 @@ export function Paper({ n }: { n: Note }) {
   const hx = useSharedValue(0);
   const turning = useSharedValue(0); // 已經決定換頁、正在滑過去：這段不再接手指
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: hx.value }] }));
-  // 右下 ＋ 不跟著整頁走（多米 2026-11-02）：反方向抵掉整頁的平移，看起來釘在原地
-  const fabStill = useAnimatedStyle(() => ({ transform: [{ translateX: -hx.value }] }));
   // 滑到定位：換成那張（新的那張不淡入）。那張剛好被別台刪掉了就彈回這張
   function turnTo(id: string) {
     if (!store.s.notes.some(x => x.id === id && !x.deleted)) { turning.value = 0; hx.value = withSpring(0, SNAP_BACK); return; }
@@ -639,6 +650,11 @@ export function Paper({ n }: { n: Note }) {
   });
   // VoiceOver 的上下滑（可調整元素）：直接換到旁邊那張
   function step(d: -1 | 1) { const id = d > 0 ? nextId : prevId; if (id) openNote(id); }
+  // 底部列（換張、開目錄、右下 ＋）畫在紙外面、換張時不重掛（多米 2026-11-03：＋ 要一直停在原地）。每次畫完把最新的內容交過去；
+  // 紙卸載時不收回，下一張紙同一輪就會交新的，列不會閃。鍵盤升起、輸入框開著、排順序時不畫
+  useLayoutEffect(() => {
+    barSlot.set({ notes: swapSet, cur: n, name, pan: barPan, onOpen: openDir, onStep: step, onAdd: addLine }, !kbUp && !composing && !ordering);
+  });
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
     if (n.color === k) return;
@@ -789,6 +805,7 @@ export function Paper({ n }: { n: Note }) {
                   const old = layouts.current[it.id], fa = focusAt.current;
                   if (old && fa?.id === it.id && fa.y !== undefined && h > old.h) fa.y += h - old.h;
                   if (newRow.current === it.id) placeNewRow(it.id, h); // 輸入框剛送出的那行：捲回頂端亮一下，或原地不動（見 addFromDraft）
+                  if (seekRow.current === it.id) { seekRow.current = null; scrollTo(Math.max(0, y - view.current.h / 3), !calm); setFreshId(it.id); } // 搜尋點過來的那行
                   layouts.current[it.id] = { y, h };
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
@@ -809,11 +826,7 @@ export function Paper({ n }: { n: Note }) {
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
           2-4 做法 6；多米 2026-11-01 說 ✓ 之後 ＋ 回來的時間點不對：之前等鍵盤完全收完才淡進，比鍵盤晚一拍）。
           鍵盤膠囊（∧ ∨ ＋ ✓）2026-11-01 多米定拿掉：輸入框旁邊就有 ✓，行裡打字要收鍵盤點空白處或空行按 Return */}
-      <Animated.View style={[StyleSheet.absoluteFill, fabStill]} pointerEvents="box-none">
-        {!kbUp && !composing && !ordering && (
-          <PageBar notes={swapSet} cur={n} name={name} pan={barPan} onOpen={openDir} onStep={step} onAdd={addLine} />
-        )}
-      </Animated.View>
+      {/* 列本身畫在紙外面（根畫面的 PageBarHost，2026-11-03），見下面 barSlot.set */}
 
       {/* 輸入框（多米 2026-11-01，第四版＝乙）：框貼在鍵盤上面、跟著鍵盤一起升降，框與鍵盤同一個時鐘（keyboardFollow）。
           第三版整個畫面鋪了暗幕、點外面不能點到別行，多米真機說「編輯感覺很不好」（2-5：記是主線，不該被包成模態），同日定乙拿掉暗幕：

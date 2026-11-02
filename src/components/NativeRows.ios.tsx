@@ -7,7 +7,7 @@
 // 系統清單裡不能放輸入框在原地打字（會跟鍵盤、捲動打架），所以點一行＝下面的輸入框帶著那行的字升起來改（Paper 處理）。
 import { Button, ContextMenu, Host, List, SwipeActions, Text } from '@expo/ui/swift-ui';
 import {
-  accessibilityLabel, contentShape, environment, font, foregroundStyle, frame, listRowBackground, listRowInsets, listRowSeparatorTint,
+  accessibilityLabel, contentShape, environment, font, foregroundStyle, frame, lineSpacing, listRowBackground, listRowInsets, listRowSeparatorTint,
   listStyle, onTapGesture, scrollContentBackground, scrollDismissesKeyboard, shapes, strikethrough, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { requireOptionalNativeModule } from 'expo';
@@ -18,7 +18,10 @@ import { T, type Colors } from '../lib/tokens';
 
 export const HAS_NATIVE_ROWS = Platform.OS === 'ios' && !!requireOptionalNativeModule('ExpoUI');
 
-const FS = T.font.bodyLine.fontSize, PAD = T.space.m, SIDE = T.space.l;
+// 字跟茄記版一樣大（多米 2026-11-03：系統清單的字太小）：以前寫死 17 點、不跟「設定→字體大小」放大，茄記版會跟；
+// 改用系統內文字級（預設也是 17，會跟著放大）。多行時的行距補到跟茄記版的 27 差不多（系統自己的行高約 22，差的那段用 lineSpacing 補），
+// 上下留白也照茄記版每行上下各 12（以前只給左右，上下是 0，整行擠在一起看起來更小）
+const LINE_GAP = T.font.bodyLine.lineHeight - T.font.composerLine.lineHeight, PAD = T.space.m, SIDE = T.space.l;
 
 export type NativeRowsProps = {
   items: Item[];
@@ -37,7 +40,7 @@ export function NativeRows({ items, colors: c, bg, rule, ordering, style, onTap,
   const row = useCallback(({ item: it }: { item: Item }) => {
     const has = !!it.t.trim();
     return (
-      <SwipeActions modifiers={[listRowBackground(bg), listRowSeparatorTint(rule), listRowInsets({ leading: SIDE, trailing: SIDE })]}>
+      <SwipeActions modifiers={[listRowBackground(bg), listRowSeparatorTint(rule), listRowInsets({ top: PAD, bottom: PAD, leading: SIDE, trailing: SIDE })]}>
         <ContextMenu>
           <ContextMenu.Items>
             {has ? <Button label={it.done ? '恢復' : '劃掉'} systemImage={it.done ? 'arrow.uturn.backward' : 'strikethrough'} onPress={() => onStrike(it.id)} /> : null}
@@ -47,7 +50,8 @@ export function NativeRows({ items, colors: c, bg, rule, ordering, style, onTap,
           </ContextMenu.Items>
           <ContextMenu.Trigger>
             <Text modifiers={[
-              font({ size: FS }),
+              font({ textStyle: 'body' }),
+              lineSpacing(LINE_GAP),
               foregroundStyle(it.done ? c.textStrike : c.textPrimary),
               strikethrough({ isActive: it.done, pattern: 'solid' }),
               frame({ maxWidth: Infinity, alignment: 'leading' }),

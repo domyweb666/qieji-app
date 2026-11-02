@@ -10,7 +10,6 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { T, useColors } from '../lib/tokens';
-import { Glass } from './Glass';
 import { Sym } from './Sym';
 
 const LINE_H = T.font.bodyLine.lineHeight;
@@ -75,8 +74,9 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
       entering={calm ? FadeIn.duration(T.motion.fade) : SlideInDown.duration(KB.duration).easing(KB_EASE)}
       exiting={calm ? FadeOut.duration(T.motion.fade) : SlideOutDown.duration(KB.duration).easing(KB_EASE)}
       >
-      {/* 卡片是系統材質（2026-11-02 系統元件化：iOS 26 液態玻璃、舊 iOS 霧面、減少透明度照舊奶油白） */}
-      <Glass style={s.card}>
+      {/* 卡片用不透明的奶油白（2026-11-03 多米：打字時連打字的框都是黑的）。2026-11-02 系統元件化曾換成液態玻璃，
+          但框後面就是變暗的紙（暗幕），玻璃照著後面的顏色變深、字看不清；打字的地方要穩定看得清楚，跟 iOS 訊息的輸入框一樣不透明 */}
+      <View style={[s.card, { backgroundColor: c.surface }, T.shape.shadowSoft]}>
       {/* grow 至少 44 高、把字那塊上下置中（一行時字跟 ✓ 在同一條中線）；字那塊由鏡像撐高、最高 maxInput，輸入框鋪滿在上面 */}
       <View style={s.grow}>
         <View style={{ maxHeight: maxInput }}>
@@ -95,7 +95,7 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
         style={({ pressed }) => [s.btn, pressed && { opacity: T.motion.pressDim }]}>
         <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
       </Pressable>
-      </Glass>
+      </View>
     </Animated.View>
   );
 }

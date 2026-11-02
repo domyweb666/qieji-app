@@ -31,7 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
   col, dropNotes, folderOf, intoFolder, isEmpty, label, markDeleted, markRestored, moveItem, newBreak, newFolder, outOfFolder, placeInFolder,
-  placeTop, renameFolder, reseat, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type Folder, type Note,
+  placeTop, renameFolder, reseat, searchLines, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -846,9 +846,9 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         {/* 搜尋列照 iOS 的樣子（2026-11-02 系統元件化）：淡灰膠囊、放大鏡、打字時右邊有系統的清除鈕、鍵盤右下是「搜尋」 */}
         <View style={[st.search, { backgroundColor: c.searchFill }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
-          <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder="搜尋清單" placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
+          <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder={moving ? '搜尋清單' : '搜尋筆記'} placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
             returnKeyType="search" enablesReturnKeyAutomatically autoCorrect={false}
-            editable={!editing} style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel="搜尋清單" />
+            editable={!editing} style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel={moving ? '搜尋清單' : '搜尋筆記'} />
         </View>
         {/* 抖動中才有：結束編輯（跟 iOS 主畫面右上的「完成」一樣） */}
         {editing && (
@@ -866,8 +866,15 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         <Text style={[st.moveHead, { color: c.textSecondary }]} numberOfLines={2}>把「{moving.t.trim()}」搬到</Text>
       )}
 
-      {searching ? (
-        // 搜尋：所有頁的紙一起找，排成一整片上下捲，不分頁（不能拖：搜到的只是一部分）
+      {searching && !moving ? (
+        // 搜尋筆記（多米 2026-11-03）：直接列出符合的那幾行，上面標是哪一張；點一行＝換到那張、捲到那行亮一下，點清單名＝打開那張
+        <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
+          {searchLines(s, q).map(h => <HitGroup key={h.note.id} h={h} q={q.trim()}
+            onNote={() => pick(h.note)} onLine={id => { if (id) store.openAt(h.note.id, id); else store.open(h.note.id); dirPanel.close(); }} />)}
+          {notes.length === 0 && <Empty lines={[`找不到含「${q.trim()}」的筆記`]} />}
+        </ScrollView>
+      ) : searching ? (
+        // 搬行模式的搜尋：找要搬到哪一張，照舊列磚，所有頁的紙一起找、上下捲，不分頁（不能拖：搜到的只是一部分）
         <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
           <View style={st.grid}>{entries.map((e, k) => tile(e, k, 0))}</View>
           {/* 找不到→帶他剛打的字；第一次不會是空的（紙永遠至少一張）。顏色篩選的空狀態跟著篩選一起拿掉（2026-11-01） */}
@@ -1274,6 +1281,44 @@ function Peek({ n, w }: { n: Note; w: number }) {
   );
 }
 
+// 搜尋筆記的一組（2026-11-03）：上面一條是哪張清單（色點＋名字，名字中了就把那段標出來），下面是符合的每一行，打中的字用 accent 粗體。
+// 行很長、打中的字在後面時，從打中的字前面幾個字開始顯示（前面補 …），不然兩行內看不到打中的地方
+const LEAD = 12; // 打中的字前面留幾個字
+function Marked({ t, q, style, lines }: { t: string; q: string; style: object; lines?: number }) {
+  const c = useColors();
+  const k = q.toLowerCase(), at = t.toLowerCase().indexOf(k);
+  const flat = t.replace(/\n/g, ' ');
+  if (at < 0 || !k) return <Text style={style} numberOfLines={lines}>{flat}</Text>;
+  const from = at > LEAD ? at - LEAD : 0;
+  return (
+    <Text style={style} numberOfLines={lines}>
+      {from ? '…' : ''}{flat.slice(from, at)}
+      <Text style={[st.hitMark, { color: c.accent }]}>{flat.slice(at, at + k.length)}</Text>
+      {flat.slice(at + k.length)}
+    </Text>
+  );
+}
+function HitGroup({ h, q, onNote, onLine }: { h: LineHit; q: string; onNote: () => void; onLine: (id: string) => void }) {
+  const c = useColors();
+  const nc = useNoteColors(h.note.color);
+  return (
+    <View style={[st.hitGroup, { borderBottomColor: c.separator }]}>
+      <Pressable onPress={onNote} accessibilityRole="button" accessibilityLabel={`打開「${label(h.note)}」`}
+        style={({ pressed }) => [st.hitHead, pressed && { opacity: T.motion.pressDim }]}>
+        <View style={[st.dot, { backgroundColor: nc.hd }]} />
+        {h.title ? <Marked t={label(h.note)} q={q} style={[st.hitTitle, { color: c.textSecondary }]} lines={1} />
+          : <Text style={[st.hitTitle, { color: c.textSecondary }]} numberOfLines={1}>{label(h.note)}</Text>}
+      </Pressable>
+      {h.lines.map((l, i) => (
+        <Pressable key={l.id || i} onPress={() => onLine(l.id)} accessibilityRole="button" accessibilityLabel={`${l.t}，在「${label(h.note)}」`}
+          style={({ pressed }) => [st.hitLine, pressed && { backgroundColor: c.pressedFill }]}>
+          <Marked t={l.t} q={q} lines={2} style={[st.hitText, { color: l.done ? c.textStrike : c.textPrimary }, l.done && st.hitDone]} />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 // 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名
 function FolderName({ f, focus }: { f: Folder; focus: boolean }) {
   const c = useColors();
@@ -1304,6 +1349,13 @@ const st = StyleSheet.create({
   page: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: T.space.s, paddingVertical: T.space.s },
   dot: { width: T.shape.pageDot, height: T.shape.pageDot, borderRadius: T.shape.pill(T.shape.pageDot) },
+  hitGroup: { paddingVertical: T.space.s, borderBottomWidth: StyleSheet.hairlineWidth },
+  hitHead: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin },
+  hitTitle: { ...T.font.subheadBold, flex: 1 },
+  hitLine: { justifyContent: 'center', minHeight: T.shape.hitMin, paddingVertical: T.space.s, paddingHorizontal: T.space.m, borderRadius: T.shape.radiusMenu },
+  hitText: { ...T.font.body },
+  hitDone: { textDecorationLine: 'line-through' },
+  hitMark: { fontWeight: T.font.emphasis.fontWeight },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.m, marginTop: T.space.m },
   ghost: { position: 'absolute', ...T.shape.shadowSoft },
   ghostAt: { left: 0, top: 0 },
