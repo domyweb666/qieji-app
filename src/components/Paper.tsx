@@ -65,7 +65,6 @@ const PAGE_TURN = { ...T.motion.pageTurn.spring }, SNAP_BACK = { ...T.motion.sna
 const TURN_RATIO = T.gesture.pageTurnRatio, TURN_FLICK = T.gesture.swapFlick, EDGE_FOLLOW = T.gesture.swapEdge;
 // 換紙＝key 換了、新的那張重新掛上。整頁撥過來的：旁邊那張的預覽已經滑到定位，新的那張直接接手、不淡入（pagedIn 放模組層級交給它）
 let pagedIn = false;
-const openNote = (id: string) => store.open(id); // 減少動態：直接換，新的那張照常淡入
 const NOOP = () => {};
 const NO_ACTIONS: { name: string; label: string }[] = [];
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
@@ -558,7 +557,8 @@ export function Paper({ n }: { n: Note }) {
   // B4：標題區左右撥＝在把手那幾張（swipeSet）之間換，手指往左＝換到右邊那張。整張紙跟著手指走（多米 2026-11-02：像 iOS 分頁一樣整頁一起換，只從標題區撥），
   // 旁邊那張的預覽（PagePreview）同時從另一邊滑進來；到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。
   // 撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙（turnTo）；不夠就彈回。減少動態：照樣跟手，放手直接換，交給整張淡入。改名時關掉；目錄開著時面板蓋著，撥不到
-  const swapSet = swipeSet(store.s, n), at = swapSet.indexOf(n);
+  // 最左邊那頁是 store.lastFree（最近看的那張沒釘選的）；滑走前現在這張沒釘選就先記下，取消釘選後再滑走也回得來
+  const swapSet = swipeSet(store.s, n, store.lastFree), at = swapSet.indexOf(n);
   const prevN = swapSet[at - 1], nextN = swapSet[at + 1];
   const prevId = prevN?.id ?? '', nextId = nextN?.id ?? ''; // worklet 只抓 id 字串，不抓紙物件
   const hx = useSharedValue(0);
@@ -568,6 +568,11 @@ export function Paper({ n }: { n: Note }) {
   function turnTo(id: string) {
     if (!store.s.notes.some(x => x.id === id && !x.deleted)) { turning.value = 0; hx.value = withSpring(0, SNAP_BACK); return; }
     pagedIn = true;
+    openNote(id);
+  }
+  // 減少動態：直接換，新的那張照常淡入
+  function openNote(id: string) {
+    if (!n.pinned) store.setLastFree(n.id);
     store.open(id);
   }
   const swap = usePanGesture({
@@ -759,8 +764,8 @@ export function Paper({ n }: { n: Note }) {
       {rowMenu && <PopMenu acts={rowActs(rowMenu.id)} top={rowMenu.top} onClose={() => setRowMenu(null)} />}
 
       {/* 左右撥換張時旁邊那張（B4 整頁）：擺在螢幕外左右各一張，跟著整張紙一起滑進來 */}
-      {prevN && <PagePreview n={prevN} side={-1} />}
-      {nextN && <PagePreview n={nextN} side={1} />}
+      {prevN && <PagePreview n={prevN} side={-1} set={swapSet} />}
+      {nextN && <PagePreview n={nextN} side={1} set={swapSet} />}
       </LayoutAnimationConfig>
     </Animated.View>
   );
@@ -768,8 +773,9 @@ export function Paper({ n }: { n: Note }) {
 
 // 左右撥換張時旁邊那張（B4，多米 2026-11-02「整個頁面一起換」）：跟真的紙同一套版面和樣式（標題列、時間列、把手、一行一行、右下 ＋），
 // 但不能點、不能打字、VoiceOver 不讀。擺在螢幕外左邊（side −1）或右邊（1），跟著整張紙一起滑進來；滑到定位後換成真的那張（turnTo），
-// 兩張要長得一模一樣才不會閃。滑進來只看得到最上面那段，行只畫到一個螢幕放得下的數量。自己聽 store：那張被改了（同步、目錄改色）才重畫
-const PagePreview = memo(function PagePreview({ n, side }: { n: Note; side: -1 | 1 }) {
+// 兩張要長得一模一樣才不會閃。滑進來只看得到最上面那段，行只畫到一個螢幕放得下的數量。自己聽 store：那張被改了（同步、目錄改色）才重畫。
+// 把手用這張紙的那組頁（set）：換過去之後還是同一組（turnTo 會把現在這張記成 lastFree），頁點前後才一致
+const PagePreview = memo(function PagePreview({ n, side, set }: { n: Note; side: -1 | 1; set: Note[] }) {
   useStore();
   const insets = useSafeAreaInsets();
   const c = useColors();
@@ -794,7 +800,7 @@ const PagePreview = memo(function PagePreview({ n, side }: { n: Note; side: -1 |
           <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
           <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
         </View>
-        <SegHandle notes={swipeSet(store.s, n)} cur={n} color={c.textSecondary} onPress={NOOP} />
+        <SegHandle notes={set} cur={n} color={c.textSecondary} onPress={NOOP} />
       </View>
       <View style={st.previewBody}>
         {n.items.length === 0 ? (
@@ -809,7 +815,7 @@ const PagePreview = memo(function PagePreview({ n, side }: { n: Note; side: -1 |
       <Fab onPress={NOOP} label="新增一行" />
     </View>
   );
-});
+}, (a, b) => a.n === b.n && a.side === b.side && a.set.length === b.set.length && a.set.every((x, i) => x === b.set[i]));
 
 // 預覽頁的一行：跟紙上的一行（LineRow）同一套樣式、同一個 Field，只是沒有手勢、不能打字。字變了就重掛 Field（它的字是不受控的）
 const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: string; done: boolean; bg: string; rule: string; colors: Colors; fs: number }) {
@@ -848,14 +854,15 @@ type LineProps = {
   drag: { start: (id: string) => void; end: () => void };
 };
 
-// 標題區下面的分段把手（B2）：一段＝標題區換得到的一張，亮的那段＝現在這張；點了開目錄（往下拉是 B3 的捷徑，這裡是看得見的入口）
+// 標題區下面的分段把手（B2）：一段＝標題區換得到的一張；現在這張拉長成一條，其他是淡的小圓點（多米 2026-11-02，像番茄鐘 App 的頁點）。
+// 點了開目錄（往下拉是 B3 的捷徑，這裡是看得見的入口）
 function SegHandle({ notes, cur, color, onPress }: { notes: Note[]; cur: Note; color: string; onPress: () => void }) {
   return (
     <Pressable style={({ pressed }) => [st.handle, pressed && { opacity: T.motion.pressDim }]} onPress={onPress}
       hitSlop={T.shape.handleSlop} accessibilityRole="button" accessibilityLabel="全部清單" accessibilityHint="打開目錄">
       {notes.map(x => (
-        <View key={x.id} style={[st.seg, { backgroundColor: color, opacity: x === cur ? 1 : T.shape.handleOff },
-          notes.length === 1 && { width: T.shape.handleSolo }]} />
+        <View key={x.id} style={[st.seg, { backgroundColor: color },
+          notes.length === 1 ? { width: T.shape.handleSolo } : x === cur ? { width: T.shape.handleSeg } : st.segDot]} />
       ))}
     </Pressable>
   );
@@ -1154,6 +1161,7 @@ const st = StyleSheet.create({
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
   handle: { alignSelf: 'center', flexDirection: 'row', gap: T.shape.handleGap, marginTop: T.space.xs },
   seg: { width: T.shape.handleSeg, height: T.shape.handleH, borderRadius: T.shape.pill(T.shape.handleH) },
+  segDot: { width: T.shape.handleH, opacity: T.shape.handleOff }, // 不是現在這頁：小圓點（寬＝高）
   timeText: { ...T.font.footnote },
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
   previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）

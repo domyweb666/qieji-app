@@ -182,10 +182,15 @@ export function pickLabel(n: Note) {
 export const PIN_MAX = 2;
 export const pinnedNotes = (s: State) => s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated);
 // 標題區換張的那幾張（B2 把手的段數、B4 左右滑）：釘選的照建立先後（不照修改時間，改一個字不會換位置），
-// 現在這張不在裡面（沒釘，或舊資料釘超過兩張）就暫時排最左
-export function swipeSet(s: State, cur: Note) {
+// 最左邊固定是一張沒釘選的（多米 2026-11-02：釘 1 張＝2 頁、釘 2 張＝3 頁，從釘選那張往回滑要回到原本那張）。
+// 現在這張不在釘選裡（沒釘，或舊資料釘超過兩張）就是它；在釘選裡就用 lastFree（最近看的那張沒釘選的），
+// 那張被刪了或後來被釘選了，改用最近改過的那張沒釘選的
+export function swipeSet(s: State, cur: Note, lastFree?: string | null) {
   const set = s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => a.created - b.created).slice(0, PIN_MAX);
-  return set.includes(cur) ? set : [cur, ...set];
+  if (!set.includes(cur)) return [cur, ...set];
+  const free = s.notes.find(n => n.id === lastFree && !n.pinned && !n.deleted)
+    ?? s.notes.filter(n => !n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated)[0];
+  return free ? [free, ...set] : set;
 }
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 

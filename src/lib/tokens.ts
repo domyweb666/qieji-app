@@ -144,11 +144,11 @@ export const shape = {
   fab: 58,
   swatchPad: 5,
   // 重新設計分支（紙是家）新增
-  // 標題區下面的分段把手（B2，多米原型 2026-11-01）：一段一小條，只有一段時是一條長的；點擊範圍另外撐到 hitMin
-  handleSeg: 12,
+  // 標題區下面的分段把手（B2，多米原型 2026-11-01；11-02 改頁點）：現在這頁一條、其他小圓點，只有一段時是一條長的；點擊範圍另外撐到 hitMin
+  handleSeg: 20,  // 現在這頁那條（其他頁是 handleH 大的小圓點）
   handleSolo: 38,
   handleH: 4,
-  handleGap: 3,
+  handleGap: 5,
   handleOff: 0.3, // 沒亮的那幾段（亮的那段不透明）
   // 把手點擊範圍往外撐：往上蓋過時間那行（不能點）、往下只到分隔線（＝時間區下緣內距 space.s），不吃到第一行
   handleSlop: { top: 30, bottom: 8, left: 16, right: 16 },

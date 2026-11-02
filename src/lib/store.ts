@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; fresh?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -22,6 +22,7 @@ const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
 const emit = () => box.subs.forEach(f => f());
 const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
+const LAST_FREE_KEY = 'cn.lastFree'; // 最近看的那張沒釘選的（左右滑最左邊那頁，swipeSet）
 const CLOUD_OFF_KEY = 'cn.cloudOffSeen'; // 「iCloud 雲碟沒開」提示過了（只跳一次，S5）
 
 // S5 多米選「提示一次」：iCloud 不能用、過 10 秒再確認還是不能用，才跳一次「紙只存在這台手機」，之後永遠不再跳
@@ -66,8 +67,16 @@ export const store = {
   setLast(id: string | null) {
     if (box.last === id) return;
     box.last = id;
+    if (id && box.state.notes.some(n => n.id === id && !n.pinned)) store.setLastFree(id);
     (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
     if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
+  },
+  // 最近看的那張沒釘選的：左右滑時最左邊那頁（swipeSet）。開到沒釘選的那張、或從沒釘選的那張滑走時記
+  get lastFree() { return box.lastFree ?? null; },
+  setLastFree(id: string) {
+    if (box.lastFree === id) return;
+    box.lastFree = id;
+    AsyncStorage.setItem(LAST_FREE_KEY, id).catch(() => {});
   },
 
   // 目錄點了哪張、或剛開了新的一張：換到那張紙（根畫面照 last 畫）。fresh＝新的一張，紙打開後直接停在輸入列
@@ -91,7 +100,7 @@ export const store = {
 
   async load() {
     if (box.loaded) return;
-    const [raw, hint, last] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY)]);
+    const [raw, hint, last, lastFree] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY)]);
     if (box.loaded) return;
     const state = parseState(raw);
     // C1 第一次轉成座位表（🔴 動真資料）：先把整份原始存檔原封不動另存一份，只存一次（已經有就不蓋）；另存失敗這次就不轉
@@ -107,6 +116,9 @@ export const store = {
     box.state = state;
     box.hintSeen = hint === '1';
     box.last = last;
+    // 上次開的那張沒釘選就用它，不然用記著的那張（被刪、被釘了 swipeSet 自己換）
+    box.lastFree = last && state.notes.some(n => n.id === last && !n.pinned) ? last : lastFree;
+    if (box.lastFree && box.lastFree !== lastFree) AsyncStorage.setItem(LAST_FREE_KEY, box.lastFree).catch(() => {});
     // 第一次安裝（手機上根本沒有這個存檔，raw 是 null）：放一張教學紙當第一張（多米 2026-11-01）。
     // 讀到壞掉的存檔不算第一次（raw 不是 null），不放，免得蓋在使用者的資料上
     const first = raw === null;
