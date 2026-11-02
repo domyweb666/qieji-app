@@ -651,9 +651,11 @@ export function Paper({ n }: { n: Note }) {
   // VoiceOver 的上下滑（可調整元素）：直接換到旁邊那張
   function step(d: -1 | 1) { const id = d > 0 ? nextId : prevId; if (id) openNote(id); }
   // 底部列（換張、開目錄、右下 ＋）畫在紙外面、換張時不重掛（多米 2026-11-03：＋ 要一直停在原地）。每次畫完把最新的內容交過去；
-  // 紙卸載時不收回，下一張紙同一輪就會交新的，列不會閃。鍵盤升起、輸入框開著、排順序時不畫
+  // 紙卸載時不收回，下一張紙同一輪就會交新的，列不會閃。鍵盤升起、輸入框開著、排順序時不畫。
+  // 紙自己的彈出選單（茄記版行的長按、網頁的 ⋯）開著時也不畫：列畫在紙外面、疊在紙的選單上面，不收的話選單後面霧掉了列還清清楚楚、還點得到
   useLayoutEffect(() => {
-    barSlot.set({ notes: swapSet, cur: n, name, pan: barPan, onOpen: openDir, onStep: step, onAdd: addLine }, !kbUp && !composing && !ordering);
+    barSlot.set({ notes: swapSet, cur: n, name, pan: barPan, onOpen: openDir, onStep: step, onAdd: addLine },
+      !kbUp && !composing && !ordering && !menu && !rowMenu);
   });
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
