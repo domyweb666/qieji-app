@@ -14,7 +14,7 @@
 // 現在手勢跟偵測元件同一個元件、同一輩子；紙只交「平移誰、左右是哪兩張」，換紙時同一個處理器原地換內容（Reanimated useEvent rebuild）
 import { useState, useSyncExternalStore } from 'react';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
-import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedReaction, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -107,7 +107,7 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
   useAnimatedReaction(
     () => (hx.value < -winW * TURN_RATIO ? nextId : hx.value > winW * TURN_RATIO ? prevId : ''),
     (id, old) => { if (id !== old) scheduleOnRN(setPeek, id); },
-    [hx, winW, prevId, nextId],
+    Platform.OS === 'web' ? [hx, winW, prevId, nextId] : undefined, // 相依陣列只給網頁（iOS 給了會一直跳警告）
   );
   const shown = (peekId && notes.find(x => x.id === peekId)) || cur;
   const shownName = shown === cur ? name : shown.title.trim() || '未命名';

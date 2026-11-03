@@ -1214,7 +1214,7 @@ function LiveRow(p: LiveProps) {
   }, (y, old) => {
     if (y === old) return;
     giveWay.value = calm || dragIdx.value < 0 || old === null ? y : withSpring(y, SHIFT_SPRING);
-  }, [index, calm]);
+  }, WEB_DEPS ? [index, calm] : undefined); // 相依陣列只給網頁（iOS 自己看用到哪些值，給了會一直跳警告）
   // 換回只畫字（捲遠了）：讓位歸零，不然留著上一次讓位的量
   useEffect(() => () => { giveWay.value = 0; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
