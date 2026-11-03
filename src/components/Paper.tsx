@@ -23,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, putBack, roomOf, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binDone, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, roomOf, uid, unbinDone, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
@@ -535,8 +535,9 @@ export function Paper({ n }: { n: Note }) {
     if (store.fresh === n.id) {
       store.clearFresh();
       const openOnce = () => { off?.(); off = undefined; clearTimeout(t); if (mounted.current) openComposer(); };
-      off = store.onPanelClosed(openOnce);
-      t = setTimeout(openOnce, T.timing.freshFocusFallback);
+      // 切換清單開的新的一張（F3，2026-11-04）：切換清單收完才開這張，不會有目錄收完的通知，直接升起（不白等 freshFocusFallback）
+      if (!store.panelOpen) openOnce();
+      else { off = store.onPanelClosed(openOnce); t = setTimeout(openOnce, T.timing.freshFocusFallback); }
     }
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
     return () => { clearTimeout(t); off?.(); cancelAnimationFrame(geoT.current); mounted.current = false; closeNote(); };
@@ -631,13 +632,14 @@ export function Paper({ n }: { n: Note }) {
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
-        const before = n.items.slice(), gone = new Set(before.filter(i => i.done).map(i => i.id));
-        setItems(before.filter(i => !i.done));
-        // 復原只放回清掉的那幾行（model putBack）：以前整份換回清掉之前，這幾秒內新記的行會不見、刪掉的行會一行兩份（2026-11-04 程式審查）。
-        // 已經換到別張也照樣放回去（清掉的行不在最近刪除裡，這裡不放回就沒了）；這張已經永久拿掉了才不放
-        ui.toast('已清掉劃掉的行', { label: '復原', fn: () => {
+        // 清掉的行進最近刪除（F1，2026-11-04：跟刪單行一樣，沒按到復原也找得回來）
+        const before = n.items.slice(), gone = new Set(binDone(n, Date.now()).map(i => i.id));
+        touch();
+        // 復原只放回清掉的那幾行（model unbinDone → putBack）：這幾秒內新記的、刪的、搬走的照留（2026-11-04 程式審查）。
+        // 已經換到別張也照樣放回去；這張已經永久拿掉了才不放
+        ui.toast(`已把 ${gone.size} 行移到最近刪除`, { label: '復原', fn: () => {
           if (!store.s.notes.includes(n)) return;
-          if (putBack(n, before, gone)) touch();
+          if (unbinDone(n, before, gone)) touch();
         } });
       } },
     ] },

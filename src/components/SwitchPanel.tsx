@@ -1,7 +1,7 @@
 // 切換清單（2026-11-04 改版，多米給的設計圖第 2 格）：點紙左上的清單名，從螢幕下面升起、貼齊底部（下面不是圓角）。
 // 一開始用 iOS 系統的半高面板（formSheet），多米真機看：跟 ⋯ 的系統選單不像同一個畫風、而且 iOS 26 的半高面板是浮起來四角都圓的、關不掉，
 // 改成自己做（多米選）：跟 ⋯ 選單同一種液態玻璃（Glass），排法照系統選單——左邊小方磚、右邊名字，組跟組之間一條線，小字標組名。
-// 內容：釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
+// 內容：最上面「新的一張」（F3，2026-11-04）；釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
 // 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -9,8 +9,8 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { label, switchList, type Note } from '../lib/model';
-import { store, useStore } from '../lib/store';
+import { label, seatFirstHole, switchList, type Note } from '../lib/model';
+import { newNote, store, useStore } from '../lib/store';
 import { T, useColors } from '../lib/tokens';
 import { dirPanel } from './DirPanel';
 import { Glass } from './Glass';
@@ -54,6 +54,12 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
   };
   const pick = (n: Note) => close(n.id === store.last ? undefined : () => store.open(n.id));
   const all = () => close(() => dirPanel.open());
+  // 新的一張（F3，2026-11-04）：收完才開（跟點一張同一個時機）。黃色、放進目錄第一個空位；fresh＝紙打開後直接升起輸入框（跟目錄的 ＋ 一樣）
+  const add = () => close(() => {
+    const n = newNote('yellow', 'check');
+    if (seatFirstHole(store.s, n.id, Date.now())) store.change();
+    store.open(n.id, true);
+  });
   // 往下撥上緣那條（小橫條＋組名那段）：跟著手指往下，撥過一段或往下甩就收起，不然彈回
   const pan = usePanGesture({
     activeOffsetY: PULL,
@@ -80,9 +86,10 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
       </Pressable>
     );
   };
-  const group = (head: string, notes: Note[], first: boolean) => notes.length ? (
+  // 每組上面一條線（最上面還有「新的一張」，所以第一組也要）
+  const group = (head: string, notes: Note[]) => notes.length ? (
     <View key={head}>
-      {!first && <View style={[st.sep, { backgroundColor: c.menuSep }]} />}
+      <View style={[st.sep, { backgroundColor: c.menuSep }]} />
       <Text style={[st.head, { color: c.textSecondary }]}>{head}</Text>
       {notes.map(row)}
     </View>
@@ -102,8 +109,14 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
           </View>
         </GestureDetector>
         <ScrollView bounces={false} contentContainerStyle={{ paddingBottom: insets.bottom + T.space.s }}>
-          {group('釘選', pinned, true)}
-          {group('最近', recent, !pinned.length)}
+          {/* 樣子跟「管理所有清單」同一種：茄紫每個畫面只出現一次，這個面板的勾已經用了 */}
+          <Pressable onPress={add} accessibilityRole="button" accessibilityLabel="新的一張"
+            style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
+            <View style={st.allIcon}><Sym name="plus" size={20} color={c.textPrimary} /></View>
+            <Text style={[st.name, { color: c.textPrimary }]}>新的一張</Text>
+          </Pressable>
+          {group('釘選', pinned)}
+          {group('最近', recent)}
           <View style={[st.sep, { backgroundColor: c.menuSep }]} />
           <Pressable onPress={all} accessibilityRole="button" accessibilityLabel="管理所有清單"
             style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>

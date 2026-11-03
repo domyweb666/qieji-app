@@ -521,6 +521,12 @@ export function seatNew(s: State, noteId: string, now: number, to?: { hole?: str
   fixOrder(s);
   return true;
 }
+// 切換清單的「新的一張」（F3，2026-11-04）放哪：目錄裡第一個空位。一頁放幾格只有目錄打開時量得到，所以不看「那頁最後一張後面還放不放得下」：
+// 沒有空位就不放，存檔時 fixOrder 排在最後。只有前面的頁有換頁標記又沒放滿時，會跟目錄的 ＋ 放的地方不一樣。回傳有沒有放
+export function seatFirstHole(s: State, noteId: string, now: number) {
+  const hole = seatedLayout(s).find(e => e.hole);
+  return hole ? seatNew(s, noteId, now, { hole: hole.id }) : false;
+}
 // 刪掉一張（進最近刪除）時呼叫：在它的座位前面放它專用的空位（見 holeFor）。在資料夾裡的、已經有的不放。回傳有沒有放
 export function leaveHole(s: State, noteId: string, now: number) {
   fixOrder(s);
@@ -727,6 +733,29 @@ export function putBack(n: Note, before: Item[], removed: Set<string>) {
   for (const it of n.items) { out.push(it); const list = after.get(it.id); if (list) out.push(...list); }
   n.items = out;
   return back;
+}
+// 「清掉劃掉的行」（F1，2026-11-04）：劃掉的行全部進這張紙的最近刪除，跟刪單行同一套（時間記清掉那一刻，30 天自動清）。
+// 照紙上的先後排在最近刪除的最前面。回傳清掉的那幾行
+export function binDone(n: Note, now: number): Item[] {
+  const gone = n.items.filter(i => i.done);
+  if (!gone.length) return gone;
+  n.items = n.items.filter(i => !i.done);
+  for (const it of gone) it.at = now;
+  n.bin.unshift(...gone);
+  return gone;
+}
+// 「清掉劃掉的行」的復原（F1）：ids 裡還在最近刪除的那幾行拿出來，照 putBack 放回原位。這幾秒內從最近刪除還原過、永久刪掉的不動。
+// 放回去的是最近刪除裡那一份（同步合併過的話跟 before 裡的不是同一個物件）。回傳放回幾行
+export function unbinDone(n: Note, before: Item[], ids: Set<string>): number {
+  const pulled = new Map<string, Item>();
+  n.bin = n.bin.filter(it => {
+    if (!ids.has(it.id)) return true;
+    delete it.at;
+    pulled.set(it.id, it);
+    return false;
+  });
+  if (!pulled.size) return 0;
+  return putBack(n, before.map(it => pulled.get(it.id) ?? it), new Set(pulled.keys()));
 }
 // 搬到別張紙：放到那張的最上面。同一張不動
 export function moveItem(from: Note, to: Note, id: string): Item | undefined {

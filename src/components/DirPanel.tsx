@@ -373,7 +373,9 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // D1：不搜尋時目錄最上層一格一格是紙或資料夾；搜尋時直接列紙（資料夾裡的也列）
   // 2026-11-02：不搜尋時用 seatedLayout（換頁標記照座位插進來；釘選的跟一般的一起排）
   const entries: Entry[] = searching ? notes.map(n => ({ id: n.id, note: n, notes: [n] })) : seatedLayout(s);
-  const trashed = s.notes.filter(n => n.deleted).length;
+  // 最近刪除裡有幾項：刪掉的清單＋還在的紙刪掉的行（跟最近刪除頁的總數同一套）。
+  // 以前只數清單：只刪過行時這一列不出現，刪掉的行進不去（F1 順手發現，2026-11-04）
+  const trashed = s.notes.reduce((k, n) => k + (n.deleted ? 1 : n.bin.length), 0);
   // 兩欄：整頁左右各留 16，中間留 12
   // 欄寬（2026-11-03 改 1×1）：目錄一排 COLS 欄、左右各留 l；打開的資料夾一排 FCOLS 欄（框寬扣左右內距）
   const tileW = Math.floor((width - T.space.l * 2) / COLS); // 取整數：搬行模式的格子是自動換行排的，差一點小數就會被擠成一排三個
@@ -981,9 +983,9 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         {/* 搜尋列照 iOS 的樣子（2026-11-02 系統元件化）：淡灰膠囊、放大鏡、打字時右邊有系統的清除鈕、鍵盤右下是「搜尋」 */}
         <View style={[st.search, { backgroundColor: c.searchFill }, editing && { opacity: T.motion.pressDim }]}>
           <Sym name="magnifyingglass" size={17} color={c.textSecondary} />
-          <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder={moving ? '搜尋清單' : '搜尋筆記'} placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
+          <TextInput value={q} onChangeText={v => { setQ(v); setPage(0); }} placeholder={moving ? '搜尋清單' : '搜尋'} placeholderTextColor={c.textMuted} clearButtonMode="while-editing"
             returnKeyType="search" enablesReturnKeyAutomatically autoCorrect={false}
-            editable={!editing} style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel={moving ? '搜尋清單' : '搜尋筆記'} />
+            editable={!editing} style={[st.searchInput, { color: c.textPrimary }]} accessibilityLabel={moving ? '搜尋清單' : '搜尋'} />
         </View>
         {/* 新的一張（2026-11-03 多米選：1×1 之後從第一頁第一列搬到這裡，格子全部給清單）；抖動中這個位置換成「完成」 */}
         {!editing && (
@@ -1070,7 +1072,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
 
       {/* 最近刪除固定在格子下面，每一頁都看得到 */}
       {trashed > 0 && (
-        <Pressable onPress={editing ? undefined : () => dirPanel.close(() => router.push('/trash'))} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 張`}
+        <Pressable onPress={editing ? undefined : () => dirPanel.close(() => router.push('/trash'))} accessibilityRole="button" accessibilityLabel={`最近刪除，${trashed} 項`}
           style={({ pressed }) => [st.trashRow, { borderTopColor: c.separator }, pressed && !editing && { opacity: T.motion.pressDim }]}>
           <Sym name="trash" size={17} color={c.textSecondary} />
           <Text style={[st.trashText, { color: c.textSecondary }]}>最近刪除</Text>

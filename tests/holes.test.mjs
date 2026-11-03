@@ -1,7 +1,7 @@
 // 目錄自由擺放（2026-11-03，多米：「清單定死位置，沒法像主畫面想放哪就放哪」）：座位表裡的空位
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, packGrid, reseat, seatNew, seatedLayout } from '../src/lib/model.ts';
+import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, packGrid, reseat, seatFirstHole, seatNew, seatedLayout } from '../src/lib/model.ts';
 
 const note = (id, o = {}) => ({ id, type: 'check', title: id, body: '', bin: [], color: 'yellow', items: [], pinned: false, deleted: false, created: 1, updated: 1, b: true, ...o });
 const state = (notes, order, folders) => ({ sort: 'updated', notes, garden: { days: {}, tot: { f: 0, e: 0 } }, order, folders });
@@ -173,6 +173,21 @@ test('seatNew：沒給、找不到就照舊排最後，不算親手排', () => {
   assert.ok(!seatNew(s, 'n', 5, { hole: '.x' }));
   assert.ok(!seatNew(s, 'n', 5));
   assert.deepEqual(s.order, ['a', 'n']);
+  assert.equal(s.orderMod, undefined);
+});
+
+test('seatFirstHole（切換清單的新的一張）：放進第一個空位，後面的空位不動', () => {
+  const s = state([note('a'), note('b'), note('c'), note('n')], ['a', '.1', 'b', '.2', 'c']);
+  assert.ok(seatFirstHole(s, 'n', 5));
+  assert.deepEqual(s.order, ['a', 'n', 'b', '.2', 'c']);
+  assert.ok(s.orderMod >= 5);
+});
+
+test('seatFirstHole：沒有空位就不放，存檔時排最後', () => {
+  const s = state([note('a'), note('b'), note('n')], ['a', 'b']);
+  assert.ok(!seatFirstHole(s, 'n', 5));
+  fixOrder(s); // 存檔時
+  assert.deepEqual(s.order, ['a', 'b', 'n']);
   assert.equal(s.orderMod, undefined);
 });
 
