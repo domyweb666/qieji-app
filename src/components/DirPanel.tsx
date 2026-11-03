@@ -164,7 +164,7 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
 // 放手滑進要放的那格再回 JS 改資料（資料夾開著但手指在框外就不滑，交給 JS）。減少動態：直接到位
 type DragOpts = {
   enabled: boolean; editing: boolean; w: number; screenW: number; gw: number; fw: number; calm: boolean; dg: DG;
-  held?: SharedValue<number>; // 這塊磚按住了沒（0～1，磚自己畫放大用）。資料夾裡的磚不給：還沒拿起來就不放大（多米 2026-11-03）
+  held: SharedValue<number>; // 這塊磚按住了沒（0～1，磚自己畫放大、收起「−」用）
   onStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function useDragPan(o: DragOpts) {
@@ -179,7 +179,7 @@ function useDragPan(o: DragOpts) {
     dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
     dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
     // 抖動中手指一按下磚就放大了（held）：拿起來那張從一樣大接著浮，不會先縮回去再長大
-    if (!calm) dg.lift.value = held ? held.value : 0;
+    if (!calm) dg.lift.value = held.value;
     dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     scheduleOnRN(onStart);
   };
@@ -190,15 +190,16 @@ function useDragPan(o: DragOpts) {
     activateAfterLongPress: editing ? undefined : G.longPressMs,
     // 抖動中手指移超過 tileDragEdit 才拿起（點一下的容許也是這個數，晃幾點還是點）；沒抖動時這個值不起作用（見上面 armed）
     minDistance: G.tileDragEdit,
-    // 抖動中手指一按下就放大（2026-11-03 多米真機：按住沒動畫，不知道按到了沒）；拖著照樣大（畫的是浮著那張，見 DragGhost），放手才縮回。
+    // 抖動中手指一按下就放大、左上的「−」收起（2026-11-03 多米真機：按住沒動畫，不知道按到了沒；資料夾裡的磚也是按住那張才變）；
+    // 拖著照樣大、沒有「−」（畫的是浮著那張，見 DragGhost），放手才縮回、「−」回來。
     // 沒抖動時長按是跳選單，選單那塊自己會浮起（Lifted），這裡不動
     onBegin: () => {
       'worklet';
-      if (editing && held) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
+      if (editing) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     },
     onFinalize: () => {
       'worklet';
-      if (held) held.value = calm ? 0 : withSpring(0, LIFT_SPRING);
+      held.value = calm ? 0 : withSpring(0, LIFT_SPRING);
     },
     onActivate: e => {
       'worklet';
@@ -1178,7 +1179,7 @@ function Tile(p: TileProps) {
         accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
         {p.children}
-        {p.editing && p.onMinus && <Minus onPress={p.onMinus} />}
+        {p.editing && p.onMinus && <Minus onPress={p.onMinus} held={held} />}
       </Animated.View>
     </GestureDetector>
   );
@@ -1221,13 +1222,17 @@ function PageBack({ editing, calm, pg, count, width, pager, onHold, onTap }: Pag
 
 // 抖動中紙磚左上角的「−」（多米 2026-11-02：照 iOS 主畫面晃動時 App 左上角的移除鈕；資料夾磚沒有）。點了由上層跳確認框。
 // 圓點小，熱區用 hitSlop 補到 44 以上；VoiceOver 走磚上的「刪除」動作，這顆不另外讀
-function Minus({ onPress }: { onPress: () => void }) {
+// 按住那塊磚（held）時收起（照 iOS 拿起的 App 沒有「−」），放手回來
+function Minus({ onPress, held }: { onPress: () => void; held: SharedValue<number> }) {
   const c = useColors();
+  const fade = useAnimatedStyle(() => ({ opacity: 1 - held.value }));
   return (
-    <Pressable onPress={onPress} hitSlop={T.space.m} accessible={false}
-      style={({ pressed }) => [st.minus, { backgroundColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
-      <Sym name="minus" size={12} color={c.textPrimary} weight="semibold" />
-    </Pressable>
+    <Animated.View style={[StyleSheet.absoluteFill, fade]} pointerEvents="box-none">
+      <Pressable onPress={onPress} hitSlop={T.space.m} accessible={false}
+        style={({ pressed }) => [st.minus, { backgroundColor: c.separator }, pressed && { opacity: T.motion.pressDim }]}>
+        <Sym name="minus" size={12} color={c.textPrimary} weight="semibold" />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -1258,8 +1263,9 @@ function FolderTile(p: FolderTileProps) {
     maxDistance: G.longPressMove,
     onActivate: e => onMenu(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標）
   });
+  const held = useSharedValue(0);
   const pan = useDragPan({
-    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg,
+    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg, held,
     onStart: onDragStart, onAim, onEdge, onDrop,
   });
   const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
@@ -1274,7 +1280,7 @@ function FolderTile(p: FolderTileProps) {
   // 同 Tile：動畫裡不准碰 p（p.n 是紙物件）
   const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }],
+    transform: [{ rotate: `${rot.value}deg` }, { scale: 1 + held.value * (HOLD_SCALE - 1) }],
     opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [ghost] : undefined);
   return (
@@ -1283,7 +1289,7 @@ function FolderTile(p: FolderTileProps) {
         accessibilityState={{ selected: p.cur }} accessibilityActions={NOTE_IN_A11Y}
         onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
         <TileFace n={p.n} w={p.w} cur={p.cur} />
-        {p.editing && <Minus onPress={p.onMinus} />}
+        {p.editing && <Minus onPress={p.onMinus} held={held} />}
       </Animated.View>
     </GestureDetector>
   );

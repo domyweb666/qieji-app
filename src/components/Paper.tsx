@@ -19,7 +19,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
+  useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -980,6 +980,9 @@ function LineRow(p: LineProps) {
   // 拿起來的那幾毫秒 dragIdx 還是 -1（JS 還沒量完），先不算；跨過一行排回 JS 震一下
   // 把手常駐之後要分工（多米 2026-11-01）：把手上「上下」動才算拿起，「左右」動就讓給整行的滑動（從把手往左滑一樣是刪除，不會變成拖）
   const grip = usePanGesture({
+    // 按在把手上：整行的長按、點一下等把手放棄了才算（2026-11-03 多米真機：拖把手時畫面閃一下——按著停一下再拖，
+    // 整行的長按先成立、跳出行的選單（背景霧掉、底部列收起），一拖又關掉）。往左右滑把手會放棄（failOffsetX），整行的滑動照常
+    block: [hold, tap],
     activeOffsetY: [-G.dragActivate, G.dragActivate],
     failOffsetX: [-G.dragFailX, G.dragFailX],
     onActivate: () => { 'worklet'; scheduleOnRN(dragStart, id); },
@@ -1042,23 +1045,29 @@ function LineRow(p: LineProps) {
     const opacity = armed.value === -1 ? 1 : interpolate(-x, [0, reach], [M.swipeLabel.fromOpacity, 1], Extrapolation.CLAMP);
     return { opacity, transform: [{ scale: labelScale.value }] };
   });
-  // 排順序：被拖的行跟手指走並浮起（放大一點＋陰影；陰影要露出來得暫時解開給滑動用的 overflow: hidden），其他行用彈簧讓位
-  const shift = useAnimatedStyle(() => {
+  // 排順序：被拖的行跟手指走並浮起（放大一點＋陰影；陰影要露出來得暫時解開給滑動用的 overflow: hidden），其他行用彈簧讓位。
+  // 讓位的彈簧只在「要讓到哪」變了那一刻開一次（2026-11-03 多米真機：拖的時候有點 lag）：以前寫在樣式裡，手指每動一格樣式就重算、
+  // 每一行都重開一次 200ms 的彈簧，手指一直動，讓位就一直被往後拖、慢半拍；手指停下來才追上
+  const giveWay = useSharedValue(0);
+  useAnimatedReaction(() => {
     const from = dragIdx.value, to = dragTo.value;
-    const held = from >= 0 && index === from;
+    if (from < 0 || index === from) return 0;
+    if (from < to && index > from && index <= to) return -dragH.value;
+    if (from > to && index < from && index >= to) return dragH.value;
+    return 0;
+  }, (y, old) => {
+    if (y === old) return;
+    giveWay.value = calm || dragIdx.value < 0 || old === null ? y : withSpring(y, M.dragShift.spring);
+  }, [index, calm]);
+  const shift = useAnimatedStyle(() => {
+    const held = dragIdx.value >= 0 && index === dragIdx.value;
     const lift = held ? dragLift.value : 0; // 0～1：浮起多少
-    let y = 0;
-    if (held) y = dragDy.value;
-    else if (from >= 0) {
-      if (from < to && index > from && index <= to) y = -dragH.value;
-      if (from > to && index < from && index >= to) y = dragH.value;
-    }
     return {
       zIndex: held ? 5 : 0,
       overflow: held ? ('visible' as const) : ('hidden' as const),
       shadowOpacity: T.shape.shadowSoft.shadowOpacity * lift,
       transform: [
-        { translateY: held || calm || from < 0 ? y : withSpring(y, M.dragShift.spring) },
+        { translateY: held ? dragDy.value : dragIdx.value < 0 ? 0 : giveWay.value },
         { scale: 1 + (calm ? 0 : (M.dragLift.scale - 1) * lift) },
       ],
     };
