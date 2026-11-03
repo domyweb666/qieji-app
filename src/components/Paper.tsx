@@ -38,6 +38,7 @@ import { Sym } from './Sym';
 import { DoneBtn, GlassBtn } from './WebBars';
 import { HAS_NATIVE_ROWS, NativeRows } from './NativeRows';
 import { barSlot } from './PageBar';
+import { perf } from '../lib/perf';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
 // 給手勢（UI 執行緒）呼叫的都放模組層級：worklet 抓到的物件會被凍住，抓到筆記或某一行就改不動了
@@ -69,7 +70,6 @@ const SNAP_BACK = { ...T.motion.snapBack.spring };
 // 換紙＝key 換了、新的那張重新掛上。整頁撥過來的：旁邊那張的預覽已經滑到定位，新的那張直接接手、不淡入（pagedIn 放模組層級交給它）
 let pagedIn = false;
 const NOOP = () => {};
-const NO_ACTIONS: { name: string; label: string }[] = [];
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
 const LINE_H = T.font.bodyLine.lineHeight;
 const PAD_V = T.space.m;
@@ -91,6 +91,9 @@ const IDLE_IDX = makeMutable(-1), IDLE_ZERO = makeMutable(0);
 
 export function Paper({ n }: { n: Note }) {
   useStore();
+  // 開發版才有：換到這張到畫出第一格花多久（lib/perf，印在終端機）
+  useState(() => perf.start('paper'));
+  useEffect(() => { perf.end('paper', `掛上紙「${n.title.trim() || '未命名'}」（${n.items.length} 行）`); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [, force] = useReducer((x: number) => x + 1, 0);
   const insets = useSafeAreaInsets();
   const calm = useReducedMotion();
@@ -917,16 +920,9 @@ const GripDots = memo(function GripDots({ color }: { color: string }) {
 const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: string; done: boolean; bg: string; rule: string; colors: Colors; fs: number }) {
   return (
     // 跟紙上那行的 st.ci 同樣的框線與裁切，但不帶陰影設定（紙上那行的陰影只在拿起時亮，平常是 0；帶著設定網頁會畫出預設陰影、iOS 會跳效能提示）
+    // 2026-11-03：裡面只畫字（跟紙上看不到的行同一個 LiteRow），不放輸入框——每換一次張左右兩張預覽要做三十幾個輸入框，換張、點開就卡
     <View style={[st.ciFlat, { backgroundColor: bg, borderBottomColor: rule }]}>
-      <View style={[st.cin, { backgroundColor: bg }]}>
-        <View style={st.field}>
-          <Field key={t} text={t} done={done} fs={fs} colors={colors} refInput={NOOP} actions={NO_ACTIONS} onAction={NOOP}
-            onLines={NOOP} onChange={NOOP} onKey={NOOP} onFocus={NOOP} onBlur={NOOP} />
-        </View>
-        <View style={st.grip}>
-          <GripDots color={colors.textSecondary} />
-        </View>
-      </View>
+      <LiteRow t={t} done={done} bg={bg} colors={colors} fs={fs} />
     </View>
   );
 });
@@ -1031,7 +1027,8 @@ function LineRow(p: LineProps) {
   return (
     <Animated.View ref={rowRef} collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
-      entering={ROW_IN} exiting={ROW_OUT} layout={!p.live || p.dragging || calm ? undefined : ROW_MOVE}
+      // 長出來淡入、拿掉淡出只掛在完整的行上：上千行時，每一行都掛的話打開、離開那張紙要一次登記、清掉上千個過場（2026-11-03 換張、點開 lag）
+      entering={p.live ? ROW_IN : undefined} exiting={p.live ? ROW_OUT : undefined} layout={!p.live || p.dragging || calm ? undefined : ROW_MOVE}
       style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, !p.live && p.liteH ? { height: p.liteH } : null, shell]}>
       {p.live ? <Live {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
         : <LiteRow t={p.it.t} done={p.done} bg={p.bg} colors={p.colors} fs={p.fs} />}
