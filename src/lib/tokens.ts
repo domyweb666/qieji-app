@@ -23,8 +23,6 @@ const P = {
   tomatoBg: four('#C83C32', '#B5392F', '#A82F27', '#A33128'), // 危險紅，當底（深色的字色太淺，淺字壓不上去）
   clay:     four('#7E6F5F', '#5A4E45', '#6B5D4E', '#4A3F37'), // 往右滑露出的暖灰
   paper:    four('#FFFCF6', '#FFFCF6', '#FFFFFF', '#FFFFFF'), // 壓在深底上的淺字，四種模式都淺
-  ink:      four('#3A2E42', '#EDE3EC', '#2A1F31', '#F6EEF5'), // toast 底（淺色是深茄紫，深色反過來用淺藥丸）
-  lilac:    four('#D7B8F3', '#7D467F', '#E9D7FA', '#5E2E60'), // toast 上的「復原」
   white:    '#FFFFFF',
   black:    '#000000',
   shadowInk: '#3B2050', // 只拿來當 shadowColor
@@ -42,13 +40,11 @@ const COLOR = {
   danger: P.tomato,   // 「刪除」「永久刪除」字
   swipeStrikeBg: P.clay,
   swipeDeleteBg: P.tomatoBg,
-  toastBg:     P.ink,
-  toastText:   four(P.white, '#2E2233', P.white, '#1B1220'),
-  toastAction: P.lilac,
   // 打開的資料夾（2026-11-02 照 iOS）：後面的目錄霧化（expo-blur）＋一層淡淡的暗幕，框是霧面玻璃、框邊一圈亮線。
   // 系統開了「減少透明度」就不霧化，改用深一點的暗幕和比較不透明的框（folderVeil、folderGlass）
   folderGlass: P.cream50,
-  fabIcon: four(P.white, P.white, P.white, P.white), // 壓在 accent 上
+  // 壓在 accent 上：淺色是白字；深色的 accent 是淡紫，白字看不清（約 2:1），改用深字（UI 範本 v2，2026-11-04）
+  fabIcon: four(P.white, '#2E2233', P.white, '#1B1220'),
 };
 const ALPHA = {
   textMuted:  alpha(0.7, 0.8, 0.85, 0.9),    // 提示字、底部提示（textPrimary 壓在底上）
@@ -57,8 +53,7 @@ const ALPHA = {
   dotOutline: alpha(0.55, 0.6, 0.7, 0.75),   // 色點描邊（textPrimary）
   rowEditing: alpha(0.45, 0.08, 0.45, 0.1),  // 正在編輯的那一行：白色壓在紙色上提亮（網頁版是 55% 紙色＋45% 白；深色只提一點）
   pressedFill: 0.08, // 按住卡片／選單項目（accent）
-  scrim: 0.3,        // 選單、表單後面的暗幕（黑）
-  toastBg: 0.94,
+  scrim: 0.2,        // 所有浮層後面的暗幕（黑）：選單、面板、確認框、輸入框（UI 範本 v2：0.3 → 0.2，全部同一個）
   folderVeil: alpha(0.4, 0.5, 0.5, 0.6),     // 打開資料夾時後面的暗幕（黑）
   folderGlass: alpha(0.92, 0.9, 0.97, 0.95),  // 資料夾框（folderGlass 色）
   folderGlassEdge: alpha(0.7, 0.12, 0.8, 0.2), // 資料夾框邊的亮線（白）
@@ -81,7 +76,6 @@ export type Colors = {
   textPrimary: string; textSecondary: string; textMuted: string; textStrike: string; textAddRow: string; textOnSwipe: string;
   accent: string; danger: string;
   swipeStrikeBg: string; swipeDeleteBg: string; pressedFill: string; scrim: string;
-  toastBg: string; toastText: string; toastAction: string;
   dotOutline: string; fabIcon: string;
   rowEditingFill: string;
   folderVeil: string; folderGlass: string; folderGlassEdge: string; folderVeilBlur: string; folderGlassBlur: string;
@@ -101,7 +95,6 @@ export function colors(mode: Mode): Colors {
     swipeStrikeBg: COLOR.swipeStrikeBg[mode], swipeDeleteBg: COLOR.swipeDeleteBg[mode],
     pressedFill: rgba(COLOR.accent[mode], ALPHA.pressedFill),
     scrim: rgba(P.black, ALPHA.scrim),
-    toastBg: rgba(COLOR.toastBg[mode], ALPHA.toastBg), toastText: COLOR.toastText[mode], toastAction: COLOR.toastAction[mode],
     dotOutline: rgba(COLOR.textPrimary[mode], ALPHA.dotOutline[mode]),
     fabIcon: COLOR.fabIcon[mode],
     rowEditingFill: rgba(P.white, ALPHA.rowEditing[mode]),
@@ -125,45 +118,41 @@ export function useColors(): Colors {
   return colors(useMode());
 }
 
-/* ---------- 文字：對應系統文字樣式，字級是系統預設值，靠 allowFontScaling 跟動態字級 ---------- */
+/* ---------- 文字：UI 範本 v2（2026-11-04 多米定）只有 6 種字，對應系統文字樣式，靠 allowFontScaling 跟動態字級 ---------- */
+// 大標題 28／標題 17 半粗／內文 17／次要 15／註記 13／標籤 12。line、input 是「內文」在紙上與輸入框的兩種行高，不是新的字級。
+// 單行的字（大標題、標題、內文）不寫行高：iOS 的單行輸入框寫了行高字會偏下（搜尋框、清單名輸入框都用）
 export const font = {
-  listTitle:    { fontSize: 20, fontWeight: '700' as const }, // Title 3；清單標題，最多放大 1.5 倍（多米定）
-  paperTitle:   { fontSize: 28, fontWeight: '700' as const }, // Title 1；紙最上面的清單名（重新設計分支）
-  body:         { fontSize: 17, fontWeight: '400' as const }, // Body；每一行、首頁清單名稱、選單項目
-  bodyLine:     { fontSize: 17, lineHeight: 27 },
+  title:    { fontSize: 28, fontWeight: '700' as const },                 // 大標題：紙的名字、最近刪除的頁名
+  headline: { fontSize: 17, fontWeight: '600' as const },                 // 標題：面板標題、確認框、資料夾名
+  body:     { fontSize: 17, fontWeight: '400' as const },                 // 內文：選單項目、清單名、搜尋框
+  line:     { fontSize: 17, lineHeight: 26 },                             // 內文（紙上每一行，多行）。舊的 17/27 收成 26，跟範本同一套
   // 輸入框的字（iOS）：行高貼著字型自己的行距（17 點的中文約 21～22），iOS 輸入框把字放在每行底部，行高拉大字就偏下；
   // 而且要明寫，不寫的話隱形量高度的文字和輸入框各用各的預設行距（真機量到一行 23 對 28），框永遠比字矮（2026-11-01 第六版）
-  composerLine: { fontSize: 17, lineHeight: 22 },             // 每一行的字（行高約 1.6）。2026-10-31 A4 曾試 20/30，多米 2026-11-01 真機看了說太大，定回 17/27
-  emphasis:     { fontSize: 17, fontWeight: '600' as const }, // Headline；確認框的字
-  subhead:      { fontSize: 15, fontWeight: '400' as const }, // chip、空狀態、toast
-  subheadBold:  { fontSize: 15, fontWeight: '600' as const }, // 滑動露出的字、面板標題、toast 按鈕
-  footnote:     { fontSize: 13, fontWeight: '400' as const }, // 底部提示、說明、動作表單標題
-  footnoteBold: { fontSize: 13, fontWeight: '600' as const }, // 面板色名
-  sectionHead:  { fontSize: 13, fontWeight: '700' as const, letterSpacing: 1.5 }, // 首頁分組標題
-  caption:      { fontSize: 12, fontWeight: '400' as const }, // 面板蔬菜名
-  largeTitle:   { fontSize: 34, fontWeight: '700' as const }, // 網頁預覽的大標題（iOS 用系統的）
-  listTitleMaxScale: 1.5,
-  emptyLineHeight: 24,
-  plusGlyph:    { fontSize: 20 }, // 「＋ 新增一行」的 ＋
-  sheetOption:  { fontSize: 20 }, // 網頁預覽動作表單項目（只用一次）
+  input:    { fontSize: 17, lineHeight: 22 },
+  callout:  { fontSize: 15, lineHeight: 20, fontWeight: '400' as const }, // 次要：提示條、空狀態、說明句
+  footnote: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const }, // 註記：修改時間、分組名（分組名加 semibold）
+  label:    { fontSize: 12, lineHeight: 16, fontWeight: '500' as const }, // 標籤：目錄磚下面的名字
+  semibold: '600' as const, // 要加粗時只准用這一個粗細（分組名、提示條按鈕、文字按鈕、磚上的字）
+  titleMaxScale: 1.5,       // 清單名最多放大 1.5 倍（多米定），不然會把 ⋯ 擠出去
 };
 
-/* ---------- 間距：六個刻度。靠近文字的（行內距 m、卡片內距 l）乘 fontScale ---------- */
-export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 40 };
+/* ---------- 間距：UI 範本 v2 七格，都是 4 的倍數。裡面的距離比外面小：字跟圖示 s、一行裡 m、浮層裡 l、整個畫面左右 gutter、區塊之間 xl 以上 ---------- */
+export const space = { xs: 4, s: 8, m: 12, l: 16, gutter: 20, xl: 24, xxl: 32 };
 
 /* ---------- 形狀與尺寸 ---------- */
 export const shape = {
-  radiusCard: 16,   // 行卡片、首頁卡片、chip、⋯ 選單、動作表單、確認框、面板色塊外框
-  radiusSwatch: 11, // 面板色塊（＝外框 16 − 內距 5）
-  radiusPanel: 24,  // 顏色面板整張（系統 sheetCornerRadius）
+  // 圓角只有三種＋全圓（pill）（UI 範本 v2）：小＝搜尋框、色塊；中＝目錄的磚、清單小方磚的群組；大＝所有浮層（選單、面板、輸入框、資料夾、確認框）
+  radiusSm: 10,
+  radiusMd: 14,
+  radiusLg: 24,
   pill: (height: number) => height / 2,
   borderCard: 1,
   borderSelected: 3,
   hitMin: 44,  // 點擊範圍最小值
-  rowMin: 54,  // 「新增一行」與每一行的最小高度
+  rowMin: 52,  // 每一行的最小高度
   cardMin: 56, // 首頁卡片
-  menuRow: 50,
-  fab: 58,
+  menuRow: 48, // 選單項目、切換清單的項目
+  fab: 56,
   swatchPad: 5,
   // 重新設計分支（紙是家）新增
   // 標題區下面的分段把手（B2，多米原型 2026-11-01；11-02 改頁點）：現在這頁一條、其他小圓點，只有一段時是一條長的；點擊範圍另外撐到 hitMin
@@ -177,7 +166,7 @@ export const shape = {
   // 目錄的磚（2026-11-03 多米：改成 1×1，跟 iPhone 主畫面的 App 一樣，規格見 .uiux/iOS主畫面編輯-官方規範對照.md 第十一節）：
   // 一排 gridCols 個，每欄寬＝格子區寬 ÷ gridCols；方磚邊長＝欄寬扣 tileGapMin、最大 tileMax（iPhone 量到約 63）；
   // 名字在方磚下面 tileLabelGap、一行高 tileLabelH；列跟列之間再空 tileRowGap；圓角＝邊長 × tileRadiusRatio（iOS 約 22%）
-  gridCols: 4, tileMax: 64, tileGapMin: 24, tileLabelGap: 6, tileLabelH: 16, tileRowGap: 14, tileRadiusRatio: 0.225,
+  gridCols: 4, tileMax: 64, tileGapMin: 24, tileLabelGap: 6, tileLabelH: 16, tileRowGap: 20, tileRadiusRatio: 14 / 64, // 圓角＝radiusMd（磚最大時剛好 14）
   // 方磚正中間名字的第一個字（2026-11-03 多米：只有顏色很難認）：字的大小＝邊長 × tileGlyphRatio
   tileGlyphRatio: 0.44,
   // 切換清單（2026-11-04 改版）：每一項前面的小方磚、右邊打勾那格的寬；左上清單名小膠囊裡的小方磚
@@ -185,7 +174,6 @@ export const shape = {
   switchMaxRatio: 0.7, // 切換清單最高佔螢幕幾成（清單多就在裡面捲）
   dirPeek: 92,   // 目錄面板垂下來時，螢幕底下留一截看得到後面的紙（點那截收起；多米原型）
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
-  tileTag: 30,   // 色磚右下角露出的色圓（1×1 之後縮小，2026-11-03）
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
   // 資料夾磚（2026-11-03 改 1×1，照 iOS）：方磚裡 3×3 小方塊，每塊是裡面一張紙的顏色；小方塊之間的縫、離框的內距
   folderMinis: 3, folderMiniGap: 3, folderMiniPad: 7,
@@ -194,17 +182,18 @@ export const shape = {
   gripDot: 3, gripDotGap: 4, gripDotOpacity: 0.55,
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
   // 打開的資料夾（2026-11-02 照 iOS；2026-11-03 改 1×1 後一頁 folderCols 欄 × folderRows 列，跟 iOS 一樣 3×3）：框的圓角、滿了往右一頁；框下面頁點那排的高
-  radiusFolder: 38, folderCols: 3, folderRows: 3, folderDotsH: 14,
+  folderCols: 3, folderRows: 3, folderDotsH: 14,
   // 霧化強度（expo-blur 的 intensity，1～100）：後面的目錄霧一點就好、看得出輪廓；框本身霧重一點，像 iOS 的檔案夾
   // 2026-11-03 照 iPhone 打開的檔案夾（多米截圖）：後面霧很重、幾乎看不出形狀
   folderBlur: 55, folderBoxBlur: 60,
   // 系統材質（2026-11-02）：舊 iOS 的霧面按鈕、選單卡霧多重；長按選單照 iOS 的樣子（寬 250、大圓角、組與組之間一條粗縫）
   materialBlur: 80, menuBlur: 30,
   barH: 52, // 紙最下面那條（PageBar，2026-11-02 Safari 式底部列）：膠囊與右邊 ＋ 的高
-  menuW: 250, menuWide: 280, radiusMenu: 22, menuGap: 8, // menuWide：最上面有一排九個色塊時（9 × 26 ＋ 兩邊內距放得下）
-  swatchDot: 26, // ⋯ 選單裡一排九個色塊
-  shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }, // 圓鈕、膠囊、⋯ 選單
-  shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.3,  shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, // 右下 ＋
+  menuW: 260, menuWide: 320, menuGap: 8, // menuWide：最上面有一排九個色塊時（9 × 28 ＋ 兩邊內距放得下）
+  swatchDot: 28, // ⋯ 選單裡一排九個色塊
+  // 陰影只有兩層（UI 範本 v2）：浮層（圓鈕、選單、面板、提示條、拿起來的行）／右下 ＋
+  shadowSoft:   { shadowColor: P.shadowInk, shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 8 } },
+  shadowStrong: { shadowColor: P.shadowInk, shadowOpacity: 0.24, shadowRadius: 12, shadowOffset: { width: 0, height: 8 } },
 };
 
 /* ---------- 動態：事件命名，毫秒。reduced＝減少動態時的替代（淡入淡出或不移動），不是關掉 ---------- */

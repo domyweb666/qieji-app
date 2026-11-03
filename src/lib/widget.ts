@@ -42,8 +42,8 @@ export function widgetProps(s: State, last: string | null): PaperWidgetProps {
     lines,
     light: scheme('light'),
     dark: scheme('dark'),
-    titleSize: T.font.subheadBold.fontSize,
-    lineSize: T.font.subhead.fontSize,
+    titleSize: T.font.callout.fontSize,
+    lineSize: T.font.callout.fontSize,
     gap: T.space.xs,
     max: T.widget.lines,
   };

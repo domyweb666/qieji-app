@@ -81,11 +81,11 @@ export function PopMenu({ acts, top, header, onClose, side = 'right', lifted }: 
 const st = StyleSheet.create({
   at: { position: 'absolute', right: T.space.m, width: T.shape.menuW, transformOrigin: 'top right' },
   atLeft: { right: undefined, left: T.space.m, transformOrigin: 'top left' },
-  card: { borderRadius: T.shape.radiusMenu },
+  card: { borderRadius: T.shape.radiusLg },
   // 組與組之間：一條粗縫（iOS 選單的分組）；組裡項目之間：髮絲線
   gap: { height: T.shape.menuGap },
   sep: { height: StyleSheet.hairlineWidth, marginLeft: T.space.l },
-  head: { ...T.font.footnote, marginHorizontal: T.space.l, marginTop: T.space.s, marginBottom: T.space.xs },
+  head: { ...T.font.footnote, fontWeight: T.font.semibold, marginHorizontal: T.space.l, marginTop: T.space.s, marginBottom: T.space.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l },
   label: { flex: 1, ...T.font.body },
 });

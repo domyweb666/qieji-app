@@ -60,14 +60,14 @@ function NoteRow({ n, onPress }: { n: Note; onPress: () => void }) {
 }
 
 export const listStyles = StyleSheet.create({
-  wrap: { paddingHorizontal: T.space.l, paddingBottom: 120 }, // 只用一次：底部留白讓最後一張能捲上來
+  wrap: { paddingHorizontal: T.space.gutter, paddingBottom: 120 }, // 只用一次：底部留白讓最後一張能捲上來
 });
 
 const DOT = 10;
 const s = StyleSheet.create({
   section: { marginTop: T.space.xl },
-  head: { ...T.font.footnote, marginBottom: T.space.s, marginLeft: T.space.l },
-  group: { borderRadius: T.shape.radiusMenu, overflow: 'hidden' },
+  head: { ...T.font.footnote, fontWeight: T.font.semibold, marginBottom: T.space.s, marginLeft: T.space.l },
+  group: { borderRadius: T.shape.radiusMd, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.hitMin, paddingVertical: T.space.m, paddingHorizontal: T.space.l },
   // 髮絲線從字起算（左內距＋色點＋間距），跟設定 app 一樣不切到色點
   sep: { height: StyleSheet.hairlineWidth, marginLeft: T.space.l + DOT + T.space.m },

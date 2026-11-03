@@ -21,7 +21,7 @@ export const HAS_NATIVE_ROWS = Platform.OS === 'ios' && !!requireOptionalNativeM
 // 字跟茄記版一樣大（多米 2026-11-03：系統清單的字太小）：以前寫死 17 點、不跟「設定→字體大小」放大，茄記版會跟；
 // 改用系統內文字級（預設也是 17，會跟著放大）。多行時的行距補到跟茄記版的 27 差不多（系統自己的行高約 22，差的那段用 lineSpacing 補），
 // 上下留白也照茄記版每行上下各 12（以前只給左右，上下是 0，整行擠在一起看起來更小）
-const LINE_GAP = T.font.bodyLine.lineHeight - T.font.composerLine.lineHeight, PAD = T.space.m, SIDE = T.space.l;
+const LINE_GAP = T.font.line.lineHeight - T.font.input.lineHeight, PAD = T.space.m, SIDE = T.space.gutter;
 
 export type NativeRowsProps = {
   items: Item[];

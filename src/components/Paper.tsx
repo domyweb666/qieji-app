@@ -67,7 +67,7 @@ const KB_EASING = Easing.bezier(KBF.easing[0], KBF.easing[1], KBF.easing[2], KBF
 const KB_SLIDE = LinearTransition.duration(KBF.duration).easing(KB_EASING);
 const NOOP = () => {};
 // 一行字的高度與上下留白（字級與行高看 tokens 的 bodyLine，上下各 12）
-const LINE_H = T.font.bodyLine.lineHeight;
+const LINE_H = T.font.line.lineHeight;
 const PAD_V = T.space.m;
 const ROW_MIN = T.shape.rowMin;
 // 只做看得到的行（2026-11-03 多米：幾千行換張會 lag）：捲到的那一段，再往上、往下各多 LIVE_BUF 個螢幕，才做成完整的行
@@ -688,7 +688,7 @@ export function Paper({ n }: { n: Note }) {
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
           // 紙上每一行用的多行輸入框畫中文從沒切過。貼上帶換行的字時換行換成空格，清單名只有一行
-          <TextInput autoFocus defaultValue={n.title} placeholder="這張叫什麼" maxFontSizeMultiplier={T.font.listTitleMaxScale}
+          <TextInput autoFocus defaultValue={n.title} placeholder="這張叫什麼" maxFontSizeMultiplier={T.font.titleMaxScale}
             multiline submitBehavior="blurAndSubmit"
             // 網頁的 textarea 預設兩列高，限一列；iOS 不限（限了長名字打到一半會被藏起來）
             {...(Platform.OS === 'web' ? { numberOfLines: 1 } : null)}
@@ -706,7 +706,7 @@ export function Paper({ n }: { n: Note }) {
               <View style={[st.pill, { borderColor: c.accent }]}>
                 <NoteIcon n={n} size={T.shape.titleIcon} />
                 <Text style={[st.pillText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
-                  maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
+                  maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
                 <Sym name="chevron.down" size={12} color={c.textSecondary} weight="semibold" />
               </View>
             ) : (
@@ -714,7 +714,7 @@ export function Paper({ n }: { n: Note }) {
                 {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
                 <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
                   onLayout={e => setTitleH(e.nativeEvent.layout.height)}
-                  maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
+                  maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
                 <Sym name="chevron.down" size={16} color={c.textSecondary} weight="semibold" />
               </>
             )}
@@ -1241,24 +1241,24 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onLines
 }
 
 const st = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.m, paddingBottom: T.space.s },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingLeft: T.space.l, paddingRight: T.space.gutter }, // 標題的字離左邊 20（titleBtn 自己再內縮 xs），跟時間、每一行對齊
   titleSlide: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
   titleBtn: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, flexDirection: 'row', alignItems: 'center', gap: T.space.s, paddingHorizontal: T.space.xs },
   // 清單名的小膠囊（2026-11-04 照設計圖）：茄紫細框、裡面小方磚＋名字＋▾，寬度照內容、太長就截
   pill: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin,
     paddingLeft: T.space.s, paddingRight: T.space.m, borderWidth: T.shape.borderSelected / 2, borderRadius: T.shape.pill(T.shape.hitMin) },
-  pillText: { ...T.font.emphasis, flexShrink: 1, minWidth: 0 },
-  title: { flexShrink: 1, minWidth: 0, ...T.font.paperTitle },
-  titleInput: { flex: 1, minWidth: 0, ...T.font.paperTitle, paddingVertical: 0, paddingHorizontal: T.space.xs },
+  pillText: { ...T.font.headline, flexShrink: 1, minWidth: 0 },
+  title: { flexShrink: 1, minWidth: 0, ...T.font.title },
+  titleInput: { flex: 1, minWidth: 0, ...T.font.title, paddingVertical: 0, paddingHorizontal: T.space.xs },
   // 一行就是紙上的一行：沒有卡片，底下一條淡格線，左右貼齊整頁
   // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
   ci: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden',
     shadowColor: T.shape.shadowSoft.shadowColor, shadowRadius: T.shape.shadowSoft.shadowRadius, shadowOffset: T.shape.shadowSoft.shadowOffset },
-  under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.l },
-  underText: { ...T.font.subheadBold },
+  under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.gutter },
+  underText: { ...T.font.callout, fontWeight: T.font.semibold },
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },
   field: { flex: 1, minWidth: 0 },
-  ta: { ...T.font.bodyLine, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: T.space.xs },
+  ta: { ...T.font.line, paddingTop: PAD_V, paddingBottom: PAD_V, paddingHorizontal: T.space.xs },
   // 隱形鏡像文字：iOS 只拿來量每一行的位置（K1 游標落點），不撐高度；網頁才用它撐高度（textarea 不會自己長）。
   // 右邊只比輸入框多留 1 點：留太多字快滿一行時鏡像會先換行、網頁的行底下就多出一整行空白；完全不留又可能反過來把最後一行切掉。5 只用一次
   mirror: { color: 'transparent', paddingRight: 5 },
@@ -1267,14 +1267,14 @@ const st = StyleSheet.create({
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
   dots: { width: T.shape.gripDot * 2 + T.shape.gripDotGap, flexDirection: 'row', flexWrap: 'wrap', gap: T.shape.gripDotGap, opacity: T.shape.gripDotOpacity },
   dot: { width: T.shape.gripDot, height: T.shape.gripDot, borderRadius: T.shape.pill(T.shape.gripDot) },
-  timeBox: { paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
+  timeBox: { paddingHorizontal: T.space.gutter, paddingTop: T.space.xs, paddingBottom: T.space.xl, borderBottomWidth: T.shape.borderCard },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
   scrollFill: { flexGrow: 1 },
   timeText: { ...T.font.footnote },
-  empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.l },
+  empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.gutter },
   previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）
-  emptyText: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
+  emptyText: { ...T.font.callout, textAlign: 'center' },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去
-  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.l },
+  kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.s },
 });

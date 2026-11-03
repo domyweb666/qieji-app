@@ -116,13 +116,13 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
 const st = StyleSheet.create({
   // 貼齊螢幕底部：只有上面兩個角是圓的（多米 2026-11-04：下面不該是圓角）
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden',
-    borderTopLeftRadius: T.shape.radiusPanel, borderTopRightRadius: T.shape.radiusPanel },
+    borderTopLeftRadius: T.shape.radiusLg, borderTopRightRadius: T.shape.radiusLg },
   grabBox: { height: T.shape.hitMin / 2, alignItems: 'center', justifyContent: 'center' },
   grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
   // 跟 PopMenu（系統選單的樣子）同一套：小字組名、組跟組之間一條線
-  head: { ...T.font.footnote, marginHorizontal: T.space.l, marginTop: T.space.xs, marginBottom: T.space.xs },
-  sep: { height: StyleSheet.hairlineWidth, marginHorizontal: T.space.l, marginVertical: T.space.s },
-  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l },
+  head: { ...T.font.footnote, fontWeight: T.font.semibold, marginHorizontal: T.space.gutter, marginTop: T.space.xs, marginBottom: T.space.xs },
+  sep: { height: StyleSheet.hairlineWidth, marginHorizontal: T.space.gutter, marginVertical: T.space.s },
+  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.gutter },
   name: { ...T.font.body, flex: 1, minWidth: 0 },
   allIcon: { width: T.shape.noteIcon, alignItems: 'center' },
 });

@@ -12,11 +12,11 @@ import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 're
 import { T, useColors } from '../lib/tokens';
 import { Sym } from './Sym';
 
-const LINE_H = T.font.bodyLine.lineHeight;
+const LINE_H = T.font.line.lineHeight;
 const WEB = Platform.OS === 'web';
 // 字：網頁照紙上每一行的 17／27（網頁驗過）。iOS 用 composerLine（17／22）：行高貼著字型自己的行距，一行時字才在正中；
 // 而且量高度的隱形文字和輸入框一定要同一個明寫的行高（第五版不給行高，真機量到隱形文字一行 23、輸入框一行 28）
-const INPUT_FONT = WEB ? T.font.bodyLine : T.font.composerLine;
+const INPUT_FONT = WEB ? T.font.line : T.font.input;
 // 卡片上下內距：從 Paper 給的「框最高多少」扣掉，才是輸入框本身的上限
 const CHROME = T.space.s * 2;
 // 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
@@ -102,7 +102,7 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
 
 const s = StyleSheet.create({
   // 跟鍵盤膠囊同一家：奶油白、圓角 16、軟陰影。✓ 貼在右端底部，字長高時它留在下面
-  card: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: T.shape.radiusMenu, paddingLeft: T.space.l, paddingRight: T.space.xs, paddingVertical: T.space.s },
+  card: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: T.shape.radiusLg, paddingLeft: T.space.l, paddingRight: T.space.xs, paddingVertical: T.space.s },
   // grow：至少跟 ✓ 一樣高（44），字那塊在裡面上下置中；多行時一起長高，上限由 Paper 給（maxH），再多輸入框自己在裡面捲
   grow: { flex: 1, minWidth: 0, minHeight: T.shape.hitMin, justifyContent: 'center' },
   input: { ...INPUT_FONT, paddingVertical: 0, paddingHorizontal: 0, textAlignVertical: 'top' },

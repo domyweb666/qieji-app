@@ -12,6 +12,6 @@ export function Empty({ lines }: { lines: string[] }) {
 }
 
 const s = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingVertical: T.space.xxl, paddingHorizontal: T.space.l },
-  text: { ...T.font.subhead, lineHeight: T.font.emptyLineHeight, textAlign: 'center' },
+  wrap: { alignItems: 'center', paddingVertical: T.space.xxl, paddingHorizontal: T.space.gutter },
+  text: { ...T.font.callout, textAlign: 'center' },
 });

@@ -1074,7 +1074,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
             <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} inset={(width - fboxW) / 2 + FPAD + (innerW - sizeOf(innerW)) / 2} />
             <View style={[st.folderBox, { width: fboxW, backgroundColor: solid ? c.folderGlass : 'transparent', borderColor: liquid ? 'transparent' : c.folderGlassEdge }]}
               onLayout={e => { const l = e.nativeEvent.layout; dg.bx.value = l.x; dg.by.value = l.y; dg.bw.value = l.width; dg.bh.value = l.height; }}>
-              {liquid ? <Glass style={[StyleSheet.absoluteFill, { borderRadius: T.shape.radiusFolder }]} />
+              {liquid ? <Glass style={[StyleSheet.absoluteFill, { borderRadius: T.shape.radiusLg }]} />
                 : !solid && (
                   <BlurView style={[StyleSheet.absoluteFill, { backgroundColor: c.folderGlassBlur }]} intensity={T.shape.folderBoxBlur} tint="default" pointerEvents="none" />
                 )}
@@ -1362,7 +1362,7 @@ function DragGhost({ dg, calm, children }: { dg: DG; calm: boolean; children: Re
   return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
 }
 
-// 一塊磚的樣子（2026-11-03 改 1×1，照 iPhone 主畫面的 App）：w＝格子寬。上面是置中的方磚——紙的顏色、右下角露出一顆色圓、正中間名字的第一個字；
+// 一塊磚的樣子（2026-11-03 改 1×1，照 iPhone 主畫面的 App）：w＝格子寬。上面是置中的方磚——整塊是紙的主色（hd，UI 範本 v2 拿掉右下角的色圓）、正中間名字的第一個字；
 // 下面是名字（一行，太長尾巴變「…」）。正在看的那張方磚用 accent 框起來（面板上唯一的 accent），釘選的右上角一個圖釘（次要字色，C1）
 function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
   const c = useColors();
@@ -1370,13 +1370,12 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
   const s = sizeOf(w);
   return (
     <View style={[st.cell, { width: w }]}>
-      <View style={[st.tile, { width: s, height: s, borderRadius: s * RADIUS, backgroundColor: nc.bg, borderColor: cur ? c.accent : nc.rule,
+      <View style={[st.tile, { width: s, height: s, borderRadius: s * RADIUS, backgroundColor: nc.hd, borderColor: cur ? c.accent : nc.rule,
         borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
-        <View style={[st.tag, { backgroundColor: nc.hd }]} />
-        {/* 正中間一個字（2026-11-03 多米：只有顏色很難認）：自己設的，沒設就是名字的第一個字；沒取名（也沒設）是「未」、次要色 */}
-        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: n.title.trim() || n.glyph ? c.textPrimary : c.textSecondary }]}
+        {/* 正中間一個字（2026-11-03 多米：只有顏色很難認）：自己設的，沒設就是名字的第一個字；沒取名（也沒設）是「未」；字色照磚的顏色配（深色磚白字） */}
+        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: nc.ink }]}
           allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
-        {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={c.textSecondary} /></View> : null}
+        {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={nc.ink} /></View> : null}
       </View>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
       <TileName t={label(n)} color={n.title.trim() ? c.textPrimary : c.textSecondary} />
@@ -1384,7 +1383,7 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
   );
 }
 function TileName({ t, color }: { t: string; color: string }) {
-  return <Text style={[st.tileName, { color }]} numberOfLines={1} maxFontSizeMultiplier={T.font.listTitleMaxScale}>{t}</Text>;
+  return <Text style={[st.tileName, { color }]} numberOfLines={1} maxFontSizeMultiplier={T.font.titleMaxScale}>{t}</Text>;
 }
 
 // 資料夾磚（2026-11-03 改 1×1，照 iOS 檔案夾）：跟紙磚一樣大，方磚裡 3×3 小方塊、每塊是裡面一張紙的顏色（最多九張），名字在下面。
@@ -1467,29 +1466,29 @@ function FolderName({ f, focus, inset }: { f: Folder; focus: boolean; inset: num
 
 const st = StyleSheet.create({
   panel: { position: 'absolute', left: 0, right: 0, bottom: 0,
-    borderTopLeftRadius: T.shape.radiusPanel, borderTopRightRadius: T.shape.radiusPanel, ...T.shape.shadowSoft },
+    borderTopLeftRadius: T.shape.radiusLg, borderTopRightRadius: T.shape.radiusLg, ...T.shape.shadowSoft },
   grabBox: { position: 'absolute', left: 0, right: 0, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
   grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
-  top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.l, paddingBottom: T.space.s },
-  search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin), flexDirection: 'row', alignItems: 'center', gap: T.space.s,
+  top: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, paddingHorizontal: T.space.gutter, paddingBottom: T.space.s },
+  search: { flex: 1, height: T.shape.hitMin, borderRadius: T.shape.radiusSm, flexDirection: 'row', alignItems: 'center', gap: T.space.s,
     paddingHorizontal: T.space.m },
   // alignSelf stretch：輸入框撐滿 44 高的藥丸，字由 iOS 自己垂直置中。只靠字的本身高度時，中文字的上緣會被切掉（多米 2026-11-01 真機）
   searchInput: { flex: 1, minWidth: 0, alignSelf: 'stretch', ...T.font.body, paddingVertical: 0 },
   done: { height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
   doneHit: { flex: 1, justifyContent: 'center', paddingHorizontal: T.space.l },
-  doneText: { ...T.font.emphasis },
+  doneText: { ...T.font.headline },
   body: { paddingHorizontal: T.space.l, paddingTop: T.space.s, paddingBottom: T.space.l },
-  moveHead: { ...T.font.subhead, marginBottom: T.space.s, marginHorizontal: T.space.l + T.space.xs },
+  moveHead: { ...T.font.callout, marginBottom: T.space.s, marginHorizontal: T.space.l + T.space.xs },
   page: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: T.space.s, paddingVertical: T.space.s },
   dot: { width: T.shape.pageDot, height: T.shape.pageDot, borderRadius: T.shape.pill(T.shape.pageDot) },
   hitGroup: { paddingVertical: T.space.s, borderBottomWidth: StyleSheet.hairlineWidth },
   hitHead: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin },
-  hitTitle: { ...T.font.subheadBold, flex: 1 },
-  hitLine: { justifyContent: 'center', minHeight: T.shape.hitMin, paddingVertical: T.space.s, paddingHorizontal: T.space.m, borderRadius: T.shape.radiusMenu },
+  hitTitle: { ...T.font.callout, fontWeight: T.font.semibold, flex: 1 },
+  hitLine: { justifyContent: 'center', minHeight: T.shape.hitMin, paddingVertical: T.space.s, paddingHorizontal: T.space.m, borderRadius: T.shape.radiusMd },
   hitText: { ...T.font.body },
   hitDone: { textDecorationLine: 'line-through' },
-  hitMark: { fontWeight: T.font.emphasis.fontWeight },
+  hitMark: { fontWeight: T.font.semibold },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: T.shape.tileRowGap, marginTop: T.space.m },
   ghost: { position: 'absolute', ...T.shape.shadowSoft },
   ghostAt: { left: 0, top: 0 },
@@ -1497,11 +1496,10 @@ const st = StyleSheet.create({
   // 一格（方磚＋名字）：方磚置中在上面，名字在下面
   cell: { alignItems: 'center', gap: T.shape.tileLabelGap },
   tile: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  glyph: { fontWeight: T.font.emphasis.fontWeight, textAlign: 'center' },
-  tileText: { ...T.font.emphasis }, // 打開時放大那塊上面的名字（Launch）
-  tileName: { ...T.font.caption, lineHeight: T.shape.tileLabelH, textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: T.space.xs },
+  glyph: { fontWeight: T.font.semibold, textAlign: 'center' },
+  tileText: { ...T.font.headline }, // 打開時放大那塊上面的名字（Launch）
+  tileName: { ...T.font.label, lineHeight: T.shape.tileLabelH, textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: T.space.xs },
   pin: { position: 'absolute', top: T.space.xs, right: T.space.xs },
-  tag: { position: 'absolute', right: -T.space.s, bottom: -T.space.s, width: T.shape.tileTag, height: T.shape.tileTag, borderRadius: T.shape.pill(T.shape.tileTag) },
   // 頂端「新的一張」：跟「完成」同一個位置的玻璃圓鈕
   newBtn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
   newHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -1519,9 +1517,9 @@ const st = StyleSheet.create({
   minus: { position: 'absolute', top: -T.space.s, left: -T.space.s, width: T.shape.minusBadge, height: T.shape.minusBadge,
     borderRadius: T.shape.pill(T.shape.minusBadge), alignItems: 'center', justifyContent: 'center' },
   // 打開的資料夾（2026-11-02 照 iOS）：毛玻璃般的半透明大圓角盒子，名字大字、靠左、放在盒子上面
-  folderBox: { alignSelf: 'center', borderRadius: T.shape.radiusFolder, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...T.shape.shadowSoft },
+  folderBox: { alignSelf: 'center', borderRadius: T.shape.radiusLg, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...T.shape.shadowSoft },
   // position relative：網頁預覽裡輸入框預設不是 relative，會被前面 absolute 的霧蓋住（iOS 本來就照順序疊）
-  folderName: { position: 'relative', ...T.font.largeTitle, textAlign: 'left', paddingVertical: T.space.m },
+  folderName: { position: 'relative', ...T.font.title, textAlign: 'left', paddingVertical: T.space.m },
   fdots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: T.space.s, height: T.shape.folderDotsH, marginBottom: T.space.s },
   fslot: { position: 'absolute' },
 });

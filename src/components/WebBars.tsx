@@ -17,7 +17,7 @@ export function WebTop({ title, left, right }: { title?: string; left?: ReactNod
   const c = useColors();
   if (native) return null;
   return (
-    <View style={{ paddingTop: insets.top + T.space.s, paddingHorizontal: T.space.l }}>
+    <View style={{ paddingTop: insets.top + T.space.s, paddingHorizontal: T.space.gutter }}>
       <View style={s.topRow}>{left}<View style={{ flex: 1 }} />{right}</View>
       {title ? <Text style={[s.large, { color: c.textPrimary }]}>{title}</Text> : null}
     </View>
@@ -77,9 +77,9 @@ export function DoneBtn({ onPress, label }: { onPress: () => void; label: string
 
 const s = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', minHeight: T.shape.hitMin },
-  large: { ...T.font.largeTitle, marginTop: T.space.xs },
+  large: { ...T.font.title, marginTop: T.space.xs },
   btn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  fabWrap: { position: 'absolute', right: T.space.l },
+  fabWrap: { position: 'absolute', right: T.space.gutter },
   fab: { width: T.shape.fab, height: T.shape.fab, borderRadius: T.shape.pill(T.shape.fab) },
 });
