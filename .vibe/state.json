@@ -1,7 +1,7 @@
 {
   "station": "audit-batch",
-  "updated_at": "2026-11-03T00:30:00+08:00",
-  "updated_by": "vibe-self-review",
+  "updated_at": "2026-11-04T02:13:00+08:00",
+  "updated_by": "vibe-traffic-control",
   "pieces": {
     "todo": 0,
     "machine_verified": 14,
@@ -134,6 +134,12 @@
       "why": "多米 2026-11-02 晚選完三件就開工",
       "since": "2026-11-02",
       "status": "組塊 D 批次驗時一併確認"
+    },
+    {
+      "what": "程式審查一批修正的計畫覆誦",
+      "why": "多米 2026-11-04「都幫我修復」",
+      "since": "2026-11-04",
+      "status": "真機第 201～210 條一併確認"
     }
   ],
   "decisions": [
