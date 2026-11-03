@@ -1,0 +1,128 @@
+// 切換清單（2026-11-04 改版，多米給的設計圖第 2 格）：點紙左上的清單名，從螢幕下面升起、貼齊底部（下面不是圓角）。
+// 一開始用 iOS 系統的半高面板（formSheet），多米真機看：跟 ⋯ 的系統選單不像同一個畫風、而且 iOS 26 的半高面板是浮起來四角都圓的、關不掉，
+// 改成自己做（多米選）：跟 ⋯ 選單同一種液態玻璃（Glass），排法照系統選單——左邊小方磚、右邊名字，組跟組之間一條線，小字標組名。
+// 內容：釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
+// 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
+import { label, switchList, type Note } from '../lib/model';
+import { store, useStore } from '../lib/store';
+import { T, useColors } from '../lib/tokens';
+import { dirPanel } from './DirPanel';
+import { Glass } from './Glass';
+import { NoteIcon } from './NoteIcon';
+import { Sym } from './Sym';
+
+const M = T.motion, G = T.gesture;
+const SPRING = { ...M.dirPanel.spring }, FADE = M.dirPanel.reducedFade;
+const PULL = G.pullActivate, CLOSE_RATIO = G.pushCloseRatio, FLICK = G.flick;
+
+let host: { open: () => void } | null = null;
+export const switchPanel = { open: () => host?.open() };
+
+export function SwitchPanelHost() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => { host = { open: () => setShown(true) }; return () => { host = null; }; }, []);
+  if (!shown) return null;
+  return <SwitchPanel onGone={() => setShown(false)} />;
+}
+
+function SwitchPanel({ onGone }: { onGone: () => void }) {
+  const s = useStore();
+  const c = useColors();
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const calm = useReducedMotion();
+  const { pinned, recent } = switchList(s, store.recent);
+  // p：0＝收著、1＝全開；h：面板量到的高（還沒量到先當整個螢幕高，從螢幕外開始）
+  const p = useSharedValue(0), h = useSharedValue(height), drag = useSharedValue(0);
+  useEffect(() => { p.value = calm ? withTiming(1, { duration: FADE }) : withSpring(1, SPRING); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 收起，收完才卸載（then：收完要做的事，例如打開目錄）
+  const close = (then?: () => void) => {
+    const done = () => { onGone(); then?.(); };
+    const fin = (f?: boolean) => { 'worklet'; if (f) scheduleOnRN(done); };
+    drag.value = 0;
+    p.value = calm ? withTiming(0, { duration: FADE }, fin) : withSpring(0, SPRING, fin);
+  };
+  const pick = (n: Note) => close(n.id === store.last ? undefined : () => store.open(n.id));
+  const all = () => close(() => dirPanel.open());
+  // 往下撥上緣那條（小橫條＋組名那段）：跟著手指往下，撥過一段或往下甩就收起，不然彈回
+  const pan = usePanGesture({
+    activeOffsetY: PULL,
+    onUpdate: e => { 'worklet'; drag.value = Math.max(0, e.translationY); },
+    onDeactivate: e => {
+      'worklet';
+      if (!e.canceled && (e.translationY > h.value * CLOSE_RATIO || e.velocityY > FLICK)) scheduleOnRN(close);
+      else drag.value = withSpring(0, SPRING);
+    },
+  });
+  const sheet = useAnimatedStyle(() => (calm
+    ? { opacity: p.value, transform: [{ translateY: 0 }] }
+    : { opacity: 1, transform: [{ translateY: (1 - p.value) * h.value + drag.value }] }));
+  const dim = useAnimatedStyle(() => ({ opacity: p.value }));
+
+  const row = (n: Note) => {
+    const cur = n.id === store.last;
+    return (
+      <Pressable key={n.id} onPress={() => pick(n)} accessibilityRole="button" accessibilityLabel={label(n)} accessibilityState={{ selected: cur }}
+        style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
+        <NoteIcon n={n} size={T.shape.noteIcon} />
+        <Text style={[st.name, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}>{label(n)}</Text>
+        {cur ? <Sym name="checkmark" size={17} color={c.accent} weight="semibold" /> : null}
+      </Pressable>
+    );
+  };
+  const group = (head: string, notes: Note[], first: boolean) => notes.length ? (
+    <View key={head}>
+      {!first && <View style={[st.sep, { backgroundColor: c.menuSep }]} />}
+      <Text style={[st.head, { color: c.textSecondary }]}>{head}</Text>
+      {notes.map(row)}
+    </View>
+  ) : null;
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }, dim]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => close()} accessibilityRole="button" accessibilityLabel="收起切換清單" />
+      </Animated.View>
+      <Animated.View style={[st.sheet, { maxHeight: height * T.shape.switchMaxRatio }, sheet]} accessibilityViewIsModal
+        onLayout={e => { h.value = e.nativeEvent.layout.height; }}>
+        <Glass style={StyleSheet.absoluteFill} material="thick" />
+        <GestureDetector gesture={pan}>
+          <View style={st.grabBox} collapsable={false}>
+            <View style={[st.grab, { backgroundColor: c.textSecondary }]} />
+          </View>
+        </GestureDetector>
+        <ScrollView bounces={false} contentContainerStyle={{ paddingBottom: insets.bottom + T.space.s }}>
+          {group('釘選', pinned, true)}
+          {group('最近', recent, !pinned.length)}
+          <View style={[st.sep, { backgroundColor: c.menuSep }]} />
+          <Pressable onPress={all} accessibilityRole="button" accessibilityLabel="管理所有清單"
+            style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
+            <View style={st.allIcon}><Sym name="square.grid.2x2" size={20} color={c.textPrimary} /></View>
+            <Text style={[st.name, { color: c.textPrimary }]}>管理所有清單</Text>
+            <Sym name="chevron.right" size={14} color={c.textSecondary} weight="semibold" />
+          </Pressable>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  // 貼齊螢幕底部：只有上面兩個角是圓的（多米 2026-11-04：下面不該是圓角）
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden',
+    borderTopLeftRadius: T.shape.radiusPanel, borderTopRightRadius: T.shape.radiusPanel },
+  grabBox: { height: T.shape.hitMin / 2, alignItems: 'center', justifyContent: 'center' },
+  grab: { width: T.shape.handleSolo, height: T.shape.dirGrab, borderRadius: T.shape.pill(T.shape.dirGrab), opacity: T.shape.handleOff },
+  // 跟 PopMenu（系統選單的樣子）同一套：小字組名、組跟組之間一條線
+  head: { ...T.font.footnote, marginHorizontal: T.space.l, marginTop: T.space.xs, marginBottom: T.space.xs },
+  sep: { height: StyleSheet.hairlineWidth, marginHorizontal: T.space.l, marginVertical: T.space.s },
+  row: { flexDirection: 'row', alignItems: 'center', gap: T.space.m, minHeight: T.shape.menuRow, paddingHorizontal: T.space.l },
+  name: { ...T.font.body, flex: 1, minWidth: 0 },
+  allIcon: { width: T.shape.noteIcon, alignItems: 'center' },
+});

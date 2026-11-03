@@ -10,7 +10,6 @@
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
 import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   AppState, Keyboard, Platform, Pressable, ScrollView as RNScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
@@ -40,6 +39,7 @@ import { DoneBtn, GlassBtn } from './WebBars';
 import { HAS_NATIVE_ROWS, NativeRows } from './NativeRows';
 import { barSlot } from './PageBar';
 import { NoteIcon } from './NoteIcon';
+import { switchPanel } from './SwitchPanel';
 import { perf } from '../lib/perf';
 
 // 空紙上的茄子：扁平線條版（多米 2026-10-31 生的圖，去背後放 assets；轉成 WebP 品質 85，135 KB → 16 KB，顯示才 96pt 看不出差別）
@@ -597,8 +597,8 @@ export function Paper({ n }: { n: Note }) {
   const name = n.title.trim() || '未命名'; // 多米 2026-11-01 定（原本「沒有名字的一張」）
   const shareText = () => (n.title ? n.title + '\n\n' : '') + plain(n);
   const anyDone = n.items.some(i => i.done);
-  // 點左上清單名：升起切換清單（2026-11-04 改版，app/switch）。左下膠囊、左右滑換張一起拿掉（多米選）
-  function openSwitch() { Keyboard.dismiss(); router.push('/switch'); }
+  // 點左上清單名：從下面升起切換清單（2026-11-04 改版，components/SwitchPanel）。左下膠囊、左右滑換張一起拿掉（多米選）
+  function openSwitch() { Keyboard.dismiss(); switchPanel.open(); }
   // 右下 ＋ 畫在紙外面、換張時不重掛（多米 2026-11-03：＋ 要一直停在原地）。每次畫完把最新的內容交過去；
   // 紙卸載時不收回，下一張紙同一輪就會交新的，列不會閃。鍵盤升起、輸入框開著、排順序時不畫。
   // 紙自己的彈出選單（茄記版行的長按、網頁的 ⋯）開著時也不畫：列畫在紙外面、疊在紙的選單上面，不收的話選單後面霧掉了列還清清楚楚、還點得到

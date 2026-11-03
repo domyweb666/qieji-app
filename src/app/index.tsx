@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { LayoutAnimationConfig } from 'react-native-reanimated';
 import { DirPanelHost } from '../components/DirPanel';
 import { PageBarHost } from '../components/PageBar';
+import { SwitchPanelHost } from '../components/SwitchPanel';
 import { Paper } from '../components/Paper';
 import { startJsWatch, useFrameWatch } from '../lib/perf';
 import { newNote, store, useStore } from '../lib/store';
@@ -29,6 +30,8 @@ export default function Home() {
       {/* 底部列（換張、開目錄、右下 ＋）在紙外面：換張時不跟著紙重掛，＋ 一直停在原地（2026-11-03）；目錄面板蓋在它上面 */}
       <PageBarHost />
       <DirPanelHost />
+      {/* 切換清單（2026-11-04 改版）：點紙左上清單名從下面升起，蓋在最上面 */}
+      <SwitchPanelHost />
     </View>
   );
 }

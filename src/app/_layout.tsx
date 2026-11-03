@@ -20,7 +20,6 @@ store.onNewCloud((adopt, decline) => ui.ask(
 store.onCloudOff(() => ui.toast('iCloud 雲碟沒開，紙只存在這台手機'));
 
 const ios = Platform.OS === 'ios';
-const SHEET_DETENTS = [T.shape.sheetHalf, 1]; // 半高、全高
 // iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊
 const glass = ios && parseInt(String(Platform.Version), 10) >= 26;
 
@@ -64,11 +63,6 @@ export default function RootLayout() {
               <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
               {/* 目錄不是路由了：B3 起是紙畫面裡自己做的面板（components/DirPanel），從上面垂下來 */}
               <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
-              {/* 切換清單（2026-11-04 改版，多米選「系統半高面板」）：iOS 系統的 sheet，先停在一半高、往上拉變全高、往下滑收起，頂端有小橫條 */}
-              <Stack.Screen name="switch" options={{
-                presentation: 'formSheet', sheetAllowedDetents: SHEET_DETENTS, sheetGrabberVisible: true, headerShown: false,
-                contentStyle: { backgroundColor: c.page },
-              }} />
             </Stack>
           </View>
         ) : <View style={{ flex: 1, backgroundColor: c.page }} />}
