@@ -278,6 +278,8 @@ export const gesture = {
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
   dragFailX: 10,      // 把手上「左右」動超過這麼多就不算拿起，讓給整行的滑動（把手常駐之後要分工，2026-11-01；比 swipeActivate 14 小，兩個手勢才不會同一點打架）
+  dragAutoEdge: 64,  // 排順序拖到清單上緣、下緣這麼近：紙自己往那邊捲（2026-11-03 多米選照提醒事項）
+  dragAutoSpeed: 900, // 自動捲最快幾點／秒（手指貼到最邊上時）；離邊越遠越慢
   longPressMs: 500,   // 長按一行多久跳選單
   longPressMove: 10,  // 長按途中手指移超過這麼多就不算長按（交給滑動）
 };
