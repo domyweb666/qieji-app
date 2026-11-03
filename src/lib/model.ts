@@ -38,7 +38,7 @@ export type Garden = { days: Record<string, Day>; tot: { f: number; e: number } 
 // orderMod＝座位表最後一次親手排（拖、往前移／往後移）的時間，或從 iCloud 照抄來那份的時間；orderSent＝上次跟 iCloud 對上的 orderMod（C2，2026-11-02 加）
 // folders＝目錄裡的資料夾（D1，2026-11-02 加）：名字＋裡面的紙照順序。資料夾在座位表裡佔一格，裡面的紙不佔
 export type Folder = { id: string; name: string; ids: string[] };
-export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[]; orderMod?: number; orderSent?: number; folders?: Folder[] };
+export type State = { sort: SortKey; notes: Note[]; garden: Garden; gone?: Record<string, number>; order?: string[]; orderMod?: number; orderSent?: number; folders?: Folder[]; grid?: number };
 
 // name 是蔬菜名，hue 是一般人說的顏色（色塊面板上兩個都標）。
 // 色碼不在這裡：九種顏色的 bg／hd／rule 在 src/lib/tokens.ts 的筆記色票（淺色、深色各一組）。
@@ -107,7 +107,7 @@ export const TUTORIAL = {
     '不要的，往左滑刪掉（刪了在最近刪除找得回來）',
     '點一下這行，就能改字',
     '按住這行，看還能做什麼',
-    '按住右邊三條線上下拖，換順序',
+    '按住右邊的小點點上下拖，換順序',
     '右下角 ＋，記下你現在想到的事',
   ],
 };
@@ -398,6 +398,18 @@ export function seatedLayout(s: State): Entry[] {
 
 // 建資料夾、放進、移出、改名都算親手排（C2：同步時後排的那台為準）
 const touchLayout = (s: State, now: number) => { s.orderMod = Math.max(now, (s.orderMod ?? 0) + 1); };
+// 磚改成一排 GRID_COLS 個（2026-11-03 多米：1×1，跟 App 一樣）：寬磚時期留的空位、換頁標記照「第幾格」存，一排四個之後位置全對不上，
+// 多米選「空格清掉、照順序排緊」——只清一次（記在 s.grid），清單和資料夾的先後不變。算親手排：同步時這台排緊的版本贏，別台裝了新版也會自己清
+export const GRID_COLS = 4;
+export function packGrid(s: State, now = Date.now()) {
+  if (s.grid === GRID_COLS) return false;
+  s.grid = GRID_COLS;
+  if (Array.isArray(s.order)) s.order = s.order.filter(id => !isHole(id) && !isBreak(id));
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
+
 // 從資料夾拿走一張之後：看得到的只剩一張就拆掉資料夾，剩下的紙（含最近刪除的）照原本順序站在資料夾那格
 // （照 iOS 拖出來只剩一個 App 檔案夾就變回那個 App，多米 2026-11-02 看錄影選）。全部在最近刪除的不拆（還原時才回得來）
 function dissolveIfOne(s: State, f: Folder) {

@@ -1,7 +1,7 @@
 // 目錄自由擺放（2026-11-03，多米：「清單定死位置，沒法像主畫面想放哪就放哪」）：座位表裡的空位
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, reseat, seatNew, seatedLayout } from '../src/lib/model.ts';
+import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, packGrid, reseat, seatNew, seatedLayout } from '../src/lib/model.ts';
 
 const note = (id, o = {}) => ({ id, type: 'check', title: id, body: '', bin: [], color: 'yellow', items: [], pinned: false, deleted: false, created: 1, updated: 1, b: true, ...o });
 const state = (notes, order, folders) => ({ sort: 'updated', notes, garden: { days: {}, tot: { f: 0, e: 0 } }, order, folders });
@@ -174,4 +174,16 @@ test('seatNew：沒給、找不到就照舊排最後，不算親手排', () => {
   assert.ok(!seatNew(s, 'n', 5));
   assert.deepEqual(s.order, ['a', 'n']);
   assert.equal(s.orderMod, undefined);
+});
+
+test('packGrid：改一排四個時空位、換頁標記清掉一次，先後不變、算親手排', () => {
+  const s = state([note('a'), note('b'), note('c')], ['a', '.1', '|1', 'b', '.2', 'c']);
+  assert.ok(packGrid(s, 9));
+  assert.deepEqual(s.order, ['a', 'b', 'c']);
+  assert.equal(s.grid, 4);
+  assert.ok(s.orderMod >= 9);
+  // 清過了：之後自己留的空位不再清
+  s.order = ['a', '.3', 'b', 'c'];
+  assert.ok(!packGrid(s, 10));
+  assert.deepEqual(s.order, ['a', '.3', 'b', 'c']);
 });

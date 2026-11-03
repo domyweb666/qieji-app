@@ -174,19 +174,21 @@ export const shape = {
   handleOff: 0.3, // 沒亮的那幾段（亮的那段不透明）
   // 把手點擊範圍往外撐：往上蓋過時間那行（不能點）、往下只到分隔線（＝時間區下緣內距 space.s），不吃到第一行
   handleSlop: { top: 30, bottom: 8, left: 16, right: 16 },
-  tile: 84,      // 目錄的色磚高度
+  // 目錄的磚（2026-11-03 多米：改成 1×1，跟 iPhone 主畫面的 App 一樣，規格見 .uiux/iOS主畫面編輯-官方規範對照.md 第十一節）：
+  // 一排 gridCols 個，每欄寬＝格子區寬 ÷ gridCols；方磚邊長＝欄寬扣 tileGapMin、最大 tileMax（iPhone 量到約 63）；
+  // 名字在方磚下面 tileLabelGap、一行高 tileLabelH；列跟列之間再空 tileRowGap；圓角＝邊長 × tileRadiusRatio（iOS 約 22%）
+  gridCols: 4, tileMax: 64, tileGapMin: 24, tileLabelGap: 6, tileLabelH: 16, tileRowGap: 14, tileRadiusRatio: 0.225,
   dirPeek: 92,   // 目錄面板垂下來時，螢幕底下留一截看得到後面的紙（點那截收起；多米原型）
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
-  tileTag: 40,   // 色磚右下角露出的色圓
+  tileTag: 30,   // 色磚右下角露出的色圓（1×1 之後縮小，2026-11-03）
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
-  // 資料夾磚（2026-11-02 多米選 A）：名字跟紙磚一樣大，下面一排兩格預覽（那張紙的顏色＋名字），更多的寫 +N
-  folderPeek: 28, folderPeekRadius: 7, folderPeeks: 2,
-  folderPlusW: 30, // 「+N」那格的寬
+  // 資料夾磚（2026-11-03 改 1×1，照 iOS）：方磚裡 3×3 小方塊，每塊是裡面一張紙的顏色；小方塊之間的縫、離框的內距
+  folderMinis: 3, folderMiniGap: 3, folderMiniPad: 7,
   // 行右邊排順序的把手（2026-11-03 多米：三條線換成 2 欄 × 3 列六個淺點）：點的大小、點跟點的縫、透明度（照次要字色再淡一點）
   gripDot: 3, gripDotGap: 4, gripDotOpacity: 0.55,
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
-  // 打開的資料夾（2026-11-02 照 iOS）：框的圓角、一頁 2 欄 × folderRows 列，滿了往右一頁；框下面頁點那排的高
-  radiusFolder: 38, folderRows: 3, folderDotsH: 14,
+  // 打開的資料夾（2026-11-02 照 iOS；2026-11-03 改 1×1 後一頁 folderCols 欄 × folderRows 列，跟 iOS 一樣 3×3）：框的圓角、滿了往右一頁；框下面頁點那排的高
+  radiusFolder: 38, folderCols: 3, folderRows: 3, folderDotsH: 14,
   // 霧化強度（expo-blur 的 intensity，1～100）：後面的目錄霧一點就好、看得出輪廓；框本身霧重一點，像 iOS 的檔案夾
   folderBlur: 24, folderBoxBlur: 60,
   // 系統材質（2026-11-02）：舊 iOS 的霧面按鈕、選單卡霧多重；長按選單照 iOS 的樣子（寬 250、大圓角、組與組之間一條粗縫）
@@ -271,9 +273,10 @@ export const gesture = {
   tileDragHeld: 18, tileDragEdit: 12,
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
   // 2026-11-02（多米：磚是寬的，左右上下都難換；原型對過）：看拖著那張跟底下那張「重疊多少」（面積比），不看中心落在哪。
-  // 不到 mergeOverlap 不理；mergeOverlap～swapOverlap 停 timing.stackHover＝準備疊；超過 swapOverlap 停 timing.swapDwell＝互換（只有這兩張動）；
-  // 準備疊之後要掉到 mergeHold 以下才取消。打開的資料夾裡不能疊，超過 folderSwapOverlap 就互換
-  mergeOverlap: 0.2, swapOverlap: 0.5, mergeHold: 0.15, folderSwapOverlap: 0.3,
+  // 2026-11-03 改 1×1、照 iPhone（多米選）：拖著那張的中心落在別張的格子裡——離那張方磚的中心不到 stackRadius × 邊長，
+  // 停 timing.stackHover＝準備疊（放手縮進去）；再遠一點（還在那格裡）停 timing.swapDwell＝互換（只有這兩張動）。
+  // 準備疊之後要離到 stackHold × 邊長外才取消（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
+  stackRadius: 0.34, stackHold: 0.5,
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起

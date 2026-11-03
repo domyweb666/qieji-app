@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
-import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, packGrid, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 import { T } from './tokens';
 
@@ -146,10 +146,12 @@ export const store = {
       box.state.notes.push(t);
       box.last = t.id;
     }
+    // 磚改成一排四個（2026-11-03）：寬磚時期的空位、換頁標記清掉一次（packGrid）
+    const packed = !box.noSeat && packGrid(box.state);
     box.loaded = true;
     box.version++;
     emit();
-    if (first || (convert && !box.noSeat)) writeNow(); // 轉好的座位表馬上存，不等第一次改字
+    if (first || packed || (convert && !box.noSeat)) writeNow(); // 轉好的座位表馬上存，不等第一次改字
     store.purgeTrash();
     store.pullCloud();
   },

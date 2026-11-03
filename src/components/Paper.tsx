@@ -1251,7 +1251,7 @@ function LiveRow(p: LiveProps) {
               onChange={p.onChange} onKey={p.onKey} onFocus={p.onFocus} onBlur={p.onBlur} />
             {!p.editing && <View style={StyleSheet.absoluteFill} collapsable={false} accessible={false} importantForAccessibility="no" />}
           </View>
-          {/* 把手：每行常駐、熱區 44 寬，三條線是 iOS 的慣例。VoiceOver 不讀它（用輸入框動作選單的往上移／往下移） */}
+          {/* 把手：每行常駐、熱區 44 寬，六個小點（2026-11-03 起，原本是 iOS 的三條線）。VoiceOver 不讀它（用輸入框動作選單的往上移／往下移） */}
           <GestureDetector gesture={grip}>
             <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
               <GripDots color={p.colors.textSecondary} />
