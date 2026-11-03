@@ -11,10 +11,10 @@
 // 就把事件綁給當時那個手勢的處理器，之後換成別的手勢不會重綁（Reanimated NativeEventsManager.updateEvents 比的是掛上時記下的那份）。
 // 之前手勢由紙建、交給列：第一張紙滑得動，換過一次紙，膠囊還綁著第一張紙的處理器，新紙的事件全被丟掉。
 // 現在手勢跟偵測元件同一個元件、同一輩子；紙只交「平移誰、左右是哪兩張」，換紙時同一個處理器原地換內容（Reanimated useEvent rebuild）
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { FadeIn, FadeOut, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useAnimatedReaction, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Note } from '../lib/model';
@@ -61,6 +61,7 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
   const insets = useSafeAreaInsets();
   // worklet 只抓拆出來的值，不抓整包 swipe
   const { hx, turning, prevId, nextId, winW, calm, enabled, onTurn, onOpenNote } = swipe;
+  const [peekId, setPeek] = useState(''); // 手指拖過半頁時先顯示的那張（見下面 useAnimatedReaction）；要在換張的 worklet 之前宣告
   // B4：左右撥＝在頁點那幾張之間換，手指往左＝換到右邊那張。整張紙跟著手指走，旁邊那張的預覽（Paper 的 PagePreview）同時從另一邊滑進來；
   // 到頭（沒有下一張）只跟三成、放手彈回（多米 11/02 定甲：不跳提示）。撥過半頁或往那邊甩：整頁滑過去，滑到定位才換紙；不夠就彈回。
   // 減少動態：照樣跟手，放手直接換，交給整張淡入
@@ -76,6 +77,8 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
     const d = e.translationX < 0 ? 1 : -1, id = d > 0 ? nextId : prevId;
     const go = !e.canceled && !!id && (Math.abs(e.translationX) > winW * TURN_RATIO || -d * e.velocityX > TURN_FLICK);
     if (!go) { hx.value = calm ? 0 : withSpring(0, { velocity: e.velocityX, ...SNAP_BACK }); return; }
+    scheduleOnRN(setPeek, id); // 甩一下就換：放手那一刻名字和頁點就換過去
+
     if (calm) { scheduleOnRN(onOpenNote, id); return; }
     turning.value = 1;
     hx.value = withSpring(-d * winW, { velocity: e.velocityX, ...PAGE_TURN }, done => { if (done) scheduleOnRN(onTurn, id); });
@@ -110,6 +113,15 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
       barMode.value = 0;
     },
   });
+  // 名字和頁點跟著手指換（2026-11-03 多米：要等快一秒才變，太久）：紙拖過半頁（放手就會換的那條線）就先寫成那張，
+  // 不等滑到定位、新的那張紙掛好（換紙要重畫整張紙，那段才是慢的）。每張紙有自己的 hx，換好之後新紙的 hx 是 0，這裡跟著回到 cur
+  useAnimatedReaction(
+    () => (hx.value < -winW * TURN_RATIO ? nextId : hx.value > winW * TURN_RATIO ? prevId : ''),
+    (id, old) => { if (id !== old) scheduleOnRN(setPeek, id); },
+    [hx, winW, prevId, nextId],
+  );
+  const shown = (peekId && notes.find(x => x.id === peekId)) || cur;
+  const shownName = shown === cur ? name : shown.title.trim() || '未命名';
   const at = Math.max(0, notes.indexOf(cur));
   const onA11y = (e: AccessibilityActionEvent) => {
     const a = e.nativeEvent.actionName;
@@ -131,12 +143,12 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
               accessibilityActions={[{ name: 'activate' }, { name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onA11y}>
               <Sym name="square.grid.2x2" size={18} color={c.textPrimary} />
               <View style={st.mid}>
-                <Text style={[st.name, { color: c.textPrimary }]} numberOfLines={1} maxFontSizeMultiplier={T.font.listTitleMaxScale}>{name}</Text>
+                <Text style={[st.name, { color: c.textPrimary }]} numberOfLines={1} maxFontSizeMultiplier={T.font.listTitleMaxScale}>{shownName}</Text>
                 {/* 頁點：左右滑換得到的那幾張，現在這張是長條（以前在標題下面） */}
                 {notes.length > 1 && (
                   <View style={st.dots}>
                     {notes.map(x => (
-                      <View key={x.id} style={[st.dot, { backgroundColor: c.textSecondary }, x === cur ? st.dotOn : st.dotOff]} />
+                      <View key={x.id} style={[st.dot, { backgroundColor: c.textSecondary }, x === shown ? st.dotOn : st.dotOff]} />
                     ))}
                   </View>
                 )}

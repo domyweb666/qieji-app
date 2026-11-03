@@ -60,7 +60,8 @@ const SINK_MS = M.sink.duration, SINK_SCALE = M.sink.scale;
 // 打開的資料夾：一頁 2 欄 × FROWS 列；框內距 FPAD（磚離框邊）
 const FROWS = T.shape.folderRows, FPER = FROWS * 2, FPAD = T.space.l;
 // 彈簧設定抄一份自己的：被抓進 worklet 的物件會被鎖住，不讓 tokens 裡的 M、G 被鎖（規矩檔 2026-11-02）
-const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring }, LIFT_SCALE = M.dragLift.scale;
+const LIFT_SPRING = { ...M.dragLift.spring }, LAND_SPRING = { ...M.dragLand.spring };
+const HOLD_SCALE = M.tileHold.scale; // 抖動中按住、拿著拖的磚放大的比例（2026-11-03 多米：按住要看得出來）
 const PULL_CLOSE = G.pushCloseRatio, FLICK = G.flick;
 const HELD_SQ = G.tileDragHeld * G.tileDragHeld; // 長按後要拖超過 tileDragHeld 才拿起（比距離的平方，worklet 裡不開根號）
 const MENU_LIFT = M.menuLift.scale; // 長按選單時那塊浮起來放大的比例
@@ -163,10 +164,11 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
 // 放手滑進要放的那格再回 JS 改資料（資料夾開著但手指在框外就不滑，交給 JS）。減少動態：直接到位
 type DragOpts = {
   enabled: boolean; editing: boolean; w: number; screenW: number; gw: number; fw: number; calm: boolean; dg: DG;
+  held: SharedValue<number>; // 這塊磚按住了沒（0～1，磚自己畫放大用）
   onStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function useDragPan(o: DragOpts) {
-  const { dg, w, screenW, gw, fw, calm, editing, onStart, onAim, onEdge, onDrop } = o; // worklet 只抓拆出來的值，不抓整包 o
+  const { dg, held, w, screenW, gw, fw, calm, editing, onStart, onAim, onEdge, onDrop } = o; // worklet 只抓拆出來的值，不抓整包 o
   // 長按到了、還沒拖夠遠（armed）：選單開著，手指再拖 tileDragHeld 才拿起來（2026-11-03 多米真機：長按選單一跳就變拖，前一版改 minDistance 沒用）。
   // 為什麼不能靠 minDistance：iOS 的 activateAfterLongPress 時間一到拖曳就直接啟動、完全不看移動距離（RNGH apple/Handlers/RNPanHandler.m），
   // 所以「長按後再拖多遠才拿起」只能自己在 onUpdate 算。網頁版長按也是時間到就啟動，兩邊一樣
@@ -176,6 +178,8 @@ function useDragPan(o: DragOpts) {
     'worklet';
     dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
     dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
+    // 抖動中手指一按下磚就放大了（held）：拿起來那張從一樣大接著浮，不會先縮回去再長大
+    if (!calm) dg.lift.value = held.value;
     dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     scheduleOnRN(onStart);
   };
@@ -186,6 +190,16 @@ function useDragPan(o: DragOpts) {
     activateAfterLongPress: editing ? undefined : G.longPressMs,
     // 抖動中手指移超過 tileDragEdit 才拿起（點一下的容許也是這個數，晃幾點還是點）；沒抖動時這個值不起作用（見上面 armed）
     minDistance: G.tileDragEdit,
+    // 抖動中手指一按下就放大（2026-11-03 多米真機：按住沒動畫，不知道按到了沒）；拖著照樣大（畫的是浮著那張，見 DragGhost），放手才縮回。
+    // 沒抖動時長按是跳選單，選單那塊自己會浮起（Lifted），這裡不動
+    onBegin: () => {
+      'worklet';
+      if (editing) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
+    },
+    onFinalize: () => {
+      'worklet';
+      held.value = calm ? 0 : withSpring(0, LIFT_SPRING);
+    },
     onActivate: e => {
       'worklet';
       // 長按到了（沒抖動）：先只開選單，等手指拖夠遠；抖動中是拖過 tileDragEdit 才啟動的，直接拿起
@@ -376,7 +390,10 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // 拖到最後一頁右邊緣＝原本那格變空位、最後面接換頁標記和這張（新的一頁）。從資料夾拿起、手指還在資料夾裡時是 null（目錄不多一格）。
   // home＝從格子拿起時在第幾頁：拖的那塊磚身上有手勢，換到別頁時不能跟著搬（搬了就重掛、手勢斷掉，放手沒反應），所以它一直留在這頁（藏起來、不佔位），
   // 別頁只畫一個空位（2026-11-02 網頁實測抓到：拖到別頁放手沒反應）
-  type Drag = { id: string; src: string | null; page: number; cells: string[] | null; inF: string | null; fto: number; k0: number; home?: number; forder?: string[] };
+  type Drag = { id: string; src: string | null; page: number; cells: string[] | null; inF: string | null; fto: number; k0: number; home?: number; forder?: string[]; base?: string[] };
+  // base＝拿起那一刻（或翻到這頁落下那一刻）的格子表。手上那張要放哪格、跟誰換，一律從 base 重算，不從上一次換完的樣子接著算
+  // （2026-11-03 多米：每張待在自己的格子，沒跟它交互就不動）：拖著經過 B 再到 C，B 會回自己那格、只有 C 跟拿起那格對調；
+  // 以前是接著換，C 被換到 B 原本那格、B 留在拿起那格，經過幾張就亂掉幾張
   // 格子表裡代表「拖的那張」的那格；cell＝這格在格子表裡記成什麼（資料夾拿出來只剩一張、先畫成那張時，格子表裡還是記資料夾）
   const ME = '@';
   type GEntry = Entry & { cell?: string };
@@ -421,6 +438,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   };
   // 排好的這一排換回格子表（拖的那張記成 ME）
   const cellsOf = (d: Drag, F: GEntry[]) => F.map(e => (e.id === d.id ? ME : e.cell ?? e.id));
+  const sameCells = (a: string[], b: string[] | null) => !!b && a.length === b.length && a.every((id, i) => id === b[i]);
   // 打開的資料夾裡排出來的紙：拖進來的放在讓出來那格；從這個資料夾拿起、已經拖到外面的留在原位不顯示（那塊磚身上有手勢，不能拿掉）
   const folderNotes = (e: Entry, d: Drag | null): Note[] => {
     if (!d) return e.notes;
@@ -459,14 +477,15 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const capOf = (pg: number) => (pg === 0 ? (rows - 1) * 2 : rows * 2);
   // 拖的那張放進第 pg 頁第 k 格（2026-11-03 自由擺放）：那格是空位＝跟空位對調（原本那格變空位）；那格有別張＝兩張對調（11/02 定的互換）；
   // 那頁最後一張後面、這頁還放得下的格子＝中間補空位再放進去，原本那格變空位。放不進去（同一格、超過這頁、那頁不存在）回 null
+  // 從 d.base 算（見 Drag 的 base）：停回拿起那格＝整排回到拿起時的樣子
   function placeAt(d: Drag, pg: number, k: number): string[] | null {
-    const F = flatOf(d), P = paginate(F)[pg] ?? [];
-    const cells = cellsOf(d, F), m = cells.indexOf(ME);
+    const b = d.base ? { ...d, cells: d.base } : d;
+    const F = flatOf(b), P = paginate(F)[pg] ?? [];
+    const cells = cellsOf(b, F), m = cells.indexOf(ME);
     if (m < 0) return null;
     if (k < P.length) {
       const j = P[k];
-      if (j === m) return null;
-      [cells[m], cells[j]] = [cells[j], cells[m]];
+      if (j !== m) [cells[m], cells[j]] = [cells[j], cells[m]];
       return cells;
     }
     if (!P.length || k >= capOf(pg)) return null;
@@ -654,7 +673,8 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     entered.current = true;
     dg.gx.value = T.space.l; dg.fopen.value = 0;
     // 格子表照現在的排法，拖的那張那格記成 ME（k、pg 只用來記從哪頁拿起）
-    setD({ id, src: null, page: pg, cells: entries.map(e => (e.id === id ? ME : e.id)), inF: null, fto: -1, k0: -1, home: pg });
+    const cells = entries.map(e => (e.id === id ? ME : e.id));
+    setD({ id, src: null, page: pg, cells, inF: null, fto: -1, k0: -1, home: pg, base: cells });
     dg.ready.value = 1; // 格子位置寫好了，手勢從下一格開始算瞄哪
     haptic('dragStart');
   }
@@ -690,7 +710,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       setOpenF(null);
       dg.bw.value = 0;
     }
-    setD({ ...d, inF: null, cells });
+    setD({ ...d, inF: null, cells, base: cells ?? undefined });
     haptic('dragPass');
     // 手指不動也先對一次目錄的格子
     // 資料夾剛收起（fopen 0），只對目錄的格子，用不到手指的位置；給磚的中心就好
@@ -739,7 +759,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       aimT.current = setTimeout(() => {
         const cur = dragRef.current;
         const cells = cur?.cells ? placeAt(cur, cur.page, k) : null;
-        if (!cur || !cells) return;
+        if (!cur || !cells || sameCells(cells, cur.cells)) return;
         setD({ ...cur, cells });
         haptic('dragPass');
       }, T.timing.swapDwell);
@@ -760,17 +780,19 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       if (!d || d.inF || !d.cells || np < 0 || dg.edge.value !== z) return;
       clearTimeout(aimT.current);
       unstack();
-      const F = flatOf(d);
+      // 離開這頁：在這頁預覽的互換、放格都不算（沒放手），從 base 開始放到新的一頁，放好之後那樣就是新的 base
+      const b = d.base ? { ...d, cells: d.base } : d;
+      const F = flatOf(b);
       if (np >= pageCount.current) {
         // 最後一頁再往右（2026-11-02，多米選照 iOS）：這頁還有別張才開新的一頁（空位不算），拖的那張是新頁唯一一張；新頁裡已經是自己了就不再開。
         // 原本那格留空位（2026-11-03 自由擺放）
         const here = (paginate(F)[d.page] ?? []).filter(i => F[i].id !== d.id && !F[i].hole);
-        const cells = cellsOf(d, F), m = cells.indexOf(ME);
+        const cells = cellsOf(b, F), m = cells.indexOf(ME);
         if (!here.length || m < 0) return;
         cells[m] = newHole();
         cells.push(newBreak(), ME);
         setPage(np);
-        setD({ ...d, page: np, cells });
+        setD({ ...d, page: np, cells, base: cells });
         dg.aim.value = AIM_NONE;
         requestAnimationFrame(() => pagerRef.current?.scrollTo({ x: np * width, animated: !calm }));
         haptic('dragPass');
@@ -788,7 +810,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         const k = u >= 0 && (u < P.length ? F[P[u]].hole : u < capOf(np)) ? u : firstEmpty(F, P, np);
         if (k >= 0) cells = placeAt(at, np, k);
       }
-      setD(cells ? { ...at, cells } : at);
+      setD(cells ? { ...at, cells, base: cells } : { ...at, cells: b.cells }); // 那頁滿了：手上那張還算在拿起那格，這頁預覽的互換收回
       dg.aim.value = AIM_NONE;
       haptic('dragPass');
       edgeT.current = setTimeout(flip, T.timing.edgeFlip);
@@ -1117,8 +1139,9 @@ function Tile(p: TileProps) {
     maxDistance: G.longPressMove,
     onActivate: e => onMenu(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標）
   });
+  const held = useSharedValue(0);
   const pan = useDragPan({
-    enabled: p.canDrag, editing: p.editing, w, screenW: sw, gw: w, fw: p.fw, calm, dg: p.dg,
+    enabled: p.canDrag, editing: p.editing, w, screenW: sw, gw: w, fw: p.fw, calm, dg: p.dg, held,
     onStart: onDragStart, onAim, onEdge, onDrop,
   });
   const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
@@ -1144,7 +1167,7 @@ function Tile(p: TileProps) {
   // 動畫裡只能用拆出來的真假值：寫 p.ghost 會把整包 props（紙、資料夾物件）抓進去，被鎖住之後改資料全部失效（多米 2026-11-02 真機「一團糟」）
   const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }, { scale: grow.value }],
+    transform: [{ rotate: `${rot.value}deg` }, { scale: grow.value * (1 + held.value * (HOLD_SCALE - 1)) }],
     opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [ghost] : undefined);
 
@@ -1235,8 +1258,9 @@ function FolderTile(p: FolderTileProps) {
     maxDistance: G.longPressMove,
     onActivate: e => onMenu(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標）
   });
+  const held = useSharedValue(0);
   const pan = useDragPan({
-    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg,
+    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg, held,
     onStart: onDragStart, onAim, onEdge, onDrop,
   });
   const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
@@ -1251,7 +1275,7 @@ function FolderTile(p: FolderTileProps) {
   // 同 Tile：動畫裡不准碰 p（p.n 是紙物件）
   const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }],
+    transform: [{ rotate: `${rot.value}deg` }, { scale: 1 + held.value * (HOLD_SCALE - 1) }],
     opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [ghost] : undefined);
   return (
@@ -1301,7 +1325,7 @@ function DragGhost({ dg, calm, children }: { dg: DG; calm: boolean; children: Re
   const style = useAnimatedStyle(() => ({
     opacity: calm && dg.sink.value > 0 ? 0 : 1 - dg.sink.value,
     transform: [{ translateX: dg.x0.value + dg.dx.value }, { translateY: dg.y0.value + dg.dy.value },
-      { scale: (1 + dg.lift.value * (LIFT_SCALE - 1)) * (1 - dg.sink.value * (1 - SINK_SCALE)) }],
+      { scale: (1 + dg.lift.value * (HOLD_SCALE - 1)) * (1 - dg.sink.value * (1 - SINK_SCALE)) }],
   }));
   return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
 }
