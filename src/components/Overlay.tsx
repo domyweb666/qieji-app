@@ -37,9 +37,9 @@ export const ui = {
     Alert.alert(msg, undefined, [{ text: '取消', style: 'cancel' }, { text: okLabel, style: 'destructive', onPress: ok }]);
   },
   // 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像 toast 會自己消失（06-首次體驗 ❓7）
-  alert: (title: string, msg: string, okLabel = '知道了') => {
-    if (Platform.OS !== 'ios') return host?.confirm({ title, msg, ok: () => {}, okLabel });
-    Alert.alert(title, msg, [{ text: okLabel }]);
+  alert: (title: string, msg: string, okLabel = '知道了', then?: () => void) => {
+    if (Platform.OS !== 'ios') return host?.confirm({ title, msg, ok: then ?? (() => {}), okLabel });
+    Alert.alert(title, msg, [{ text: okLabel, onPress: then }]);
   },
   // 兩個選項的提示框（iCloud 看起來換了帳號，S5）：iOS 用系統提示框；網頁不同步、用不到，只留一顆按鈕的保險版
   ask: (title: string, msg: string, yes: { label: string; fn: () => void }, noLabel: string, no?: () => void) => {

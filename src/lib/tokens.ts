@@ -322,11 +322,19 @@ const NOTES: Record<NoteKey, { bg: Four; hd: string; rule: Four }> = {
   black:  { bg: four('#E6E2E1', '#2B222F', '#E6E2E1', '#251D2A'), hd: '#4E3F4C', rule: four('#D4CECF', '#302734', '#CCC6C8', '#2C232F') },
   white:  { bg: four('#FFFDF9', '#4E464D', '#FFFDF9', '#484247'), hd: '#EDE3D2', rule: four('#F4EDE0', '#665E61', '#EFE6D7', '#625A5D') },
 };
-export type NoteColors = { bg: string; hd: string; rule: string };
+// ink＝寫在 hd（卡片顏色、磚上那顆色圓的顏色）上面的字色：大多是深色字，太深的（墨色）用白字（2026-11-03 資料夾磚的小方塊用）
+export type NoteColors = { bg: string; hd: string; rule: string; ink: string };
+const INK_DARK = '#2B2230', INK_LIGHT = '#FFFFFF';
+// 亮度（0 黑～1 白，sRGB 粗算）：太暗就換白字
+const lightness = (hex: string) => {
+  const v = parseInt(hex.slice(1), 16);
+  return (0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
+};
+const INK_SWITCH = 0.5;
 // 不認得的 key 用玉米（跟 model.ts 的 col() 同一個預設）
 export function noteColors(key: string, mode: Mode): NoteColors {
   const n = NOTES[key as NoteKey] || NOTES.yellow;
-  return { bg: n.bg[mode], hd: n.hd, rule: n.rule[mode] };
+  return { bg: n.bg[mode], hd: n.hd, rule: n.rule[mode], ink: lightness(n.hd) < INK_SWITCH ? INK_LIGHT : INK_DARK };
 }
 export function useNoteColors(key: string): NoteColors {
   return noteColors(key, useMode());

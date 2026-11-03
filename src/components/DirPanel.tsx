@@ -661,8 +661,10 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     ];
   };
   // 改磚上的字（2026-11-03 多米：改磚正中間那個字，不是改全名）：系統輸入框，打的字只取第一個；清空＝回到用名字的第一個字
-  function editGlyph(n: Note) {
-    ui.prompt('磚上的字', '打一個字（emoji 也可以）；清空就用名字的第一個字', n.glyph ?? '', v => {
+  // 只能一個字（2026-11-03 多米）：打超過一個字按「好」→ 跳提示、不收，按「知道了」回到輸入框（打的字還在）重打
+  function editGlyph(n: Note, draft = n.glyph ?? '') {
+    ui.prompt('磚上的字', '打一個字（emoji 也可以）；清空就用名字的第一個字', draft, v => {
+      if (Array.from(v.trim()).length > 1) { ui.alert('只能打一個字', `「${v.trim()}」有 ${Array.from(v.trim()).length} 個字，留一個就好`, '知道了', () => editGlyph(n, v)); return; }
       if (setGlyph(n, v)) { n.updated = Date.now(); store.change(); }
     }, '好');
   }
@@ -1401,13 +1403,13 @@ function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number;
     </View>
   );
 }
-// 資料夾磚裡的小方塊：那張紙的顏色＋它磚上的字（2026-11-03 多米：不然看不出資料夾裡有什麼）
+// 資料夾磚裡的小方塊：那張紙的卡片顏色（hd，比紙的底色深，2026-11-03 多米：米色底跟資料夾底分不出來）＋它磚上的字。
+// 只有收著的資料夾磚這樣畫；打開的資料夾裡照舊是一般的磚
 function Mini({ n, w }: { n: Note; w: number }) {
-  const c = useColors();
   const nc = useNoteColors(n.color);
   return (
-    <View style={[st.mini, { width: w, height: w, borderRadius: w * RADIUS, backgroundColor: nc.bg, borderColor: nc.rule }]}>
-      <Text style={[st.glyph, { fontSize: Math.round(w * T.shape.tileGlyphRatio * T.shape.folderMiniGlyph), color: c.textPrimary }]}
+    <View style={[st.mini, { width: w, height: w, borderRadius: w * RADIUS, backgroundColor: nc.hd, borderColor: nc.rule }]}>
+      <Text style={[st.glyph, { fontSize: Math.round(w * T.shape.tileGlyphRatio * T.shape.folderMiniGlyph), color: nc.ink }]}
         allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
     </View>
   );

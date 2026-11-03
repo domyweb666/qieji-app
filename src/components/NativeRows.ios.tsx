@@ -11,7 +11,7 @@ import {
   listStyle, onTapGesture, scrollContentBackground, scrollDismissesKeyboard, shapes, strikethrough, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { requireOptionalNativeModule } from 'expo';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { Platform, type StyleProp, type ViewStyle } from 'react-native';
 import type { Item } from '../lib/model';
 import { T, type Colors } from '../lib/tokens';
@@ -37,7 +37,13 @@ export type NativeRowsProps = {
 };
 
 export function NativeRows({ items, colors: c, bg, rule, ordering, style, onTap, onStrike, onRemove, onMoveTo, onCopy, onMove }: NativeRowsProps) {
+  // 2026-11-03 多米真機：系統清單版排順序不能用。兩個原因：(1) 每一行都一次畫出來（recycling 關著），上千行時一動就要重畫上千行；
+  // (2) 畫一行的函式跟著紙每次重畫換新（點、劃掉這些函式每次都是新的），清單以為每一行都變了、全部重畫。
+  // 改成只畫看得到附近的行（recycling 開著），點、劃掉這些交給 ref，畫一行的函式只在顏色換了才換
+  const on = useRef({ onTap, onStrike, onRemove, onMoveTo, onCopy });
+  on.current = { onTap, onStrike, onRemove, onMoveTo, onCopy };
   const row = useCallback(({ item: it }: { item: Item }) => {
+    const { onTap, onStrike, onRemove, onMoveTo, onCopy } = on.current;
     const has = !!it.t.trim();
     return (
       <SwipeActions modifiers={[listRowBackground(bg), listRowSeparatorTint(rule), listRowInsets({ top: PAD, bottom: PAD, leading: SIDE, trailing: SIDE })]}>
@@ -73,7 +79,7 @@ export function NativeRows({ items, colors: c, bg, rule, ordering, style, onTap,
         </SwipeActions.Actions>
       </SwipeActions>
     );
-  }, [bg, rule, c, onTap, onStrike, onRemove, onMoveTo, onCopy]);
+  }, [bg, rule, c]);
 
   return (
     <Host style={style} colorScheme={c.mode === 'dark' ? 'dark' : 'light'}>
@@ -81,8 +87,8 @@ export function NativeRows({ items, colors: c, bg, rule, ordering, style, onTap,
         listStyle('plain'), scrollContentBackground('hidden'), scrollDismissesKeyboard('interactively'),
         environment('editMode', ordering ? 'active' : 'inactive'),
       ]}>
-        <List.ForEach data={items} keyExtractor={it => it.id} recycling={false}
-          onMove={(src, dest) => onMove(src[0], dest)} onDelete={idx => idx.forEach(i => items[i] && onRemove(items[i].id))}>
+        <List.ForEach data={items} keyExtractor={it => it.id} estimatedItemSize={T.shape.rowMin}
+          onMove={(src, dest) => onMove(src[0], dest)} onDelete={idx => idx.forEach(i => items[i] && on.current.onRemove(items[i].id))}>
           {row}
         </List.ForEach>
       </List>

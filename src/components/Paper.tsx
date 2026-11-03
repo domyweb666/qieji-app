@@ -793,8 +793,8 @@ export function Paper({ n }: { n: Note }) {
               return (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
                 live={live} liteH={!live && lh?.t === it.t ? lh.h : 0}
-                dragFy={dragFy} dragAy={dragAy} dragOn={dragOn}
-                count={n.items.length} calm={calm} fs={fs} dragging={dragging} editing={editing === it.id} rev={(revs.current[it.id] ?? 0) + store.syncRev(it.id)}
+                dragFy={dragFy} dragAy={dragAy} dragOn={dragOn} dragY={dragY} dragY0={dragY0}
+                count={n.items.length} calm={calm} fs={fs} dragging={live && dragging} editing={editing === it.id} rev={(revs.current[it.id] ?? 0) + store.syncRev(it.id)}
                 fresh={freshId === it.id} onFreshDone={() => setFreshId(f => (f === it.id ? null : f))}
                 dragIdx={dragIdx} dragTo={dragTo} dragDy={dragDy} dragH={dragH} dragMids={dragMids} dragTops={dragTops} dragHs={dragHs} dragLift={dragLift}
                 refInput={r => { inputs.current[it.id] = r; }}
@@ -943,6 +943,7 @@ type LineProps = {
   dragIdx: SharedValue<number>; dragTo: SharedValue<number>; dragDy: SharedValue<number>; dragH: SharedValue<number>;
   dragMids: SharedValue<number[]>; dragTops: SharedValue<number[]>; dragHs: SharedValue<number[]>; dragLift: SharedValue<number>;
   dragFy: SharedValue<number>; dragAy: SharedValue<number>; dragOn: SharedValue<number>; // 把手回報手指（見 Paper 的 autoDrag）
+  dragY: SharedValue<number>; dragY0: SharedValue<number>; // 自動捲捲到哪、拿起時捲在哪（把手直接算被拖那行的位置用）
   live: boolean; liteH: number; // live＝做成完整的行（看得到的那段）；不是的話只畫字（LiteRow），liteH＝之前完整時量到的高（0＝沒量過，照字自己撐）
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void;
@@ -1032,7 +1033,7 @@ function LineRow(p: LineProps) {
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
       entering={ROW_IN} exiting={ROW_OUT} layout={!p.live || p.dragging || calm ? undefined : ROW_MOVE}
       style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, !p.live && p.liteH ? { height: p.liteH } : null, shell]}>
-      {p.live ? <LiveRow {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
+      {p.live ? <Live {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
         : <LiteRow t={p.it.t} done={p.done} bg={p.bg} colors={p.colors} fs={p.fs} />}
     </Animated.View>
   );
@@ -1058,12 +1059,16 @@ type LiveProps = LineProps & {
   w: SharedValue<number>; giveWay: SharedValue<number>;
   rowRef: RefObject<ViewInstance | null>;
 };
-// 完整的一行：輸入框、滑動劃掉／刪除、長按選單、點一下編輯、把手拖曳
+// 完整的一行：輸入框、滑動劃掉／刪除、長按選單、點一下編輯、把手拖曳。拿起、放下（dragging 變）只有外殼要換過場，
+// 這層不跟著重畫（重畫就要重設每一行的四個手勢，拿起那一刻會頓一下）
+const Live = memo(function Live(p: LiveProps) { return <LiveRow {...p} />; }, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
+  && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
+  && a.editing === b.editing && a.rev === b.rev && a.fresh === b.fresh);
 function LiveRow(p: LiveProps) {
   const tx = useSharedValue(0);
   const op = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
-  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragTops, dragHs, dragLift, dragFy, dragAy, dragOn } = p;
+  const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragTops, dragHs, dragLift, dragFy, dragAy, dragOn, dragY, dragY0 } = p;
   const { w, giveWay, rowRef } = p;
   const { start: dragStart, end: dragEnd } = p.drag;
   const { swipeStrikeBg, swipeDeleteBg } = p.colors;
@@ -1145,11 +1150,13 @@ function LiveRow(p: LiveProps) {
     activeOffsetY: [-G.dragActivate, G.dragActivate],
     failOffsetX: [-G.dragFailX, G.dragFailX],
     onActivate: () => { 'worklet'; scheduleOnRN(dragStart, id); },
-    // 只回報手指；行跟到哪、對到第幾個位置、碰到上下緣要不要捲，由 Paper 的 autoDrag 每一格算
+    // 回報手指，同時直接把被拖那行放到手指底下（2026-11-03 多米真機：排順序很 lag——只交給 autoDrag 那一格才算，
+    // 手指動了要等下一格畫面行才跟上）。對到第幾個位置、碰到上下緣要不要捲，還是 Paper 的 autoDrag 每一格算
     onUpdate: e => {
       'worklet';
       dragFy.value = e.translationY;
       dragAy.value = e.absoluteY;
+      if (dragOn.value && dragIdx.value >= 0) dragDy.value = e.translationY + dragY.value - dragY0.value;
     },
     // 放下（onDeactivate 才帶放手速度）：其他行早就讓好位了，被拖的行滑進空出來的那一格
     // （往下拖＝to 那行原本的底邊往上一個自己的高；往上拖＝to 那行原本的頂邊），滑到了才回 JS 改資料；放手那一刻震一下。減少動態：直接到位
