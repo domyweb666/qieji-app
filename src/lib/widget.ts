@@ -49,11 +49,17 @@ export function widgetProps(s: State, last: string | null): PaperWidgetProps {
   };
 }
 
+// 上次推過去的內容：一樣就不推（2026-11-03 多米：用一下手機就發熱）。每推一次 iOS 就叫醒小工具重畫一次（expo-widgets 的
+// updateSnapshot → WidgetCenter.reloadTimelines），以前每次存檔都推：打字停一下、拖一下目錄、換一張紙都推，小工具上的字根本沒變
+let sent = '';
 export function pushWidget(s: State, last: string | null) {
   const w = load();
   if (!w) return;
   try {
-    w.updateSnapshot(widgetProps(s, last));
+    const props = widgetProps(s, last), key = JSON.stringify(props);
+    if (key === sent) return;
+    w.updateSnapshot(props);
+    sent = key;
   } catch (e) {
     console.warn('小工具更新失敗：', e);
   }

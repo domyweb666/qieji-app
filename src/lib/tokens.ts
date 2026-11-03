@@ -182,6 +182,8 @@ export const shape = {
   // 資料夾磚（2026-11-02 多米選 A）：名字跟紙磚一樣大，下面一排兩格預覽（那張紙的顏色＋名字），更多的寫 +N
   folderPeek: 28, folderPeekRadius: 7, folderPeeks: 2,
   folderPlusW: 30, // 「+N」那格的寬
+  // 行右邊排順序的把手（2026-11-03 多米：三條線換成 2 欄 × 3 列六個淺點）：點的大小、點跟點的縫、透明度（照次要字色再淡一點）
+  gripDot: 3, gripDotGap: 4, gripDotOpacity: 0.55,
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）
   // 打開的資料夾（2026-11-02 照 iOS）：框的圓角、一頁 2 欄 × folderRows 列，滿了往右一頁；框下面頁點那排的高
   radiusFolder: 38, folderRows: 3, folderDotsH: 14,

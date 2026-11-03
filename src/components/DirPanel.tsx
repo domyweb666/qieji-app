@@ -31,7 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
   col, dropNotes, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
-  placeTop, renameFolder, reseat, searchLines, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
+  placeTop, renameFolder, reseat, searchLines, seatNew, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -577,8 +577,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     setLaunch({ n, x, y, w });
   }
   // 新的一張：黃色；開完直接停在紙的輸入列（fresh）。搬行時就是搬進新的一張（紙不換）
+  // 2026-11-03 多米：放進第一個空格（從第一頁找起：自己留的空位，或那頁最後一張後面還放得下），都滿了才排最後
   function add() {
+    const L = seatedLayout(store.s), P = paginate(L);
     const n = newNote('yellow', 'check');
+    for (let pg = 0; pg < P.length; pg++) {
+      const to = emptyTo(L, P[pg], pg);
+      if (to) { if (seatNew(store.s, n.id, Date.now(), to)) store.change(); break; }
+    }
     if (from && moving) { pick(n); return; }
     store.open(n.id, true);
     dirPanel.close();
@@ -639,9 +645,12 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     const f = folderOf(store.s, n.id);
     if (!f) return;
     const L = seatedLayout(store.s), P = paginate(L), pg = P.findIndex(p => p.some(i => L[i].id === f.id));
-    const k = pg >= 0 ? firstEmpty(L, P[pg], pg) : -1;
-    const to = k < 0 ? undefined : k < P[pg].length ? { hole: L[P[pg][k]].id } : { after: L[P[pg][P[pg].length - 1]].id };
-    if (outOfFolder(store.s, n.id, Date.now(), to)) store.change();
+    if (outOfFolder(store.s, n.id, Date.now(), pg >= 0 ? emptyTo(L, P[pg], pg) : undefined)) store.change();
+  }
+  // 第 pg 頁第一個空格換成 model 要的「放哪」：空位＝那個空位；最後一張後面（這頁還放得下）＝排在最後那格後面。沒有空格回 undefined
+  function emptyTo(L: Entry[], P: number[], pg: number) {
+    const k = firstEmpty(L, P, pg);
+    return k < 0 ? undefined : k < P.length ? { hole: L[P[k]].id } : P.length ? { after: L[P[P.length - 1]].id } : undefined;
   }
   const tileActs = (n: Note): Act[] => {
     return [

@@ -857,6 +857,15 @@ const PagePreview = memo(function PagePreview({ n, side, set }: { n: Note; side:
 }, (a, b) => a.n === b.n && a.side === b.side && a.set.length === b.set.length && a.set.every((x, i) => x === b.set[i]));
 
 // 預覽頁的一行：跟紙上的一行（LineRow）同一套樣式、同一個 Field，只是沒有手勢、不能打字。字變了就重掛 Field（它的字是不受控的）
+// 排順序的把手：2 欄 × 3 列六個淺點（2026-11-03 多米給的圖，原本是 iOS 的三條線）。熱區由外面那層 st.grip 撐到 44
+const GripDots = memo(function GripDots({ color }: { color: string }) {
+  return (
+    <View style={st.dots}>
+      {[0, 1, 2, 3, 4, 5].map(i => <View key={i} style={[st.dot, { backgroundColor: color }]} />)}
+    </View>
+  );
+});
+
 const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: string; done: boolean; bg: string; rule: string; colors: Colors; fs: number }) {
   return (
     // 跟紙上那行的 st.ci 同樣的框線與裁切，但不帶陰影設定（紙上那行的陰影只在拿起時亮，平常是 0；帶著設定網頁會畫出預設陰影、iOS 會跳效能提示）
@@ -867,7 +876,7 @@ const RowFace = memo(function RowFace({ t, done, bg, rule, colors, fs }: { t: st
             onLines={NOOP} onChange={NOOP} onKey={NOOP} onSubmit={NOOP} onFocus={NOOP} onBlur={NOOP} />
         </View>
         <View style={st.grip}>
-          <Sym name="line.3.horizontal" size={18} color={colors.textSecondary} />
+          <GripDots color={colors.textSecondary} />
         </View>
       </View>
     </View>
@@ -1116,7 +1125,7 @@ function LineRow(p: LineProps) {
           {/* 把手：每行常駐、熱區 44 寬，三條線是 iOS 的慣例。VoiceOver 不讀它（用輸入框動作選單的往上移／往下移） */}
           <GestureDetector gesture={grip}>
             <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
-              <Sym name="line.3.horizontal" size={18} color={p.colors.textSecondary} />
+              <GripDots color={p.colors.textSecondary} />
             </View>
           </GestureDetector>
         </Animated.View>
@@ -1191,6 +1200,8 @@ const st = StyleSheet.create({
   taFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlignVertical: 'top' },
   taDone: { textDecorationLine: 'line-through' },
   grip: { width: T.shape.hitMin, height: T.shape.rowMin, alignItems: 'center', justifyContent: 'center' },
+  dots: { width: T.shape.gripDot * 2 + T.shape.gripDotGap, flexDirection: 'row', flexWrap: 'wrap', gap: T.shape.gripDotGap, opacity: T.shape.gripDotOpacity },
+  dot: { width: T.shape.gripDot, height: T.shape.gripDot, borderRadius: T.shape.pill(T.shape.gripDot) },
   timeBox: { paddingHorizontal: T.space.l, paddingVertical: T.space.s, borderBottomWidth: T.shape.borderCard },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
   scrollFill: { flexGrow: 1 },

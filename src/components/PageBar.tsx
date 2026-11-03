@@ -158,7 +158,9 @@ export function PageBar({ notes, cur, name, swipe, onOpen, onStep, onAdd }: BarP
           </Glass>
         </View>
       </GestureDetector>
-      <Glass style={[st.add, T.shape.shadowStrong]} tint={c.accent} interactive>
+      {/* 不加 shadowStrong（2026-11-03 效能）：玻璃照圓角裁邊（overflow hidden），陰影本來就畫不出來，只是讓 iOS 每一格另外算一次形狀
+          （終端機一直跳的「GlassView has a shadow set but cannot calculate shadow efficiently」就是它）；液態玻璃自己有立體感，不透明版 Glass 會自己帶陰影 */}
+      <Glass style={st.add} tint={c.accent} interactive>
         <Pressable onPress={onAdd} accessibilityRole="button" accessibilityLabel="新增一行"
           style={({ pressed }) => [st.addHit, pressed && { opacity: T.motion.pressDim }]}>
           <Sym name="plus" size={24} color={c.fabIcon} weight="semibold" />

@@ -1,7 +1,7 @@
 // 目錄自由擺放（2026-11-03，多米：「清單定死位置，沒法像主畫面想放哪就放哪」）：座位表裡的空位
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, reseat, seatedLayout } from '../src/lib/model.ts';
+import { fillHole, fixOrder, holeFor, intoFolder, isBreak, isHole, leaveHole, markDeleted, markRestored, newFolder, newHole, outOfFolder, reseat, seatNew, seatedLayout } from '../src/lib/model.ts';
 
 const note = (id, o = {}) => ({ id, type: 'check', title: id, body: '', bin: [], color: 'yellow', items: [], pinned: false, deleted: false, created: 1, updated: 1, b: true, ...o });
 const state = (notes, order, folders) => ({ sort: 'updated', notes, garden: { days: {}, tot: { f: 0, e: 0 } }, order, folders });
@@ -152,4 +152,26 @@ test('從資料夾拖出來直接疊到別張：不多出空位，後面的不�
   intoFolder(s, 'a', f2.id, 5, false);
   assert.deepEqual(cells(seatedLayout(s)), ['b', 'c', 'f2']);
   assert.ok(!s.order.some(isHole));
+});
+
+test('seatNew：新的一張放進給的空位，別張不動、算親手排', () => {
+  const s = state([note('a'), note('b'), note('n')], ['a', '.1', 'b']);
+  assert.ok(seatNew(s, 'n', 5, { hole: '.1' }));
+  assert.deepEqual(s.order, ['a', 'n', 'b']);
+  assert.ok(s.orderMod >= 5);
+});
+
+test('seatNew：排在那頁最後一張後面（換頁標記前），不跑到下一頁', () => {
+  const s = state([note('a'), note('b'), note('n')], ['a', '|1', 'b']);
+  assert.ok(seatNew(s, 'n', 5, { after: 'a' }));
+  assert.deepEqual(s.order, ['a', 'n', '|1', 'b']);
+  assert.deepEqual(cells(seatedLayout(s)), ['a', 'n', '|', 'b']);
+});
+
+test('seatNew：沒給、找不到就照舊排最後，不算親手排', () => {
+  const s = state([note('a'), note('n')], ['a']);
+  assert.ok(!seatNew(s, 'n', 5, { hole: '.x' }));
+  assert.ok(!seatNew(s, 'n', 5));
+  assert.deepEqual(s.order, ['a', 'n']);
+  assert.equal(s.orderMod, undefined);
 });

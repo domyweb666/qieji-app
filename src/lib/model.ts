@@ -455,6 +455,22 @@ export function outOfFolder(s: State, noteId: string, now: number, to?: { hole?:
   fixOrder(s);
   return true;
 }
+// 新的一張放進目錄第一個空格（2026-11-03 多米：「第一頁還有空缺就優先補上」，不然會跑到第二頁去）：to.hole＝放進這個空位、
+// to.after＝排在這格後面（那頁最後一張後面、這頁還放得下；第幾頁放得下幾格只有目錄知道，所以由目錄算好給進來）。
+// 沒給、或找不到就照舊排最後。放進去算親手排（C2：同步時這台的排法才贏，不然別台的座位表會把它排回最後）。回傳有沒有放
+export function seatNew(s: State, noteId: string, now: number, to?: { hole?: string; after?: string }) {
+  fixOrder(s);
+  const o = s.order!;
+  const h = to?.hole && isHole(to.hole) ? o.indexOf(to.hole) : -1;
+  const a = to?.after && to.after !== noteId ? o.indexOf(to.after) : -1;
+  if (h < 0 && a < 0) return false;
+  s.order = o.filter(x => x !== noteId);
+  if (h >= 0) s.order[s.order.indexOf(to!.hole!)] = noteId;
+  else s.order.splice(s.order.indexOf(to!.after!) + 1, 0, noteId);
+  touchLayout(s, now);
+  fixOrder(s);
+  return true;
+}
 // 刪掉一張（進最近刪除）時呼叫：在它的座位前面放它專用的空位（見 holeFor）。在資料夾裡的、已經有的不放。回傳有沒有放
 export function leaveHole(s: State, noteId: string, now: number) {
   fixOrder(s);
