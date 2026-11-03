@@ -10,7 +10,7 @@
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
-import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   AppState, Keyboard, Platform, ScrollView as RNScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
@@ -19,7 +19,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
+  makeMutable, scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -86,6 +86,8 @@ const AUTO_EDGE = T.gesture.dragAutoEdge, AUTO_SPEED = T.gesture.dragAutoSpeed;
 // 給行的動畫 worklet 用的值，先抄成數字和自己的物件（worklet 抓到的物件會被鎖住，規矩檔）
 const SHIFT_SPRING = { ...T.motion.dragShift.spring }, LIFT_SPRING = { ...T.motion.dragLift.spring }, LAND_SPRING = { ...T.motion.dragLand.spring };
 const LIFT_SCALE = T.motion.dragLift.scale, LIFT_SHADOW = T.shape.shadowSoft.shadowOpacity;
+// 只畫字的行的外殼接這幾個「永遠不變」的值（沒在拖），動畫就完全不跑；完整的行才接真的拖曳值（見 LineRow）
+const IDLE_IDX = makeMutable(-1), IDLE_ZERO = makeMutable(0);
 
 export function Paper({ n }: { n: Note }) {
   useStore();
@@ -462,37 +464,10 @@ export function Paper({ n }: { n: Note }) {
     scheduleOnRN(hapticPass);
   }, false);
 
-  // 只做看得到的行（見 LIVE_BUF）：win＝做成完整的行從第幾行到第幾行（含）。捲過半個螢幕、清單量好、行數變了才重算（排到下一格畫面，
-  // 一格裡來好幾次只算一次）；還沒量到位置的行當成最矮的一行。一開始還沒量：先做最上面「一個螢幕＋多留的」那麼多行
-  const [win, setWin] = useState(() => ({ a: 0, b: Math.ceil((winH * (1 + LIVE_BUF)) / ROW_MIN) }));
-  const winRef = useRef(win);
-  winRef.current = win;
-  const winFn = useRef(() => {});
-  winFn.current = () => {
-    const H = view.current.h || winH, y = dragging ? dragY.value : scrollY.value;
-    let pos = 0, a = -1, b = -1;
-    for (let i = 0; i < n.items.length; i++) {
-      const l = layouts.current[n.items[i].id];
-      const t = l ? l.y : pos;
-      pos = t + (l ? l.h : ROW_MIN);
-      if (t > y + H * (1 + LIVE_BUF)) break;
-      if (a < 0 && pos >= y - H * LIVE_BUF) a = i;
-      b = i;
-    }
-    const w = { a: Math.max(0, a), b };
-    if (w.a !== winRef.current.a || w.b !== winRef.current.b) setWin(w);
-  };
-  const kickT = useRef(0);
-  const [kickWin] = useState(() => () => {
-    if (kickT.current) return;
-    kickT.current = requestAnimationFrame(() => { kickT.current = 0; if (mounted.current) winFn.current(); });
-  });
-  useEffect(() => () => cancelAnimationFrame(kickT.current), []);
-  useEffect(kickWin, [n.items.length, kickWin]);
-  // 捲過半個螢幕才排回 JS 重算一次（不是每一格畫面）；拖的時候自動捲也走這裡
-  useAnimatedReaction(() => Math.floor(scrollY.value / Math.max(1, listH.value / 2)), (k, old) => {
-    if (old !== null && k !== old) scheduleOnRN(kickWin);
-  });
+  // 只做看得到的行：哪幾行做成完整的由 LineList 自己記、自己重畫（捲動時整張紙不重畫，底部列也不跟著重畫）。
+  // 行的位置變了、清單量好了就叫它重算一次
+  const kickRef = useRef<() => void>(NOOP);
+  const kickWin = () => kickRef.current();
   // 做成完整的行時量到的高：換回只畫字的時候照這個高畫，不會因為字的排法差一兩點讓下面的行跳（字被改過就不算數）
   const liveH = useRef<Record<string, { h: number; t: string }>>({});
   const drag = useRef<{ idx: number } | null>(null);
@@ -809,9 +784,10 @@ export function Paper({ n }: { n: Note }) {
           scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
-            {n.items.map((it, index) => {
-              // 完整的行：在 win 裡的，加上正在打的、剛送出亮著的、正在拖的、等著對焦的（捲遠了也不能拆掉，拆了鍵盤會收、拖會斷）
-              const live = (index >= win.a && index <= win.b) || editing === it.id || freshId === it.id || focused.current === it.id
+            <LineList items={n.items} winH={winH} view={view} layouts={layouts} scrollY={scrollY} listH={listH} dragY={dragY}
+              dragging={dragging} mounted={mounted} kickRef={kickRef} render={(it, index, inWin) => {
+              // 完整的行：看得到的那段，加上正在打的、剛送出亮著的、正在拖的、等著對焦的（捲遠了也不能拆掉，拆了鍵盤會收、拖會斷）
+              const live = inWin || editing === it.id || freshId === it.id || focused.current === it.id
                 || pending.current?.id === it.id || (dragging && drag.current?.idx === index);
               const lh = liveH.current[it.id];
               return (
@@ -839,7 +815,7 @@ export function Paper({ n }: { n: Note }) {
                 onMenu={y => openRowMenu(it.id, y)} onEdit={(caret, y) => focusItem(it.id, caret, y)}
                 onMove={d => move(it.id, d)} drag={dragApi} />
               );
-            })}
+            }} />
           </LayoutAnimationConfig>
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次。行不多時撐滿到底（contentContainerStyle flexGrow），
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
@@ -982,26 +958,81 @@ const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.ind
   && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
   && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev && a.fresh === b.fresh && a.live === b.live && a.liteH === b.liteH);
 
+// 只做看得到的行（2026-11-03）：從捲到的地方往上、往下各多 LIVE_BUF 個螢幕，交給 render 做成完整的行（inWin），其他只畫字。
+// 自己記 win、自己重畫：捲動時只有這一排重畫，整張紙、底部列不跟著重畫（多米 2026-11-03 真機：一直往下捲每隔一段卡一下）。
+// 捲過 1/WIN_STEP 個螢幕就重算（之前半個螢幕：一次要做十幾行輸入框，iOS 做輸入框很花時間，就卡一下；改成每次只多做幾行）。
+// 還沒量到位置的行當成最矮的一行；一開始還沒量：先做最上面「一個螢幕＋多留的」那麼多行
+const WIN_STEP = 4;
+type ListProps = {
+  items: Item[]; winH: number; dragging: boolean;
+  view: RefObject<{ h: number }>; layouts: RefObject<Record<string, { y: number; h: number }>>; mounted: RefObject<boolean>;
+  scrollY: SharedValue<number>; listH: SharedValue<number>; dragY: SharedValue<number>;
+  kickRef: RefObject<() => void>; render: (it: Item, index: number, inWin: boolean) => ReactNode;
+};
+function LineList({ items, winH, dragging, view, layouts, mounted, scrollY, listH, dragY, kickRef, render }: ListProps) {
+  const [win, setWin] = useState(() => ({ a: 0, b: Math.ceil((winH * (1 + LIVE_BUF)) / ROW_MIN) }));
+  const winRef = useRef(win);
+  winRef.current = win;
+  const calc = useRef(() => {});
+  calc.current = () => {
+    const H = view.current.h || winH, y = dragging ? dragY.value : scrollY.value;
+    let pos = 0, a = -1, b = -1;
+    for (let i = 0; i < items.length; i++) {
+      const l = layouts.current[items[i].id];
+      const t = l ? l.y : pos;
+      pos = t + (l ? l.h : ROW_MIN);
+      if (t > y + H * (1 + LIVE_BUF)) break;
+      if (a < 0 && pos >= y - H * LIVE_BUF) a = i;
+      b = i;
+    }
+    const w = { a: Math.max(0, a), b };
+    if (w.a !== winRef.current.a || w.b !== winRef.current.b) setWin(w);
+  };
+  // 一格畫面裡叫好幾次（每一行量到位置都會叫）只算一次
+  const kickT = useRef(0);
+  const [kick] = useState(() => () => {
+    if (kickT.current) return;
+    kickT.current = requestAnimationFrame(() => { kickT.current = 0; if (mounted.current) calc.current(); });
+  });
+  kickRef.current = kick;
+  useEffect(() => () => cancelAnimationFrame(kickT.current), []);
+  useEffect(kick, [items.length, kick]);
+  // 捲過 1/WIN_STEP 個螢幕才排回 JS 重算一次（不是每一格畫面）；拖的時候自動捲也走這裡
+  useAnimatedReaction(() => Math.floor(scrollY.value / Math.max(1, listH.value / WIN_STEP)), (k, old) => {
+    if (old !== null && k !== old) scheduleOnRN(kick);
+  });
+  return <>{items.map((it, i) => render(it, i, i >= win.a && i <= win.b))}</>;
+}
+
 // 一行的外殼：底色、格線、長出來／拿掉的淡入淡出、其他行讓位時的滑動、被拖時的浮起，完整的行和只畫字的行共用這一層
-// （換來換去時外殼不重掛，才不會每捲一段就有幾行淡入淡出）。浮起、位移只看自己的 ty、lift、hold，由完整的行寫進來：
-// 只畫字的行沒人寫，動畫完全不跑（上千行時，拖一下每一格畫面不用每一行都重算）
+// （換來換去時外殼不重掛，才不會每捲一段就有幾行淡入淡出）。
+// 位移直接在這裡看拖曳的值算，不經過別的反應轉一手（2026-11-03 多米真機：拖完放手畫面抖一下——轉一手就晚一格畫面，
+// 放手換順序那一格，行已經站到新位置、位移還沒歸零）。只畫字的行接 IDLE_*（永遠不變），上千行拖的時候也不用每一行都重算
 function LineRow(p: LineProps) {
   const w = useSharedValue(1);
-  const ty = useSharedValue(0), lift = useSharedValue(0), hold = useSharedValue(0);
+  const giveWay = useSharedValue(0); // 讓位要讓多少（彈簧由完整的行在目標變了時開，見 LiveRow）
   const rowRef = useRef<ViewInstance>(null);
-  const calm = p.calm;
-  const shell = useAnimatedStyle(() => ({
-    zIndex: hold.value ? 5 : 0,
-    overflow: hold.value ? ('visible' as const) : ('hidden' as const),
-    shadowOpacity: LIFT_SHADOW * lift.value,
-    transform: [{ translateY: ty.value }, { scale: 1 + (calm ? 0 : (LIFT_SCALE - 1) * lift.value) }],
-  }), WEB_DEPS ? [calm] : undefined);
+  const { calm, index, live } = p;
+  const dIdx = live ? p.dragIdx : IDLE_IDX, dDy = live ? p.dragDy : IDLE_ZERO, dLift = live ? p.dragLift : IDLE_ZERO;
+  const shell = useAnimatedStyle(() => {
+    const from = dIdx.value, held = from >= 0 && index === from;
+    const l = held ? dLift.value : 0; // 0～1：浮起多少
+    return {
+      zIndex: held ? 5 : 0,
+      overflow: held ? ('visible' as const) : ('hidden' as const),
+      shadowOpacity: LIFT_SHADOW * l,
+      transform: [
+        { translateY: held ? dDy.value : from < 0 ? 0 : giveWay.value },
+        { scale: 1 + (calm ? 0 : (LIFT_SCALE - 1) * l) },
+      ],
+    };
+  }, WEB_DEPS ? [index, calm, live] : undefined);
   return (
     <Animated.View ref={rowRef} collapsable={false}
       onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
       entering={ROW_IN} exiting={ROW_OUT} layout={!p.live || p.dragging || calm ? undefined : ROW_MOVE}
       style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, !p.live && p.liteH ? { height: p.liteH } : null, shell]}>
-      {p.live ? <LiveRow {...p} w={w} ty={ty} lift={lift} hold={hold} rowRef={rowRef} />
+      {p.live ? <LiveRow {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
         : <LiteRow t={p.it.t} done={p.done} bg={p.bg} colors={p.colors} fs={p.fs} />}
     </Animated.View>
   );
@@ -1024,7 +1055,7 @@ const LiteRow = memo(function LiteRow({ t, done, bg, colors: c, fs }: { t: strin
 });
 
 type LiveProps = LineProps & {
-  w: SharedValue<number>; ty: SharedValue<number>; lift: SharedValue<number>; hold: SharedValue<number>;
+  w: SharedValue<number>; giveWay: SharedValue<number>;
   rowRef: RefObject<ViewInstance | null>;
 };
 // 完整的一行：輸入框、滑動劃掉／刪除、長按選單、點一下編輯、把手拖曳
@@ -1033,7 +1064,7 @@ function LiveRow(p: LiveProps) {
   const op = useSharedValue(1);
   // 手勢和動畫只能抓這些「拆出來的」值；抓到 p 會連 p.it（這一行的資料）一起被凍住，打字就存不進去
   const { onStrike, onRemove, onMenu, onEdit, index, calm, dragIdx, dragTo, dragDy, dragH, dragTops, dragHs, dragLift, dragFy, dragAy, dragOn } = p;
-  const { w, ty, lift, hold, rowRef } = p;
+  const { w, giveWay, rowRef } = p;
   const { start: dragStart, end: dragEnd } = p.drag;
   const { swipeStrikeBg, swipeDeleteBg } = p.colors;
   const id = p.it.id;
@@ -1168,28 +1199,20 @@ function LiveRow(p: LiveProps) {
     const opacity = armed.value === -1 ? 1 : interpolate(-x, [0, reach], [M.swipeLabel.fromOpacity, 1], Extrapolation.CLAMP);
     return { opacity, transform: [{ scale: labelScale.value }] };
   });
-  // 排順序：被拖的行跟手指走並浮起（放大一點＋陰影；陰影要露出來得暫時解開給滑動用的 overflow: hidden），其他行用彈簧讓位。
-  // 寫進外殼的 ty、lift、hold（見 LineRow）。讓位的彈簧只在「要讓到哪」變了那一刻開一次（2026-11-03 多米真機：拖的時候有點 lag）：
-  // 以前寫在樣式裡，手指每動一格每一行都重開一次 200ms 的彈簧，讓位就一直被往後拖、慢半拍
+  // 其他行讓位（被拖的那行跟手指走、浮起在外殼 LineRow 直接算）：彈簧只在「要讓到哪」變了那一刻開一次
+  // （2026-11-03 多米真機：拖的時候有點 lag——以前寫在樣式裡，手指每動一格每一行都重開一次 200ms 的彈簧，讓位一直被往後拖）
   useAnimatedReaction(() => {
     const from = dragIdx.value, to = dragTo.value;
-    if (from >= 0 && index === from) return { held: 1, y: dragDy.value, l: dragLift.value };
-    let y = 0;
-    if (from >= 0) {
-      if (from < to && index > from && index <= to) y = -dragH.value;
-      if (from > to && index < from && index >= to) y = dragH.value;
-    }
-    return { held: 0, y, l: 0 };
-  }, (r, old) => {
-    // 沒變就不寫：寫了外殼的樣式就要重算一次（拖的時候每一格每一行都會跑到這裡）
-    if (hold.value !== r.held) hold.value = r.held;
-    if (lift.value !== r.l) lift.value = r.l;
-    if (r.held) { ty.value = r.y; return; }
-    if (old && !old.held && old.y === r.y) return;
-    ty.value = calm || dragIdx.value < 0 || !old || old.held ? r.y : withSpring(r.y, SHIFT_SPRING);
+    if (from < 0 || index === from) return 0;
+    if (from < to && index > from && index <= to) return -dragH.value;
+    if (from > to && index < from && index >= to) return dragH.value;
+    return 0;
+  }, (y, old) => {
+    if (y === old) return;
+    giveWay.value = calm || dragIdx.value < 0 || old === null ? y : withSpring(y, SHIFT_SPRING);
   }, [index, calm]);
-  // 換回只畫字（捲遠了）：外殼的位移、浮起歸零，不然留著上一次讓位的位置
-  useEffect(() => () => { ty.value = 0; lift.value = 0; hold.value = 0; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 換回只畫字（捲遠了）：讓位歸零，不然留著上一次讓位的量
+  useEffect(() => () => { giveWay.value = 0; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // VoiceOver：滑動和拖曳用不了，從輸入框的動作選單（上下滑）劃掉、刪除、移動
   const actions = [
