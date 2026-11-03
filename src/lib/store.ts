@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; fresh?: string | null; seek?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; titleMode?: TitleMode; recent?: string[]; fresh?: string | null; seek?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -24,6 +24,10 @@ const emit = () => box.subs.forEach(f => f());
 const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
 const ROWS_KEY = 'cn.rowsMode'; // 紙上的行用哪一套：系統清單（system）或茄記自己做的（qieji）。2026-11-02 多米要兩套都能試
 export type RowsMode = 'system' | 'qieji';
+const TITLE_KEY = 'cn.titleMode'; // 左上清單名的樣子：大字（big）或小膠囊（pill）。2026-11-04 多米要兩種都能切換比較
+export type TitleMode = 'big' | 'pill';
+const RECENT_KEY = 'cn.recent'; // 這台手機最近開過的紙（id 陣列，新的在前）：切換清單的「最近」用。只記在這台，不同步（每開一張就上傳太吵）
+const RECENT_KEEP = 20;
 const LAST_FREE_KEY = 'cn.lastFree'; // 最近看的那張沒釘選的（左右滑最左邊那頁，swipeSet）
 const CLOUD_OFF_KEY = 'cn.cloudOffSeen'; // 「iCloud 雲碟沒開」提示過了（只跳一次，S5）
 
@@ -69,6 +73,11 @@ export const store = {
   setLast(id: string | null) {
     if (box.last === id) return;
     box.last = id;
+    // 切換清單的「最近」（2026-11-04）：換到哪張就排到最前面
+    if (id) {
+      box.recent = [id, ...(box.recent ?? []).filter(x => x !== id)].slice(0, RECENT_KEEP);
+      AsyncStorage.setItem(RECENT_KEY, JSON.stringify(box.recent)).catch(() => {});
+    }
     if (id && box.state.notes.some(n => n.id === id && !n.pinned)) store.setLastFree(id);
     (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
     if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
@@ -79,6 +88,15 @@ export const store = {
   setRowsMode(m: RowsMode) {
     box.rowsMode = m;
     AsyncStorage.setItem(ROWS_KEY, m).catch(() => {});
+    box.version++;
+    emit();
+  },
+  get recent(): string[] { return box.recent ?? []; },
+  // 左上清單名的樣子（⋯ 選單裡切換，對照用）：預設大字
+  get titleMode(): TitleMode { return box.titleMode ?? 'big'; },
+  setTitleMode(m: TitleMode) {
+    box.titleMode = m;
+    AsyncStorage.setItem(TITLE_KEY, m).catch(() => {});
     box.version++;
     emit();
   },
@@ -118,8 +136,10 @@ export const store = {
 
   async load() {
     if (box.loaded) return;
-    const [raw, hint, last, lastFree, rows] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(ROWS_KEY)]);
+    const [raw, hint, last, lastFree, rows, title, recent] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(ROWS_KEY), AsyncStorage.getItem(TITLE_KEY), AsyncStorage.getItem(RECENT_KEY)]);
     if (rows === 'system' || rows === 'qieji') box.rowsMode = rows;
+    if (title === 'big' || title === 'pill') box.titleMode = title;
+    try { const r = JSON.parse(recent ?? '[]'); if (Array.isArray(r)) box.recent = r.filter((x: unknown) => typeof x === 'string').slice(0, RECENT_KEEP); } catch { /* 壞了就當沒記過 */ }
     if (box.loaded) return;
     const state = parseState(raw);
     // C1 第一次轉成座位表（🔴 動真資料）：先把整份原始存檔原封不動另存一份，只存一次（已經有就不蓋）；另存失敗這次就不轉

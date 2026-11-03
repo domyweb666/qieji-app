@@ -1,7 +1,7 @@
 // 清單左右滑的頁（2026-11-02，多米：最左邊固定是最近看的那張沒釘選的，右邊接釘選的；從釘選那張往回滑要回到原本那張）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { swipeSet } from '../src/lib/model.ts';
+import { swipeSet, switchList } from '../src/lib/model.ts';
 
 const note = (id, o = {}) => ({ id, type: 'check', title: id, body: '', bin: [], color: 'yellow', items: [], pinned: false, deleted: false, created: 1, updated: 1, b: true, ...o });
 const state = notes => ({ sort: 'updated', notes, garden: { days: {}, tot: { f: 0, e: 0 } } });
@@ -41,4 +41,13 @@ test('沒記 lastFree（第一次）：用最近改過的那張沒釘選的；�
 test('舊資料釘超過上限（PIN_MAX 5）、現在這張是第六張：照舊暫時排最左', () => {
   const ps = [1, 2, 3, 4, 5, 6].map(i => note('p' + i, { pinned: true, created: i }));
   assert.deepEqual(ids(swipeSet(state(ps), ps[5], null)), ['p6', 'p1', 'p2', 'p3', 'p4', 'p5']);
+});
+
+test('switchList：釘選的照建立先後在前；最近開過的接著（不重複、不含釘選、不含刪除的），最多 5 張', () => {
+  const ns = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id, i) => note(id, { created: i, updated: i }));
+  ns[1].pinned = true; ns[0].pinned = true; ns[6].deleted = true;
+  const { pinned, recent } = switchList(state(ns), ['g', 'c', 'b', 'e', 'c']);
+  assert.deepEqual(ids(pinned), ['a', 'b']);
+  // 記到的 c、e 在前，不夠的用最近改過的補（f、d）
+  assert.deepEqual(ids(recent), ['c', 'e', 'f', 'd']);
 });

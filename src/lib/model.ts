@@ -205,6 +205,19 @@ export function swipeSet(s: State, cur: Note, lastFree?: string | null) {
     ?? s.notes.filter(n => !n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated)[0];
   return free ? [free, ...set] : set;
 }
+// 切換清單（2026-11-04 改版，點左上清單名升起的面板）：釘選的全部（照建立先後，最多 PIN_MAX），再來最近開過的 RECENT_MAX 張
+// （recent＝這台手機最近開過的 id，新的在前；不重複、不含釘選、不含最近刪除裡的）。最近一張都沒記到（剛裝、剛升級）就用最近改過的補
+export const RECENT_MAX = 5;
+export function switchList(s: State, recent: string[]) {
+  const live = (n: Note) => !n.deleted;
+  const pinned = s.notes.filter(n => n.pinned && live(n)).sort((a, b) => a.created - b.created).slice(0, PIN_MAX);
+  const seen = new Set(pinned.map(n => n.id));
+  const out: Note[] = [];
+  const take = (n: Note | undefined) => { if (n && live(n) && !seen.has(n.id) && out.length < RECENT_MAX) { seen.add(n.id); out.push(n); } };
+  recent.forEach(id => take(s.notes.find(n => n.id === id)));
+  s.notes.filter(n => live(n) && !seen.has(n.id)).sort((a, b) => b.updated - a.updated).forEach(take);
+  return { pinned, recent: out };
+}
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
 // q 要先 trim、轉小寫
