@@ -19,6 +19,7 @@ export type Note = {
   items: Item[];
   bin: Item[]; // 這張紙刪掉的行（最近刪除）；欄位 2026-10-31 加，舊存檔沒有就是空的
   color: ColorKey;
+  glyph?: string; // 磚正中間的字（2026-11-03 多米：長按選單「改磚上的字」）；沒設＝名字的第一個字（glyphOf）
   pinned: boolean;
   deleted: boolean;
   deletedAt?: number; // 丟進最近刪除的時間，30 天自動清掉用；還原時拿掉
@@ -74,6 +75,9 @@ export function fixNote(n: any): Note {
   n.bin = (Array.isArray(n.bin) ? n.bin : []).map(fixItem);
   n.title = n.title || '';
   n.body = n.body || '';
+  // 磚上的字只留一個字（emoji 也算一個）；空的、不是字串的拿掉，回到用名字的第一個字
+  const g = typeof n.glyph === 'string' ? Array.from(n.glyph.trim())[0] : undefined;
+  if (g) n.glyph = g; else delete n.glyph;
   n.b = n.b === undefined ? true : !!n.b;
   // 30 天自動清（2026-11-01 接上）：不在最近刪除裡就不該留著刪除時間——網頁版還原只改 deleted、不清 deletedAt，殘留的舊時間會讓它下次被刪時立刻過期。
   // 在最近刪除裡但時間不可信的也拿掉，交給 stampOldTrash 從現在起算
@@ -168,6 +172,15 @@ export const plain = (n: Note) =>
     .map((i, k) => `${k + 1}.${i.done ? '（劃線）' : ''}${i.t}`).join('\n\n');
 // 沒取名的紙一律叫「未命名」，跟紙的標題列同一個字（多米 2026-11-01：目錄磚拿第一行當名字，會以為那是名字）
 export const label = (n: Note) => n.title.trim() || '未命名';
+// 磚正中間的字：自己設的（glyph），沒設就是名字的第一個字（沒取名是「未」）
+export const glyphOf = (n: Note) => n.glyph || Array.from(label(n))[0] || '';
+// 改磚上的字：只取第一個字；清空＝回到用名字的第一個字。回傳有沒有改
+export function setGlyph(n: Note, v: string) {
+  const g = Array.from(v.trim())[0];
+  if ((g ?? undefined) === n.glyph) return false;
+  if (g) n.glyph = g; else delete n.glyph;
+  return true;
+}
 // 要在選單裡分出是哪張：沒名字的寫「未命名・」＋第一行開頭，不單用第一行（理由同上）
 const PEEK = 8;
 export function pickLabel(n: Note) {
@@ -179,7 +192,7 @@ export function pickLabel(n: Note) {
 }
 // 釘選最多兩張：標題區左右滑只在這兩張之間換（多米 2026-11-01 晚定）。
 // 舊資料或別台同步回來超過的不自動拔，等下次釘新的時全部列出來讓人挑
-export const PIN_MAX = 2;
+export const PIN_MAX = 5; // 2026-11-03 多米：2 → 5
 export const pinnedNotes = (s: State) => s.notes.filter(n => n.pinned && !n.deleted).sort((a, b) => b.updated - a.updated);
 // 標題區換張的那幾張（B2 把手的段數、B4 左右滑）：釘選的照建立先後（不照修改時間，改一個字不會換位置），
 // 最左邊固定是一張沒釘選的（多米 2026-11-02：釘 1 張＝2 頁、釘 2 張＝3 頁，從釘選那張往回滑要回到原本那張）。

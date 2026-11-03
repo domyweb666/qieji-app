@@ -47,6 +47,15 @@ export const ui = {
     Alert.alert(title, msg, [{ text: noLabel, style: 'cancel', onPress: no }, { text: yes.label, onPress: yes.fn }]);
   },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
+  // 打一小段字（改磚上的字，2026-11-03）：iOS 用系統的輸入提示框；網頁預覽用瀏覽器的 prompt
+  prompt: (title: string, msg: string, initial: string, ok: (v: string) => void, okLabel = '好') => {
+    if (Platform.OS !== 'ios') {
+      const v = (globalThis as { prompt?: (m: string, d: string) => string | null }).prompt?.(`${title}\n${msg}`, initial);
+      if (v !== null && v !== undefined) ok(v);
+      return;
+    }
+    Alert.prompt(title, msg, [{ text: '取消', style: 'cancel' }, { text: okLabel, onPress: v => ok(v ?? '') }], 'plain-text', initial);
+  },
 };
 
 export function OverlayHost() {

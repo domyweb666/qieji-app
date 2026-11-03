@@ -38,7 +38,7 @@ test('沒記 lastFree（第一次）：用最近改過的那張沒釘選的；�
   assert.deepEqual(ids(swipeSet(state([p1, p2]), p2, null)), ['p1', 'p2']);
 });
 
-test('舊資料釘超過兩張、現在這張是第三張：照舊暫時排最左', () => {
-  const p1 = note('p1', { pinned: true, created: 1 }), p2 = note('p2', { pinned: true, created: 2 }), p3 = note('p3', { pinned: true, created: 3 });
-  assert.deepEqual(ids(swipeSet(state([p1, p2, p3]), p3, null)), ['p3', 'p1', 'p2']);
+test('舊資料釘超過上限（PIN_MAX 5）、現在這張是第六張：照舊暫時排最左', () => {
+  const ps = [1, 2, 3, 4, 5, 6].map(i => note('p' + i, { pinned: true, created: i }));
+  assert.deepEqual(ids(swipeSet(state(ps), ps[5], null)), ['p6', 'p1', 'p2', 'p3', 'p4', 'p5']);
 });

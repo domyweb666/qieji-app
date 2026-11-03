@@ -186,6 +186,7 @@ export const shape = {
   pageDot: 7,    // 目錄頁點（C3）：幾頁幾個，亮的是現在這頁（沒亮的用 handleOff）
   // 資料夾磚（2026-11-03 改 1×1，照 iOS）：方磚裡 3×3 小方塊，每塊是裡面一張紙的顏色；小方塊之間的縫、離框的內距
   folderMinis: 3, folderMiniGap: 3, folderMiniPad: 7,
+  folderMiniGlyph: 1.5, // 小方塊裡的字比照大磚的比例再放大一點（小方塊才十幾點，照 tileGlyphRatio 太小看不清）
   // 行右邊排順序的把手（2026-11-03 多米：三條線換成 2 欄 × 3 列六個淺點）：點的大小、點跟點的縫、透明度（照次要字色再淡一點）
   gripDot: 3, gripDotGap: 4, gripDotOpacity: 0.55,
   minusBadge: 22, // 目錄抖動時紙磚左上角的「−」（照 iOS 主畫面移除鈕；熱區另外用 hitSlop 補到 44 以上）

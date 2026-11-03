@@ -31,7 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
   col, dropNotes, FULL_MSG, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
-  placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
+  placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, setGlyph, glyphOf, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -75,14 +75,16 @@ const HELD_SQ = G.tileDragHeld * G.tileDragHeld; // 長按後要拖超過 tileDr
 const MENU_LIFT = M.menuLift.scale; // 長按選單時那塊浮起來放大的比例
 // 抖動中在空白處撥翻頁（PageBack）：跟清單左右撥換張同一組門檻（撥過半頁或甩一下就翻、到頭只跟三成）
 const TURN_RATIO = G.pageTurnRatio, TURN_FLICK = G.swapFlick, EDGE_FOLLOW = G.swapEdge;
-// 第 k 格的左上角（相對格子左上角）：cw＝欄寬、cols＝一排幾欄
-function slotX(k: number, cw: number, cols = COLS) { 'worklet'; return (k % cols) * cw; }
-function slotY(k: number, cw: number, cols = COLS) { 'worklet'; return Math.floor(k / cols) * rowOf(cw); }
+// 第 k 格的左上角（相對格子左上角）：cw＝欄寬、cols＝一排幾欄（沒給＝目錄的 COLS）。
+// 預設值不能寫在參數上（cols = COLS）：worklet 不會把參數預設值用到的外面變數帶到 UI 執行緒，真機一拖就「Property 'COLS' doesn't exist」閃退（多米 2026-11-03）
+function slotX(k: number, cw: number, cols?: number) { 'worklet'; return (k % (cols ?? COLS)) * cw; }
+function slotY(k: number, cw: number, cols?: number) { 'worklet'; return Math.floor(k / (cols ?? COLS)) * rowOf(cw); }
 // 一個點（相對格子左上角）落在第幾格（D4 起拖曳都用螢幕座標算）；在格子上面、左邊回 −1
-function cellAt(lx: number, ly: number, cw: number, cols = COLS) {
+function cellAt(lx: number, ly: number, cw: number, cols?: number) {
   'worklet';
+  const n = cols ?? COLS;
   if (ly < 0 || lx < 0) return -1;
-  return Math.floor(ly / rowOf(cw)) * cols + Math.min(cols - 1, Math.floor(lx / cw));
+  return Math.floor(ly / rowOf(cw)) * n + Math.min(n - 1, Math.floor(lx / cw));
 }
 // 這頁第 k 格是不是空位（holes 是位元表：第 k 格是空位，第 k 位就是 1）。位元運算是 32 位元，只記得前 HOLE_BITS 格，手機一頁不會那麼多格
 const HOLE_BITS = 31;
@@ -653,10 +655,17 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const tileActs = (n: Note): Act[] => {
     return [
       // 釘選跟紙的 ⋯ 同一套。放進、移出資料夾照 iOS 只用拖的，不放文字選項；VoiceOver 的「改名字」「放進資料夾」「移出資料夾」動作留著，給不能拖的人（HIG）
+      { label: '改磚上的字', icon: 'character', fn: () => editGlyph(n) },
       { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: () => togglePin(n) },
       { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
     ];
   };
+  // 改磚上的字（2026-11-03 多米：改磚正中間那個字，不是改全名）：系統輸入框，打的字只取第一個；清空＝回到用名字的第一個字
+  function editGlyph(n: Note) {
+    ui.prompt('磚上的字', '打一個字（emoji 也可以）；清空就用名字的第一個字', n.glyph ?? '', v => {
+      if (setGlyph(n, v)) { n.updated = Date.now(); store.change(); }
+    }, '好');
+  }
   // 長按資料夾（2026-11-02：資料夾的選單項目都拿掉了）：直接進抖動，手指一動就拖得走；改名字＝打開資料夾點名字
   function holdFolder() {
     if (dragRef.current) return;
@@ -930,7 +939,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     const inside = !!folderOf(s, n!.id);
     return (
       <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={(x, y) => pick(n!, x + (tileW - sizeOf(tileW)) / 2, y, sizeOf(tileW))} onMenu={(x, y) => openMenu(n!.id, x, y, tileW, true, 2)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
+        onPick={(x, y) => pick(n!, x + (tileW - sizeOf(tileW)) / 2, y, sizeOf(tileW))} onMenu={(x, y) => openMenu(n!.id, x, y, tileW, true, 3)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
         {face(e, tileW)}
       </Tile>
     );
@@ -1077,7 +1086,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
                       <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={drag?.id === n.id}
                         x={pg * fboxW + FPAD + slotX(kk, innerW, FCOLS)} y={FPAD + slotY(kk, innerW, FCOLS)}
                         dg={dg} screenW={width} gw={tileW}
-                        label={noteLabel(n)} onPick={(x, y) => pick(n, x + (innerW - sizeOf(innerW)) / 2, y, sizeOf(innerW))} onMenu={(x, y) => openMenu(n.id, x, y, innerW, true, 2)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
+                        label={noteLabel(n)} onPick={(x, y) => pick(n, x + (innerW - sizeOf(innerW)) / 2, y, sizeOf(innerW))} onMenu={(x, y) => openMenu(n.id, x, y, innerW, true, 3)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
                         onDragStart={() => dragStartFolder(n, openEntry.id, k)} onAim={onAim} onEdge={onEdge} onDrop={drop} />
                     );
                   })}
@@ -1362,9 +1371,9 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
       <View style={[st.tile, { width: s, height: s, borderRadius: s * RADIUS, backgroundColor: nc.bg, borderColor: cur ? c.accent : nc.rule,
         borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
         <View style={[st.tag, { backgroundColor: nc.hd }]} />
-        {/* 正中間名字的第一個字（2026-11-03 多米：只有顏色很難認）。沒取名的是「未」、次要色 */}
-        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: n.title.trim() ? c.textPrimary : c.textSecondary }]}
-          allowFontScaling={false} accessible={false}>{Array.from(label(n).trim())[0] ?? ''}</Text>
+        {/* 正中間一個字（2026-11-03 多米：只有顏色很難認）：自己設的，沒設就是名字的第一個字；沒取名（也沒設）是「未」、次要色 */}
+        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: n.title.trim() || n.glyph ? c.textPrimary : c.textSecondary }]}
+          allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
         {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={c.textSecondary} /></View> : null}
       </View>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
@@ -1392,9 +1401,16 @@ function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number;
     </View>
   );
 }
+// 資料夾磚裡的小方塊：那張紙的顏色＋它磚上的字（2026-11-03 多米：不然看不出資料夾裡有什麼）
 function Mini({ n, w }: { n: Note; w: number }) {
+  const c = useColors();
   const nc = useNoteColors(n.color);
-  return <View style={{ width: w, height: w, borderRadius: w * RADIUS, backgroundColor: nc.bg, borderColor: nc.rule, borderWidth: StyleSheet.hairlineWidth }} />;
+  return (
+    <View style={[st.mini, { width: w, height: w, borderRadius: w * RADIUS, backgroundColor: nc.bg, borderColor: nc.rule }]}>
+      <Text style={[st.glyph, { fontSize: Math.round(w * T.shape.tileGlyphRatio * T.shape.folderMiniGlyph), color: c.textPrimary }]}
+        allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
+    </View>
+  );
 }
 
 // 搜尋筆記的一組（2026-11-03）：上面一條是哪張清單（色點＋名字，名字中了就把那段標出來），下面是符合的每一行，打中的字用 accent 粗體。
@@ -1492,6 +1508,7 @@ const st = StyleSheet.create({
   trashText: { ...T.font.body },
   // 資料夾磚裡 3×3 小方塊（2026-11-03 改 1×1）
   minis: { flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start' },
+  mini: { borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   above: { zIndex: 1 },
   parked: { position: 'absolute', left: 0, top: 0 }, // 長按選單開著：目錄整塊蓋在底部把手上面（暗幕才蓋得到把手那截）
   launch: { position: 'absolute', borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
