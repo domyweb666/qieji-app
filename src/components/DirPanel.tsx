@@ -17,7 +17,7 @@
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
@@ -922,33 +922,51 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const face = (e: Entry, w: number) => (e.folder
     ? <FolderFace f={e.folder} notes={e.notes} w={w} cur={e.notes.some(n => n.id === store.last)} />
     : <TileFace n={e.note!} w={w} cur={e.id === store.last} />);
+  // 磚只在自己的樣子、位置、狀態變了才重畫（2026-11-04 效能，多米：拖磚要順）。以前目錄每重畫一次（換色、拖著停一下換位、翻頁、疊上去），
+  // 每一塊磚都跟著重畫、三個手勢全部重新設定一遍，拖的時候特別吃力。磚手上的動作是同一組（tileApi，不會換），
+  // 經過 tileAct 轉一手，叫到的永遠是這一次畫的函式（裡面用到的格子表、資料夾、那張紙都是現在的）
+  const noteById = (id: string) => store.s.notes.find(x => x.id === id && !x.deleted);
+  const tileAct = useRef<TileApi | null>(null);
+  tileAct.current = {
+    dragStartGrid, onAim, onEdge, drop,
+    dragStartFolder: (id, fid, k) => { const n = store.s.notes.find(x => x.id === id); if (n) dragStartFolder(n, fid, k); },
+    pickNote: (id, x, y, w) => { const n = noteById(id); if (n) pick(n, x + (w - sizeOf(w)) / 2, y, sizeOf(w)); },
+    menuNote: (id, x, y, w) => openMenu(id, x, y, w, true, 3),
+    a11yNote: (id, name) => { const n = noteById(id); if (n) noteA11y(n)(name); },
+    minusNote: id => { const n = noteById(id); if (n) askDel(n); },
+    openFolder: id => setOpenF({ id, naming: false }),
+    holdFolder,
+    a11yFolder: (id, name) => {
+      if (name === 'activate') setOpenF({ id, naming: false });
+      else if (name === 'rename') setOpenF({ id, naming: true });
+      else if (name === 'forward') moveBy({ id }, -1);
+      else if (name === 'backward') moveBy({ id }, 1);
+    },
+  };
+  const [tileApi] = useState<TileApi>(() => ({
+    dragStartGrid: (id, pg, k) => tileAct.current!.dragStartGrid(id, pg, k),
+    dragStartFolder: (id, fid, k) => tileAct.current!.dragStartFolder(id, fid, k),
+    onAim: a => tileAct.current!.onAim(a),
+    onEdge: z => tileAct.current!.onEdge(z),
+    drop: () => tileAct.current!.drop(),
+    pickNote: (id, x, y, w) => tileAct.current!.pickNote(id, x, y, w),
+    menuNote: (id, x, y, w) => tileAct.current!.menuNote(id, x, y, w),
+    a11yNote: (id, name) => tileAct.current!.a11yNote(id, name),
+    minusNote: id => tileAct.current!.minusNote(id),
+    openFolder: id => tileAct.current!.openFolder(id),
+    holdFolder: () => tileAct.current!.holdFolder(),
+    a11yFolder: (id, name) => tileAct.current!.a11yFolder(id, name),
+  }));
   const tile = (e: Entry, k: number, pg: number, parked = false, placed = false) => {
     if (e.hole || e.brk) return null; // 空位佔一格但不畫東西（k 照算，後面的磚位置不變）
     const f = e.folder, n = e.note;
-    const common = {
-      w: tileW, sw: width, fw: innerW, k, editing, calm, canDrag: !searching, ghost: drag?.id === e.id, dg, parked, placed,
-      onDragStart: () => dragStartGrid(e.id, pg, k), onAim, onEdge, onDrop: drop, target: stackOn === e.id, pop: popId === e.id,
-    };
-    if (f) {
-      return (
-        <Tile key={e.id} {...common} tapInEdit label={`資料夾，${f.name}，${e.notes.length} 張`} selected={e.notes.some(x => x.id === store.last)} acts={FOLDER_A11Y}
-          onPick={() => setOpenF({ id: f.id, naming: false })} onMenu={holdFolder}
-          onA11y={name => {
-            if (name === 'activate') setOpenF({ id: f.id, naming: false });
-            else if (name === 'rename') setOpenF({ id: f.id, naming: true });
-            else if (name === 'forward') moveBy(f, -1);
-            else if (name === 'backward') moveBy(f, 1);
-          }}>
-          {face(e, tileW)}
-        </Tile>
-      );
-    }
-    const inside = !!folderOf(s, n!.id);
+    const cur = f ? e.notes.some(x => x.id === store.last) : e.id === store.last;
     return (
-      <Tile key={e.id} {...common} label={noteLabel(n!)} selected={e.id === store.last} acts={inside ? NOTE_IN_A11Y : NOTE_A11Y}
-        onPick={(x, y) => pick(n!, x + (tileW - sizeOf(tileW)) / 2, y, sizeOf(tileW))} onMenu={(x, y) => openMenu(n!.id, x, y, tileW, true, 3)} onA11y={noteA11y(n!)} onMinus={() => askDel(n!)}>
-        {face(e, tileW)}
-      </Tile>
+      <TileM key={e.id} e={e} cur={cur} face={f ? folderFaceKey(f, e.notes, cur) : noteFaceKey(n!, cur)} api={tileApi} pg={pg} k={k}
+        w={tileW} sw={width} fw={innerW} editing={editing} calm={calm} canDrag={!searching} ghost={drag?.id === e.id} dg={dg}
+        parked={parked} placed={placed} target={stackOn === e.id} pop={popId === e.id}
+        label={f ? `資料夾，${f.name}，${e.notes.length} 張` : noteLabel(n!)} selected={cur}
+        acts={f ? FOLDER_A11Y : folderOf(s, n!.id) ? NOTE_IN_A11Y : NOTE_A11Y} />
     );
   };
   // 浮起那塊的樣子：從資料夾拿起的用資料夾裡的寬
@@ -1092,11 +1110,10 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
                   {folderList.map((n, k) => ({ n, k })).sort((a, b) => fRank(a.n.id, a.k) - fRank(b.n.id, b.k)).map(({ n, k }) => {
                     const pg = Math.floor(k / FPER), kk = k % FPER;
                     return (
-                      <FolderTile key={n.id} n={n} k={k} w={innerW} calm={calm} editing={editing} cur={n.id === store.last} ghost={drag?.id === n.id}
+                      <FolderTileM key={n.id} n={n} fid={openEntry.id} face={noteFaceKey(n, n.id === store.last)} api={tileApi} k={k} w={innerW}
+                        calm={calm} editing={editing} cur={n.id === store.last} ghost={drag?.id === n.id}
                         x={pg * fboxW + FPAD + slotX(kk, innerW, FCOLS)} y={FPAD + slotY(kk, innerW, FCOLS)}
-                        dg={dg} screenW={width} gw={tileW}
-                        label={noteLabel(n)} onPick={(x, y) => pick(n, x + (innerW - sizeOf(innerW)) / 2, y, sizeOf(innerW))} onMenu={(x, y) => openMenu(n.id, x, y, innerW, true, 3)} onA11y={noteA11y(n)} onMinus={() => askDel(n)}
-                        onDragStart={() => dragStartFolder(n, openEntry.id, k)} onAim={onAim} onEdge={onEdge} onDrop={drop} />
+                        dg={dg} screenW={width} gw={tileW} label={noteLabel(n)} />
                     );
                   })}
                 </View>
@@ -1133,16 +1150,30 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   );
 }
 
+// 磚手上的動作（2026-11-04）：目錄畫一次給一組、之後不換（見 Directory 的 tileApi）。資料夾磚、紙磚、資料夾裡的磚都用這一組，照 id 找人
+type TileApi = {
+  dragStartGrid: (id: string, pg: number, k: number) => void; dragStartFolder: (id: string, fid: string, k: number) => void;
+  onAim: (a: number) => void; onEdge: (z: number) => void; drop: () => void;
+  pickNote: (id: string, x: number, y: number, w: number) => void; menuNote: (id: string, x: number, y: number, w: number) => void;
+  a11yNote: (id: string, name: string) => void; minusNote: (id: string) => void;
+  openFolder: (id: string) => void; holdFolder: () => void; a11yFolder: (id: string, name: string) => void;
+};
+// 磚畫出來的樣子用到的全部，串成一串字：一樣就不必重畫（紙是在原物件上改的，比物件看不出換了顏色、改了名字）。
+// 紙磚：顏色、磚上的字、名字（沒取名是「未命名」、字是次要色）、釘選、正在看；資料夾：名字、裡面前九張的顏色和字、正在看的在不在裡面
+const noteFaceKey = (n: Note, cur: boolean) => `${n.color}|${glyphOf(n)}|${label(n)}|${n.title.trim() ? 1 : 0}|${n.pinned ? 1 : 0}|${cur ? 1 : 0}`;
+const folderFaceKey = (f: Folder, notes: Note[], cur: boolean) =>
+  `${f.name}|${notes.slice(0, T.shape.folderMinis * T.shape.folderMinis).map(n => n.color + glyphOf(n)).join(',')}|${cur ? 1 : 0}`;
+
 type TileProps = {
+  e: Entry; cur: boolean; // 這塊磚畫的是哪一格（紙或資料夾）；cur＝正在看的紙是它（資料夾：在它裡面）
+  face: string; // 樣子的摘要（noteFaceKey、folderFaceKey）：重畫看它，不看 e 是不是同一個物件
+  api: TileApi; pg: number; // 拿起時回報在第幾頁第幾格（k）
   w: number; sw: number; fw: number; k: number; editing: boolean; calm: boolean; canDrag: boolean; ghost: boolean; dg: DG;
-  label: string; selected: boolean; acts: { name: string; label?: string }[]; children: ReactNode;
-  tapInEdit?: boolean; // 抖動中點一下也算（資料夾磚：iOS 抖動中點檔案夾會打開）
+  label: string; selected: boolean; acts: { name: string; label?: string }[];
   placed?: boolean; // 用位置排（第 k 格的座標），不靠排列順序：拖的時候磚在陣列裡的順序不變，手勢才不會因為節點被搬動而斷
   parked?: boolean; // 拖的那塊被排到別頁：留在原本那頁、疊在左上角不佔位（看不見，只為了手勢不斷）
   pop?: boolean; // 剛有東西縮進來（疊成新資料夾、放進資料夾）：彈一下（2026-11-02 照 iOS）
-  onMinus?: () => void; // 抖動中左上角的「−」（只有紙磚；資料夾磚沒有，照 iOS）
-  onPick: (x: number, y: number) => void; onMenu: (x: number, y: number) => void; onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void; target: boolean;
-  onA11y: (name: string) => void;
+  target: boolean;
 };
 
 // VoiceOver 的動作：目錄裡的紙、資料夾裡的紙（不能往前往後移，D3 才有資料夾裡的排序）、資料夾
@@ -1156,11 +1187,16 @@ const FOLDER_A11Y = [{ name: 'activate' }, { name: 'rename', label: '改名字' 
 // 一塊磚的手勢（C4）：點＝換紙；長按（不動）＝選單；長按後一拖、或抖動中直接拖＝拿起來換位置（拖的部分 D4 起跟資料夾裡共用 useDragPan）。
 // 長按與拖同時聽（長按先成立跳選單，手指再動才拖）；點要等它們都不成立。抖動中不能點、不跳選單（資料夾磚除外：抖動中點會打開）
 function Tile(p: TileProps) {
-  const { k, w, sw, calm, onPick, onMenu, onDragStart, onAim, onEdge, onDrop } = p;
+  const { e, api, k, w, sw, calm } = p;
+  const id = e.id, isFolder = !!e.folder;
+  const onPick = (x: number, y: number) => (isFolder ? api.openFolder(id) : api.pickNote(id, x, y, w));
+  const onMenu = (x: number, y: number) => (isFolder ? api.holdFolder() : api.menuNote(id, x, y, w));
+  const onDragStart = () => api.dragStartGrid(id, p.pg, k);
+  const { onAim, onEdge, drop: onDrop } = api;
   const pressed = useSharedValue(0);
   const tap = useTapGesture({
     runOnJS: true,
-    enabled: !p.editing || !!p.tapInEdit,
+    enabled: !p.editing || isFolder, // 抖動中點一下也算的只有資料夾磚（iOS 抖動中點檔案夾會打開）
     // 抖動中點資料夾：容許的晃動跟拿起來拖的門檻一樣（tileDragEdit），晃幾點不會被當成拖
     maxDistance: p.editing ? G.tileDragEdit : G.longPressMove,
     onBegin: () => { pressed.value = 1; },
@@ -1211,13 +1247,19 @@ function Tile(p: TileProps) {
       <Animated.View style={[style, p.placed && [st.fslot, { left: slotX(p.k, p.w), top: slotY(p.k, p.w) }], p.parked && st.parked]} layout={calm ? undefined : TILE_MOVE}
         accessible accessibilityRole="button" accessibilityLabel={p.label}
         accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
-        onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
-        {p.children}
-        {p.editing && p.onMinus && <Minus onPress={p.onMinus} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
+        onAccessibilityAction={(ev: AccessibilityActionEvent) => (isFolder ? api.a11yFolder(id, ev.nativeEvent.actionName) : api.a11yNote(id, ev.nativeEvent.actionName))}>
+        {isFolder ? <FolderFace f={e.folder!} notes={e.notes} w={w} cur={p.cur} /> : <TileFace n={e.note!} w={w} cur={p.cur} />}
+        {/* 抖動中左上角的「−」只有紙磚有（資料夾磚沒有，照 iOS） */}
+        {p.editing && !isFolder && <Minus onPress={() => api.minusNote(id)} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
       </Animated.View>
     </GestureDetector>
   );
 }
+// 磚只在這些變了才重畫（2026-11-04 效能）：dg 是同一組 shared value（每次畫拿到的是新包的物件，裡面一樣）、api 不會換，都不用看
+const TileM = memo(Tile, (a, b) => a.e.id === b.e.id && a.face === b.face && a.cur === b.cur && a.pg === b.pg && a.k === b.k
+  && a.w === b.w && a.sw === b.sw && a.fw === b.fw && a.editing === b.editing && a.calm === b.calm && a.canDrag === b.canDrag
+  && a.ghost === b.ghost && a.label === b.label && a.selected === b.selected && a.acts === b.acts && a.placed === b.placed
+  && a.parked === b.parked && a.pop === b.pop && a.target === b.target);
 
 // 目錄一頁的空白處（多米 2026-11-02 晚，照 iOS 使用手冊「按住主畫面背景直到項目開始晃動」「完成後點一下背景」）：
 // 墊在磚的下面，磚、新的一張蓋在上面，點到磚不會到這裡（頁和格子都設 box-none，空白處才點得到它）。按住＝進抖動；抖動中點一下＝結束。
@@ -1273,13 +1315,16 @@ function Minus({ onPress, held, inset }: { onPress: () => void; held: SharedValu
 // 資料夾裡的一張（D3、D4）：點＝換紙；長按（不動）＝選單；長按後一拖（抖動中直接拖）＝拿起來：框裡換順序，拖出框停一下資料夾收起、放到目錄任一格。
 // 跟目錄的磚分開寫是因為長相、點的規則不同；拖跟目錄共用 useDragPan
 type FolderTileProps = {
-  n: Note; k: number; w: number; calm: boolean; editing: boolean; cur: boolean; ghost: boolean; dg: DG; screenW: number; gw: number; label: string;
+  n: Note; fid: string; face: string; api: TileApi; // fid＝這個資料夾；face＝樣子的摘要（noteFaceKey），重畫看它；動作跟目錄的磚同一組
+  k: number; w: number; calm: boolean; editing: boolean; cur: boolean; ghost: boolean; dg: DG; screenW: number; gw: number; label: string;
   x: number; y: number; // 在資料夾那層裡的位置（2026-11-02：所有頁畫在同一層，照位置排到各頁）
-  onPick: (x: number, y: number) => void; onMenu: (x: number, y: number) => void; onA11y: (name: string) => void; onMinus: () => void;
-  onDragStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function FolderTile(p: FolderTileProps) {
-  const { calm, onPick, onMenu, onDragStart, onAim, onEdge, onDrop } = p;
+  const { calm, api, n: { id } } = p;
+  const onPick = (x: number, y: number) => api.pickNote(id, x, y, p.w);
+  const onMenu = (x: number, y: number) => api.menuNote(id, x, y, p.w);
+  const onDragStart = () => api.dragStartFolder(id, p.fid, p.k);
+  const { onAim, onEdge, drop: onDrop } = api;
   const pressed = useSharedValue(0);
   // 抖動中（iOS 晃動中打開的檔案夾）：點不換紙、不跳選單，手指一動就拿起來
   const tap = useTapGesture({
@@ -1321,13 +1366,17 @@ function FolderTile(p: FolderTileProps) {
     <GestureDetector gesture={gesture}>
       <Animated.View style={[st.fslot, { left: p.x, top: p.y }, style]} layout={calm ? undefined : TILE_MOVE} accessible accessibilityRole="button" accessibilityLabel={p.label}
         accessibilityState={{ selected: p.cur }} accessibilityActions={NOTE_IN_A11Y}
-        onAccessibilityAction={(e: AccessibilityActionEvent) => p.onA11y(e.nativeEvent.actionName)}>
+        onAccessibilityAction={(e: AccessibilityActionEvent) => api.a11yNote(id, e.nativeEvent.actionName)}>
         <TileFace n={p.n} w={p.w} cur={p.cur} />
-        {p.editing && <Minus onPress={p.onMinus} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
+        {p.editing && <Minus onPress={() => api.minusNote(id)} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
       </Animated.View>
     </GestureDetector>
   );
 }
+// 同目錄的磚（TileM）：只在樣子、位置、狀態變了才重畫
+const FolderTileM = memo(FolderTile, (a, b) => a.n.id === b.n.id && a.fid === b.fid && a.face === b.face && a.k === b.k
+  && a.x === b.x && a.y === b.y && a.w === b.w && a.calm === b.calm && a.editing === b.editing && a.cur === b.cur && a.ghost === b.ghost
+  && a.screenW === b.screenW && a.gw === b.gw && a.label === b.label);
 // 長按選單時浮起來的那塊（2026-11-02 照虛擬手機原型）：畫在暗幕上面、原本那塊的位置，放大一點加陰影。減少動態：不放大
 function Lifted({ x, y, calm, children }: { x: number; y: number; calm: boolean; children: ReactNode }) {
   const up = useSharedValue(calm ? MENU_LIFT : 1);

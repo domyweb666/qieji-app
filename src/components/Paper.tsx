@@ -19,7 +19,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, FadeOut, interpolate, LayoutAnimationConfig, LinearTransition,
-  makeMutable, scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
+  scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -81,8 +81,11 @@ const AUTO_EDGE = T.gesture.dragAutoEdge, AUTO_SPEED = T.gesture.dragAutoSpeed;
 // 給行的動畫 worklet 用的值，先抄成數字和自己的物件（worklet 抓到的物件會被鎖住，規矩檔）
 const SHIFT_SPRING = { ...T.motion.dragShift.spring }, LIFT_SPRING = { ...T.motion.dragLift.spring }, LAND_SPRING = { ...T.motion.dragLand.spring };
 const LIFT_SCALE = T.motion.dragLift.scale, LIFT_SHADOW = T.shape.shadowSoft.shadowOpacity;
-// 只畫字的行的外殼接這幾個「永遠不變」的值（沒在拖），動畫就完全不跑；完整的行才接真的拖曳值（見 LineRow）
-const IDLE_IDX = makeMutable(-1), IDLE_ZERO = makeMutable(0);
+// 打開一張紙（2026-11-04 效能，多米：點開大紙、換張要絲滑）：先掛最上面 FIRST_SCREENS 個螢幕的行，其他的每一格畫面從上往下補 MOUNT_BATCH 行，
+// 一千行大約四十格畫面（不到一秒，都在畫面下面）補完；一格只補一小批，補的時候捲動、動畫不會掉格。
+// 補完之後跟以前一樣每一行都掛著，拖曳、搜尋跳到某行、量位置都照舊。還沒補到的那段先用一塊空白撐著
+const FIRST_SCREENS = 3, MOUNT_BATCH = 25;
+const ROW_EST = ROW_MIN + T.shape.borderCard; // 還沒掛上的行先當成最矮的一行（含格線）
 
 export function Paper({ n }: { n: Note }) {
   useStore();
@@ -437,6 +440,9 @@ export function Paper({ n }: { n: Note }) {
   // 行的位置變了、清單量好了就叫它重算一次
   const kickRef = useRef<() => void>(NOOP);
   const kickWin = () => kickRef.current();
+  // 還在分批掛行（剛打開大紙那一下）就要拖：剩下的一次掛完（fullRef），掛上之後量到位置再補進拖曳用的位置表（geoT）
+  const fullRef = useRef<() => void>(NOOP);
+  const geoT = useRef(0);
   // 做成完整的行時量到的高：換回只畫字的時候照這個高畫，不會因為字的排法差一兩點讓下面的行跳（字被改過就不算數）
   const liveH = useRef<Record<string, { h: number; t: string }>>({});
   const drag = useRef<{ idx: number } | null>(null);
@@ -451,6 +457,18 @@ export function Paper({ n }: { n: Note }) {
     dim.value = withTiming(composing ? 1 : 0, { duration: KBF.duration, easing: KB_EASING });
   }, [composing]); // eslint-disable-line react-hooks/exhaustive-deps
   const scrimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
+  // 每一行的中點、頂邊、高度交給拖曳的 worklet。還沒量到的行（還在分批掛）接在上一行後面、當成最矮的一行，順序才不會亂
+  // （以前一律當成 0：會被算成在最上面）
+  function dragGeo() {
+    const mids: number[] = [], tops: number[] = [], hs: number[] = [];
+    let pos = 0;
+    for (const it of n.items) {
+      const l = layouts.current[it.id], t = l ? l.y : pos, h = l ? l.h : ROW_MIN;
+      tops.push(t); hs.push(h); mids.push(t + h / 2);
+      pos = t + h;
+    }
+    dragMids.value = mids; dragTops.value = tops; dragHs.value = hs;
+  }
   // start 和 end 還是在 JS（一次性的事：量位置、改資料）；手指移動中的計算與放下的落地動畫在 LineRow 的 grip worklet 裡
   const dragApi = {
     start(id: string) {
@@ -458,10 +476,8 @@ export function Paper({ n }: { n: Note }) {
       const idx = n.items.findIndex(i => i.id === id);
       if (idx < 0) return;
       drag.current = { idx };
-      const ls = n.items.map(i => layouts.current[i.id]);
-      dragMids.value = ls.map(l => (l ? l.y + l.h / 2 : 0));
-      dragTops.value = ls.map(l => l?.y ?? 0);
-      dragHs.value = ls.map(l => l?.h ?? ROW_MIN);
+      fullRef.current();
+      dragGeo();
       dragH.value = (layouts.current[id]?.h ?? ROW_MIN);
       dragDy.value = 0; dragTo.value = idx; dragIdx.value = idx;
       dragY0.value = dragY.value = scrollY.value; dragOn.value = 1;
@@ -523,7 +539,7 @@ export function Paper({ n }: { n: Note }) {
       t = setTimeout(openOnce, T.timing.freshFocusFallback);
     }
     store.setLast(n.id); // 關掉 app 時還開著這張，下次打開就直接回到這裡
-    return () => { clearTimeout(t); off?.(); mounted.current = false; closeNote(); };
+    return () => { clearTimeout(t); off?.(); cancelAnimationFrame(geoT.current); mounted.current = false; closeNote(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 控制中心「記一行」（qieji://new，C1）：升起輸入框。app 還沒回到前景就等它回來（不在前景叫不起鍵盤）；
   // 目錄面板開著就等它收完（跟上面從目錄開新的一張同一個理由），沒開就馬上。冷啟動時請求比紙早到，紙掛上來先拿一次
@@ -717,14 +733,15 @@ export function Paper({ n }: { n: Note }) {
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             <LineList items={n.items} winH={winH} view={view} layouts={layouts} scrollY={scrollY} listH={listH} dragY={dragY}
-              dragging={dragging} mounted={mounted} kickRef={kickRef} render={(it, index, inWin) => {
+              dragging={dragging} mounted={mounted} kickRef={kickRef} fullRef={fullRef} render={(it, index, inWin, born) => {
               // 完整的行：看得到的那段，加上正在打的、剛送出亮著的、正在拖的、等著對焦的（捲遠了也不能拆掉，拆了鍵盤會收、拖會斷）
+              const held = dragging && drag.current?.idx === index;
               const live = inWin || editing === it.id || freshId === it.id || focused.current === it.id
-                || pending.current?.id === it.id || (dragging && drag.current?.idx === index);
+                || pending.current?.id === it.id || held;
               const lh = liveH.current[it.id];
               return (
               <Line key={it.id} it={it} index={index} done={it.done} bg={nc.bg} rule={nc.rule} colors={c}
-                live={live} liteH={!live && lh?.t === it.t ? lh.h : 0}
+                live={live} liteH={!live && lh?.t === it.t ? lh.h : 0} held={held} born={born}
                 dragFy={dragFy} dragAy={dragAy} dragOn={dragOn} dragY={dragY} dragY0={dragY0}
                 count={n.items.length} calm={calm} fs={fs} dragging={live && dragging} editing={editing === it.id} rev={(revs.current[it.id] ?? 0) + store.syncRev(it.id)}
                 fresh={freshId === it.id} onFreshDone={() => setFreshId(f => (f === it.id ? null : f))}
@@ -738,6 +755,8 @@ export function Paper({ n }: { n: Note }) {
                   if (seekRow.current === it.id) { seekRow.current = null; scrollTo(Math.max(0, y - view.current.h / 3), !calm); setFreshId(it.id); } // 搜尋點過來的那行
                   layouts.current[it.id] = { y, h };
                   if (live) liveH.current[it.id] = { h, t: it.t };
+                  // 拖的時候還有行剛掛上（拿起時還在分批掛）：量到位置就補進拖曳用的位置表，一格畫面補一次
+                  if (drag.current && !geoT.current) geoT.current = requestAnimationFrame(() => { geoT.current = 0; if (drag.current) dragGeo(); });
                   kickWin(); // 行的位置變了：看得到的是哪幾行可能也變了
                   if (focused.current === it.id) ensureVisible(it.id); // 打到長出新的一行時，跟著往上捲
                 }}
@@ -811,6 +830,8 @@ type LineProps = {
   dragFy: SharedValue<number>; dragAy: SharedValue<number>; dragOn: SharedValue<number>; // 把手回報手指（見 Paper 的 autoDrag）
   dragY: SharedValue<number>; dragY0: SharedValue<number>; // 自動捲捲到哪、拿起時捲在哪（把手直接算被拖那行的位置用）
   live: boolean; liteH: number; // live＝做成完整的行（看得到的那段）；不是的話只畫字（LiteRow），liteH＝之前完整時量到的高（0＝沒量過，照字自己撐）
+  held: boolean; // 這一行正被拖著：外殼疊在別行上面（zIndex）
+  born: boolean; // 上一次畫的時候清單裡還沒有這一行（剛記的、剛救回來的、同步進來的）：掛上時淡入。只在掛上那一刻有用，不必為它重畫
   refInput: (r: TextInputInstance | null) => void; onLayoutRow: (y: number, h: number) => void;
   onChange: (v: string) => void; onKey: (e: TextInputKeyPressEvent, sel: Sel) => void;
   onFocus: () => void; onBlur: () => void;
@@ -820,10 +841,15 @@ type LineProps = {
 };
 
 // 一行只有在自己的資料變了才重畫（打字不算：字由底下的 Field 自己管），
-// 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡
-const Line = memo(LineRow, (a, b) => a.it === b.it && a.done === b.done && a.index === b.index
-  && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
-  && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev && a.fresh === b.fresh && a.live === b.live && a.liteH === b.liteH);
+// 不然每次重畫整頁，每一行的滑動手勢都要重設一次，打字和捲動會卡。
+// 前後兩次都只畫字的行只看畫得出來的東西（2026-11-04 效能）：第幾行、總共幾行只有完整的行用得到（VoiceOver 的往上移、往下移），
+// 上千行的紙加一行、刪一行、劃掉一行，看不到的那上千行不用跟著重畫
+const Line = memo(LineRow, (a, b) => (!a.live && !b.live
+  ? a.it === b.it && a.done === b.done && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.fs === b.fs && a.liteH === b.liteH && a.calm === b.calm
+  : a.it === b.it && a.done === b.done && a.index === b.index
+    && a.bg === b.bg && a.rule === b.rule && a.colors === b.colors && a.count === b.count && a.calm === b.calm && a.fs === b.fs
+    && a.dragging === b.dragging && a.editing === b.editing && a.rev === b.rev && a.fresh === b.fresh && a.live === b.live && a.liteH === b.liteH
+    && a.held === b.held));
 
 // 只做看得到的行（2026-11-03）：從捲到的地方往上、往下各多 LIVE_BUF 個螢幕，交給 render 做成完整的行（inWin），其他只畫字。
 // 自己記 win、自己重畫：捲動時只有這一排重畫，整張紙、底部列不跟著重畫（多米 2026-11-03 真機：一直往下捲每隔一段卡一下）。
@@ -834,9 +860,26 @@ type ListProps = {
   items: Item[]; winH: number; dragging: boolean;
   view: RefObject<{ h: number }>; layouts: RefObject<Record<string, { y: number; h: number }>>; mounted: RefObject<boolean>;
   scrollY: SharedValue<number>; listH: SharedValue<number>; dragY: SharedValue<number>;
-  kickRef: RefObject<() => void>; render: (it: Item, index: number, inWin: boolean) => ReactNode;
+  kickRef: RefObject<() => void>; fullRef: RefObject<() => void>; render: (it: Item, index: number, inWin: boolean, born: boolean) => ReactNode;
 };
-function LineList({ items, winH, dragging, view, layouts, mounted, scrollY, listH, dragY, kickRef, render }: ListProps) {
+function LineList({ items, winH, dragging, view, layouts, mounted, scrollY, listH, dragY, kickRef, fullRef, render }: ListProps) {
+  // 掛到第幾行（不含）；全部掛完記成 Infinity，之後加行、刪行都不會又少掛（見 FIRST_SCREENS）
+  const [upto, setUpto] = useState(() => {
+    const first = Math.ceil((winH * FIRST_SCREENS) / ROW_MIN);
+    return first >= items.length ? Infinity : first;
+  });
+  const all = upto >= items.length;
+  useEffect(() => {
+    if (all) return;
+    const r = requestAnimationFrame(() => {
+      if (mounted.current) setUpto(u => (u + MOUNT_BATCH >= items.length ? Infinity : u + MOUNT_BATCH));
+    });
+    return () => cancelAnimationFrame(r);
+  }, [upto, all, items.length, mounted]);
+  fullRef.current = () => { if (!all) setUpto(Infinity); };
+  // 上一次畫完時清單裡有哪些行（born：剛加進來的行掛上時才淡入）。畫完才記，同一次畫重跑兩遍結果也一樣
+  const had = useRef<Set<string> | null>(null);
+  useLayoutEffect(() => { had.current = new Set(items.map(i => i.id)); });
   const [win, setWin] = useState(() => ({ a: 0, b: Math.ceil((winH * (1 + LIVE_BUF)) / ROW_MIN) }));
   const winRef = useRef(win);
   winRef.current = win;
@@ -868,24 +911,65 @@ function LineList({ items, winH, dragging, view, layouts, mounted, scrollY, list
   useAnimatedReaction(() => Math.floor(scrollY.value / Math.max(1, listH.value / WIN_STEP)), (k, old) => {
     if (old !== null && k !== old) scheduleOnRN(kick);
   });
-  return <>{items.map((it, i) => render(it, i, i >= win.a && i <= win.b))}</>;
+  const shown = all ? items : items.slice(0, upto);
+  // 分批補行、捲動換窗時紙本身沒重畫（render 是同一個）：這一行的資料、第幾行、是不是完整的行都沒變，就沿用上一次做好的元素，
+  // React 直接跳過（2026-11-04 效能：以前每補一批、每捲 1/4 個螢幕，上千行每一行都要重做一次元素和十幾個函式）。紙重畫了 render 就換新，全部重做
+  const made = useRef<{ render: ListProps['render']; els: Map<string, { it: Item; i: number; w: boolean; el: ReactNode }> } | null>(null);
+  if (made.current?.render !== render) made.current = { render, els: new Map() };
+  const els = made.current.els;
+  const rows = shown.map((it, i) => {
+    const w = i >= win.a && i <= win.b, old = els.get(it.id);
+    if (old && old.it === it && old.i === i && old.w === w) return old.el;
+    const el = render(it, i, w, !!had.current && !had.current.has(it.id));
+    els.set(it.id, { it, i, w, el });
+    return el;
+  });
+  return (
+    <>
+      {rows}
+      {/* 還沒補到的那幾行先用一塊同樣高的空白撐著（在畫面下面，看不到），捲動的長度才不會一直變 */}
+      {!all && <View style={{ height: (items.length - shown.length) * ROW_EST }} />}
+    </>
+  );
 }
 
-// 一行的外殼：底色、格線、長出來／拿掉的淡入淡出、其他行讓位時的滑動、被拖時的浮起，完整的行和只畫字的行共用這一層
-// （換來換去時外殼不重掛，才不會每捲一段就有幾行淡入淡出）。
-// 位移直接在這裡看拖曳的值算，不經過別的反應轉一手（2026-11-03 多米真機：拖完放手畫面抖一下——轉一手就晚一格畫面，
-// 放手換順序那一格，行已經站到新位置、位移還沒歸零）。只畫字的行接 IDLE_*（永遠不變），上千行拖的時候也不用每一行都重算
+// 一行的外殼：量到位置回報紙；完整的行再加長出來淡入／拿掉淡出、其他行滑到新位置。
+// 2026-11-04 效能（多米：點開大紙、換張要絲滑）：以前完整的行和只畫字的行共用一層動畫外殼，上千行每一行都是動畫元件、
+// 掛一份動畫樣式和兩個 shared value，打開、離開大紙要一次做出、拆掉上千份。現在只畫字的行外殼是普通的框（自己帶底色、格線，
+// 裡面直接是字和六個點），完整的行才是動畫外殼，底色、格線、浮起、讓位那層在 LiveShell。
+// 換來換去外殼會重掛，所以淡入只給「剛加進清單」的行（born）：捲動時看不到的行換成完整的行不會淡入（以前外殼不重掛就是為了這個）；
+// 換回只畫字時舊的外殼照樣淡出，但那時它離畫面至少一個螢幕，看不到
 function LineRow(p: LineProps) {
+  const onLayout = (e: { nativeEvent: { layout: { y: number; height: number } } }) => p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height);
+  if (!p.live) {
+    return (
+      <View collapsable={false} onLayout={onLayout}
+        style={[st.liteRow, { backgroundColor: p.bg, borderBottomColor: p.rule }, p.liteH ? { height: p.liteH } : null]}>
+        <LiteRow t={p.it.t} done={p.done} colors={p.colors} fs={p.fs} />
+      </View>
+    );
+  }
+  return (
+    <Animated.View collapsable={false} onLayout={onLayout}
+      entering={p.born ? ROW_IN : undefined} exiting={ROW_OUT} layout={p.dragging || p.calm ? undefined : ROW_MOVE}
+      style={p.held && st.held}>
+      <LiveShell {...p} />
+    </Animated.View>
+  );
+}
+
+// 完整的行外面那層（2026-11-04 從外殼搬進來，樣子、動法都沒變）：底色、格線、被拖時浮起（放大＋陰影）跟著手指、其他行讓位時的滑動。
+// 位移直接在這裡看拖曳的值算，不經過別的反應轉一手（2026-11-03 多米真機：拖完放手畫面抖一下——轉一手就晚一格畫面，
+// 放手換順序那一格，行已經站到新位置、位移還沒歸零）。疊在別行上面（zIndex）交給外殼（held），這層疊得再高也蓋不過下一行的外殼
+function LiveShell(p: LineProps) {
   const w = useSharedValue(1);
   const giveWay = useSharedValue(0); // 讓位要讓多少（彈簧由完整的行在目標變了時開，見 LiveRow）
   const rowRef = useRef<ViewInstance>(null);
-  const { calm, index, live } = p;
-  const dIdx = live ? p.dragIdx : IDLE_IDX, dDy = live ? p.dragDy : IDLE_ZERO, dLift = live ? p.dragLift : IDLE_ZERO;
+  const { calm, index, dragIdx: dIdx, dragDy: dDy, dragLift: dLift } = p;
   const shell = useAnimatedStyle(() => {
     const from = dIdx.value, held = from >= 0 && index === from;
     const l = held ? dLift.value : 0; // 0～1：浮起多少
     return {
-      zIndex: held ? 5 : 0,
       overflow: held ? ('visible' as const) : ('hidden' as const),
       shadowOpacity: LIFT_SHADOW * l,
       transform: [
@@ -893,32 +977,27 @@ function LineRow(p: LineProps) {
         { scale: 1 + (calm ? 0 : (LIFT_SCALE - 1) * l) },
       ],
     };
-  }, WEB_DEPS ? [index, calm, live] : undefined);
+  }, WEB_DEPS ? [index, calm] : undefined);
   return (
-    <Animated.View ref={rowRef} collapsable={false}
-      onLayout={e => { w.value = e.nativeEvent.layout.width; p.onLayoutRow(e.nativeEvent.layout.y, e.nativeEvent.layout.height); }}
-      // 長出來淡入、拿掉淡出只掛在完整的行上：上千行時，每一行都掛的話打開、離開那張紙要一次登記、清掉上千個過場（2026-11-03 換張、點開 lag）
-      entering={p.live ? ROW_IN : undefined} exiting={p.live ? ROW_OUT : undefined} layout={!p.live || p.dragging || calm ? undefined : ROW_MOVE}
-      style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, !p.live && p.liteH ? { height: p.liteH } : null, shell]}>
-      {p.live ? <Live {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
-        : <LiteRow t={p.it.t} done={p.done} bg={p.bg} colors={p.colors} fs={p.fs} />}
+    <Animated.View ref={rowRef} collapsable={false} onLayout={e => { w.value = e.nativeEvent.layout.width; }}
+      style={[st.ci, { backgroundColor: p.bg, borderBottomColor: p.rule }, shell]}>
+      <Live {...p} w={w} giveWay={giveWay} rowRef={rowRef} />
     </Animated.View>
   );
 }
 
 // 只畫字的一行（捲得很遠、看不到的那些）：跟完整的行同一套字型、行高、留白、右邊的把手，看起來一樣、佔一樣的高，
-// 但沒有輸入框、手勢、動畫。捲過來之前（上下多留一個螢幕）就換成完整的行
-const LiteRow = memo(function LiteRow({ t, done, bg, colors: c, fs }: { t: string; done: boolean; bg: string; colors: Colors; fs: number }) {
+// 但沒有輸入框、手勢、動畫。捲過來之前（上下多留一個螢幕）就換成完整的行。
+// 2026-11-04：少兩層框（字直接放在外殼裡、六個點直接放在把手那格），上千行時少掛幾千個框，排出來的位置跟完整的行一模一樣
+const LiteRow = memo(function LiteRow({ t, done, colors: c, fs }: { t: string; done: boolean; colors: Colors; fs: number }) {
   const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
-    <View style={[st.cin, { backgroundColor: bg }]}>
-      <View style={st.field}>
-        <Text style={[st.ta, lh, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}>{t}</Text>
+    <>
+      <Text style={[st.ta, st.liteText, lh, { color: done ? c.textStrike : c.textPrimary }, done && st.taDone]}>{t}</Text>
+      <View style={st.liteGrip} accessible={false} importantForAccessibility="no-hide-descendants">
+        {[0, 1, 2, 3, 4, 5].map(i => <View key={i} style={[st.dot, { backgroundColor: c.textSecondary }]} />)}
       </View>
-      <View style={st.grip} accessible={false} importantForAccessibility="no-hide-descendants">
-        <GripDots color={c.textSecondary} />
-      </View>
-    </View>
+    </>
   );
 });
 
@@ -1191,6 +1270,13 @@ const st = StyleSheet.create({
   // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
   ci: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden',
     shadowColor: T.shape.shadowSoft.shadowColor, shadowRadius: T.shape.shadowSoft.shadowRadius, shadowOffset: T.shape.shadowSoft.shadowOffset },
+  held: { zIndex: 5 }, // 被拖的那行疊在別行上面（以前寫在外殼的動畫樣式裡，同一個值）
+  // 只畫字的行（2026-11-04）：外殼直接排字和把手＝完整的行的 ci＋cin（不帶陰影設定，平常本來就是 0）；字佔掉把手以外的寬＝field；
+  // 把手那格直接排六個點＝grip＋dots（左右內距把點擠成兩欄、上下置中，點的位置跟完整的行一模一樣）
+  liteRow: { borderBottomWidth: T.shape.borderCard, overflow: 'hidden', flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },
+  liteText: { flex: 1, minWidth: 0 },
+  liteGrip: { width: T.shape.hitMin, height: T.shape.rowMin, flexDirection: 'row', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center',
+    gap: T.shape.gripDotGap, paddingHorizontal: (T.shape.hitMin - (T.shape.gripDot * 2 + T.shape.gripDotGap)) / 2, opacity: T.shape.gripDotOpacity },
   under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.gutter },
   underText: { ...T.font.callout, fontWeight: T.font.semibold },
   cin: { flexDirection: 'row', alignItems: 'flex-start', gap: T.space.xs, paddingLeft: T.space.l },
