@@ -889,7 +889,11 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     if (into) setPopId(into);
     if (!keepOpen && d && (d.src || d.inF)) setOpenF(null);
   }
-  const shown = (i: number) => pages[i];
+  // 拖的那塊一直掛在拿起的那頁（parked，見下面格子那段：換了爸爸手勢就斷）。那頁被拖空了也先畫著（空的），放手才收掉——
+  // 不然那頁一不見、磚跟著被拆掉，手勢斷了磚就卡在手指最後的位置（2026-11-03 多米真機：從第二頁拖到第一頁很容易卡住）
+  const gridPages: Entry[][] = drag && !drag.src && drag.home !== undefined && drag.home >= pages.length
+    ? [...pages, ...Array.from({ length: drag.home + 1 - pages.length }, () => [])] : pages;
+  const shown = (i: number) => gridPages[i] ?? [];
 
   const noteA11y = (n: Note) => (name: string) => {
     if (name === 'activate') pick(n);
@@ -988,7 +992,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
               keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => Keyboard.dismiss()}
               onScroll={e => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               scrollEventThrottle={T.timing.pageScroll}>
-              {pages.map((_, i) => (
+              {gridPages.map((_, i) => (
                 <View key={i} style={[st.page, { width }]} pointerEvents="box-none" accessibilityLabel={pages.length > 1 ? `第 ${i + 1} 頁，共 ${pages.length} 頁` : undefined}>
                   <PageBack editing={editing} calm={calm} pg={i} count={pages.length} width={width} pager={pagerRef}
                     onHold={() => { setMenu(null); haptic('menu'); setEditing(true); }} onTap={() => setEditing(false)} />
