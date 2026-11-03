@@ -178,6 +178,8 @@ export const shape = {
   // 一排 gridCols 個，每欄寬＝格子區寬 ÷ gridCols；方磚邊長＝欄寬扣 tileGapMin、最大 tileMax（iPhone 量到約 63）；
   // 名字在方磚下面 tileLabelGap、一行高 tileLabelH；列跟列之間再空 tileRowGap；圓角＝邊長 × tileRadiusRatio（iOS 約 22%）
   gridCols: 4, tileMax: 64, tileGapMin: 24, tileLabelGap: 6, tileLabelH: 16, tileRowGap: 14, tileRadiusRatio: 0.225,
+  // 方磚正中間名字的第一個字（2026-11-03 多米：只有顏色很難認）：字的大小＝邊長 × tileGlyphRatio
+  tileGlyphRatio: 0.44,
   dirPeek: 92,   // 目錄面板垂下來時，螢幕底下留一截看得到後面的紙（點那截收起；多米原型）
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）
   tileTag: 30,   // 色磚右下角露出的色圓（1×1 之後縮小，2026-11-03）
@@ -190,7 +192,8 @@ export const shape = {
   // 打開的資料夾（2026-11-02 照 iOS；2026-11-03 改 1×1 後一頁 folderCols 欄 × folderRows 列，跟 iOS 一樣 3×3）：框的圓角、滿了往右一頁；框下面頁點那排的高
   radiusFolder: 38, folderCols: 3, folderRows: 3, folderDotsH: 14,
   // 霧化強度（expo-blur 的 intensity，1～100）：後面的目錄霧一點就好、看得出輪廓；框本身霧重一點，像 iOS 的檔案夾
-  folderBlur: 24, folderBoxBlur: 60,
+  // 2026-11-03 照 iPhone 打開的檔案夾（多米截圖）：後面霧很重、幾乎看不出形狀
+  folderBlur: 55, folderBoxBlur: 60,
   // 系統材質（2026-11-02）：舊 iOS 的霧面按鈕、選單卡霧多重；長按選單照 iOS 的樣子（寬 250、大圓角、組與組之間一條粗縫）
   materialBlur: 80, menuBlur: 30,
   barH: 52, // 紙最下面那條（PageBar，2026-11-02 Safari 式底部列）：膠囊與右邊 ＋ 的高

@@ -37,7 +37,7 @@ import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Empty } from './Empty';
-import { Glass, useCanBlur } from './Glass';
+import { Glass, useCanBlur, useSurface } from './Glass';
 import { ui } from './Overlay';
 import { togglePin } from './pin';
 import { PopMenu } from './PopMenu';
@@ -376,7 +376,8 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // 欄寬（2026-11-03 改 1×1）：目錄一排 COLS 欄、左右各留 l；打開的資料夾一排 FCOLS 欄（框寬扣左右內距）
   const tileW = Math.floor((width - T.space.l * 2) / COLS); // 取整數：搬行模式的格子是自動換行排的，差一點小數就會被擠成一排三個
   // 打開的資料夾裡兩欄：框左右各留 l、框裡再留 l
-  const innerW = Math.floor((width - T.space.l * 2 - FPAD * 2) / FCOLS);
+  // 打開的資料夾跟目錄同一個欄寬（2026-11-03 照 iPhone：檔案夾裡的 App 跟主畫面一樣大、一樣的間距，框只包住 3 欄＋內距，不撐滿螢幕）
+  const innerW = tileW;
 
   // 拖的那塊（C4、C5、D4）：id＝拖的紙或資料夾；src＝從哪個資料夾拿起（null＝目錄）；page＝現在看的那頁；inF＝現在對準哪個打開的資料夾（null＝對準目錄）；
   // fto＝資料夾裡讓出來那格；k0＝從資料夾拿起時在第幾格；forder＝拖的途中互換過之後，資料夾裡其他格的順序（互換：只有那兩張動，多米 2026-11-02）。
@@ -512,7 +513,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // 框裡捲到哪（拖的時候算格子、落點都要扣掉）。換一個資料夾或重新打開，捲動從頂端開始（ScrollView 用資料夾 id 當 key 會重掛）
   const openFolderId = openEntry?.folder?.id;
   // 打開的資料夾翻到第幾頁（2026-11-02：一頁 2×3，滿了往右一頁）。框的寬＝螢幕寬扣左右 l；翻頁時手勢也要知道（dg.fpg）
-  const fboxW = width - T.space.l * 2;
+  const fboxW = FCOLS * innerW + FPAD * 2;
   const [fpage, setFpageState] = useState(0);
   const setFpage = (i: number) => { setFpageState(i); dg.fpg.value = i; };
   useEffect(() => { setFpage(0); }, [openFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -520,6 +521,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const onFolderScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { const i = Math.round(e.nativeEvent.contentOffset.x / fboxW); if (i !== dg.fpg.value) setFpage(i); };
   const folderList = openEntry ? folderNotes(openEntry, drag) : [];
   const solid = !useCanBlur(); // 減少透明度、或舊開發版沒有霧化的原生碼（Glass.tsx）
+  const liquid = useSurface() === 'glass'; // iOS 26 以上：資料夾框用系統的液態玻璃（跟 iPhone 檔案夾同一種材質，2026-11-03 多米）
   // 從這個資料夾拿起、已經拖出去：資料夾收起（看不到、點不到），但留著，拿起的那塊磚才不會不見
   const folderHidden = !!(drag && openF && drag.src === openF.id && !drag.inF);
 
@@ -1057,12 +1059,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
             {!solid && <BlurView style={StyleSheet.absoluteFill} intensity={T.shape.folderBlur} tint="default" pointerEvents="none" />}
             <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: solid ? c.folderVeil : c.folderVeilBlur }]} onPress={() => { Keyboard.dismiss(); setOpenF(null); }}
               accessibilityRole="button" accessibilityLabel="收起資料夾" />
-            <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} />
-            <View style={[st.folderBox, { width: fboxW, backgroundColor: solid ? c.folderGlass : 'transparent', borderColor: c.folderGlassEdge }]}
+            {/* 名字照 iPhone：靠左、跟框裡第一欄方磚的左邊對齊 */}
+            <FolderName key={openEntry.folder.id} f={openEntry.folder} focus={openF!.naming} inset={(width - fboxW) / 2 + FPAD + (innerW - sizeOf(innerW)) / 2} />
+            <View style={[st.folderBox, { width: fboxW, backgroundColor: solid ? c.folderGlass : 'transparent', borderColor: liquid ? 'transparent' : c.folderGlassEdge }]}
               onLayout={e => { const l = e.nativeEvent.layout; dg.bx.value = l.x; dg.by.value = l.y; dg.bw.value = l.width; dg.bh.value = l.height; }}>
-              {!solid && (
-                <BlurView style={[StyleSheet.absoluteFill, { backgroundColor: c.folderGlassBlur }]} intensity={T.shape.folderBoxBlur} tint="default" pointerEvents="none" />
-              )}
+              {liquid ? <Glass style={[StyleSheet.absoluteFill, { borderRadius: T.shape.radiusFolder }]} />
+                : !solid && (
+                  <BlurView style={[StyleSheet.absoluteFill, { backgroundColor: c.folderGlassBlur }]} intensity={T.shape.folderBoxBlur} tint="default" pointerEvents="none" />
+                )}
               <ScrollView ref={fpagerRef} key={openEntry.folder.id} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={!editing && !drag && fpages > 1}
                 keyboardShouldPersistTaps="handled" onScroll={onFolderScroll} onMomentumScrollEnd={onFolderScroll} scrollEventThrottle={T.timing.pageScroll}>
                 <View style={{ width: fpages * fboxW, height: gridH + FPAD * 2 }}>
@@ -1347,7 +1351,7 @@ function DragGhost({ dg, calm, children }: { dg: DG; calm: boolean; children: Re
   return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
 }
 
-// 一塊磚的樣子（2026-11-03 改 1×1，照 iPhone 主畫面的 App；多米選「只有顏色」）：w＝格子寬。上面是置中的方磚——紙的顏色、右下角露出一顆色圓；
+// 一塊磚的樣子（2026-11-03 改 1×1，照 iPhone 主畫面的 App）：w＝格子寬。上面是置中的方磚——紙的顏色、右下角露出一顆色圓、正中間名字的第一個字；
 // 下面是名字（一行，太長尾巴變「…」）。正在看的那張方磚用 accent 框起來（面板上唯一的 accent），釘選的右上角一個圖釘（次要字色，C1）
 function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
   const c = useColors();
@@ -1358,6 +1362,9 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
       <View style={[st.tile, { width: s, height: s, borderRadius: s * RADIUS, backgroundColor: nc.bg, borderColor: cur ? c.accent : nc.rule,
         borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
         <View style={[st.tag, { backgroundColor: nc.hd }]} />
+        {/* 正中間名字的第一個字（2026-11-03 多米：只有顏色很難認）。沒取名的是「未」、次要色 */}
+        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: n.title.trim() ? c.textPrimary : c.textSecondary }]}
+          allowFontScaling={false} accessible={false}>{Array.from(label(n).trim())[0] ?? ''}</Text>
         {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={c.textSecondary} /></View> : null}
       </View>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
@@ -1429,14 +1436,14 @@ function HitGroup({ h, q, onNote, onLine }: { h: LineHit; q: string; onNote: () 
 }
 
 // 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名
-function FolderName({ f, focus }: { f: Folder; focus: boolean }) {
+function FolderName({ f, focus, inset }: { f: Folder; focus: boolean; inset: number }) {
   const c = useColors();
   const [draft, setDraft] = useState(f.name);
   return (
     <TextInput value={draft} autoFocus={focus} selectTextOnFocus={focus} returnKeyType="done" accessibilityLabel="資料夾名字"
       onChangeText={v => { setDraft(v); if (renameFolder(store.s, f.id, v, Date.now())) store.change(); }}
       onBlur={() => { if (!draft.trim()) setDraft(f.name); }}
-      style={[st.folderName, { color: c.textPrimary, width: '100%' }]} />
+      style={[st.folderName, { color: c.textPrimary, width: '100%', paddingLeft: inset, paddingRight: inset }]} />
   );
 }
 
@@ -1471,7 +1478,8 @@ const st = StyleSheet.create({
   hidden: { opacity: 0 },
   // 一格（方磚＋名字）：方磚置中在上面，名字在下面
   cell: { alignItems: 'center', gap: T.shape.tileLabelGap },
-  tile: { overflow: 'hidden' },
+  tile: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  glyph: { fontWeight: T.font.emphasis.fontWeight, textAlign: 'center' },
   tileText: { ...T.font.emphasis }, // 打開時放大那塊上面的名字（Launch）
   tileName: { ...T.font.caption, lineHeight: T.shape.tileLabelH, textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: T.space.xs },
   pin: { position: 'absolute', top: T.space.xs, right: T.space.xs },
@@ -1494,7 +1502,7 @@ const st = StyleSheet.create({
   // 打開的資料夾（2026-11-02 照 iOS）：毛玻璃般的半透明大圓角盒子，名字大字、靠左、放在盒子上面
   folderBox: { alignSelf: 'center', borderRadius: T.shape.radiusFolder, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', ...T.shape.shadowSoft },
   // position relative：網頁預覽裡輸入框預設不是 relative，會被前面 absolute 的霧蓋住（iOS 本來就照順序疊）
-  folderName: { position: 'relative', ...T.font.largeTitle, textAlign: 'left', paddingVertical: T.space.m, paddingHorizontal: T.space.l + T.space.l },
+  folderName: { position: 'relative', ...T.font.largeTitle, textAlign: 'left', paddingVertical: T.space.m },
   fdots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: T.space.s, height: T.shape.folderDotsH, marginBottom: T.space.s },
   fslot: { position: 'absolute' },
 });
