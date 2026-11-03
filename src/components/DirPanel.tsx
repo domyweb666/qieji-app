@@ -164,7 +164,7 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
 // 放手滑進要放的那格再回 JS 改資料（資料夾開著但手指在框外就不滑，交給 JS）。減少動態：直接到位
 type DragOpts = {
   enabled: boolean; editing: boolean; w: number; screenW: number; gw: number; fw: number; calm: boolean; dg: DG;
-  held: SharedValue<number>; // 這塊磚按住了沒（0～1，磚自己畫放大用）
+  held?: SharedValue<number>; // 這塊磚按住了沒（0～1，磚自己畫放大用）。資料夾裡的磚不給：還沒拿起來就不放大（多米 2026-11-03）
   onStart: () => void; onAim: (a: number) => void; onEdge: (z: number) => void; onDrop: () => void;
 };
 function useDragPan(o: DragOpts) {
@@ -179,7 +179,7 @@ function useDragPan(o: DragOpts) {
     dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
     dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
     // 抖動中手指一按下磚就放大了（held）：拿起來那張從一樣大接著浮，不會先縮回去再長大
-    if (!calm) dg.lift.value = held.value;
+    if (!calm) dg.lift.value = held ? held.value : 0;
     dg.lift.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     scheduleOnRN(onStart);
   };
@@ -194,11 +194,11 @@ function useDragPan(o: DragOpts) {
     // 沒抖動時長按是跳選單，選單那塊自己會浮起（Lifted），這裡不動
     onBegin: () => {
       'worklet';
-      if (editing) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
+      if (editing && held) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     },
     onFinalize: () => {
       'worklet';
-      held.value = calm ? 0 : withSpring(0, LIFT_SPRING);
+      if (held) held.value = calm ? 0 : withSpring(0, LIFT_SPRING);
     },
     onActivate: e => {
       'worklet';
@@ -1258,9 +1258,8 @@ function FolderTile(p: FolderTileProps) {
     maxDistance: G.longPressMove,
     onActivate: e => onMenu(e.absoluteX - e.x, e.absoluteY - e.y), // 磚的左上角（螢幕座標）
   });
-  const held = useSharedValue(0);
   const pan = useDragPan({
-    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg, held,
+    enabled: true, editing: p.editing, w: p.w, screenW: p.screenW, gw: p.gw, fw: p.w, calm, dg: p.dg,
     onStart: onDragStart, onAim, onEdge, onDrop,
   });
   const gesture = useExclusiveGestures(useSimultaneousGestures(hold, pan), tap);
@@ -1275,7 +1274,7 @@ function FolderTile(p: FolderTileProps) {
   // 同 Tile：動畫裡不准碰 p（p.n 是紙物件）
   const ghost = p.ghost;
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }, { scale: 1 + held.value * (HOLD_SCALE - 1) }],
+    transform: [{ rotate: `${rot.value}deg` }],
     opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [ghost] : undefined);
   return (
