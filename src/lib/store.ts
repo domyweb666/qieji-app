@@ -10,7 +10,7 @@ import { T } from './tokens';
 // 開發時一改程式，這個檔案會被重跑。資料放在 global 上，重跑後還是同一份，
 // 不會變回空白狀態再被存回去蓋掉舊資料（正式版不會重跑，這只是保險）。
 type Box = {
-  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; rowsMode?: RowsMode; titleMode?: TitleMode; recent?: string[]; fresh?: string | null; seek?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
+  state: State; loaded: boolean; version: number; hintSeen: boolean; last: string | null; lastFree?: string | null; recent?: string[]; fresh?: string | null; seek?: string | null; rename?: string | null; renameSubs?: Set<() => void>;
   saveT?: ReturnType<typeof setTimeout>; onSaveError?: () => void; saveFailed?: boolean; subs: Set<() => void>; listening?: boolean;
   panelSubs?: Set<() => void>; // 等「目錄面板收完」的人（K6）
   panelOpen?: boolean; compose?: boolean; composeSubs?: Set<() => void>; // 目錄面板開著；控制中心「記一行」等著紙升起輸入框（C1）
@@ -22,10 +22,6 @@ const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
 const emit = () => box.subs.forEach(f => f());
 const LAST_KEY = 'cn.last'; // 只記一個筆記 id，跟筆記資料分開存
-const ROWS_KEY = 'cn.rowsMode'; // 紙上的行用哪一套：系統清單（system）或茄記自己做的（qieji）。2026-11-02 多米要兩套都能試
-export type RowsMode = 'system' | 'qieji';
-const TITLE_KEY = 'cn.titleMode'; // 左上清單名的樣子：大字（big）或小膠囊（pill）。2026-11-04 多米要兩種都能切換比較
-export type TitleMode = 'big' | 'pill';
 const RECENT_KEY = 'cn.recent'; // 這台手機最近開過的紙（id 陣列，新的在前）：切換清單的「最近」用。只記在這台，不同步（每開一張就上傳太吵）
 const RECENT_KEEP = 20;
 const LAST_FREE_KEY = 'cn.lastFree'; // 最近看的那張沒釘選的（左右滑最左邊那頁，swipeSet）
@@ -83,23 +79,7 @@ export const store = {
     if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
   },
   // 最近看的那張沒釘選的：左右滑時最左邊那頁（swipeSet）。開到沒釘選的那張、或從沒釘選的那張滑走時記
-  // 行的手勢用哪一套（⋯ 選單裡切換，對照用）：預設系統清單（多米 2026-11-02 選「真的系統清單元件」）
-  get rowsMode(): RowsMode { return box.rowsMode ?? 'system'; },
-  setRowsMode(m: RowsMode) {
-    box.rowsMode = m;
-    AsyncStorage.setItem(ROWS_KEY, m).catch(() => {});
-    box.version++;
-    emit();
-  },
   get recent(): string[] { return box.recent ?? []; },
-  // 左上清單名的樣子（⋯ 選單裡切換，對照用）：預設大字
-  get titleMode(): TitleMode { return box.titleMode ?? 'big'; },
-  setTitleMode(m: TitleMode) {
-    box.titleMode = m;
-    AsyncStorage.setItem(TITLE_KEY, m).catch(() => {});
-    box.version++;
-    emit();
-  },
   get lastFree() { return box.lastFree ?? null; },
   setLastFree(id: string) {
     if (box.lastFree === id) return;
@@ -136,9 +116,7 @@ export const store = {
 
   async load() {
     if (box.loaded) return;
-    const [raw, hint, last, lastFree, rows, title, recent] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(ROWS_KEY), AsyncStorage.getItem(TITLE_KEY), AsyncStorage.getItem(RECENT_KEY)]);
-    if (rows === 'system' || rows === 'qieji') box.rowsMode = rows;
-    if (title === 'big' || title === 'pill') box.titleMode = title;
+    const [raw, hint, last, lastFree, recent] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(RECENT_KEY)]);
     try { const r = JSON.parse(recent ?? '[]'); if (Array.isArray(r)) box.recent = r.filter((x: unknown) => typeof x === 'string').slice(0, RECENT_KEEP); } catch { /* 壞了就當沒記過 */ }
     if (box.loaded) return;
     const state = parseState(raw);

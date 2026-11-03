@@ -36,7 +36,6 @@ import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
 import { Sym } from './Sym';
 import { DoneBtn, GlassBtn } from './WebBars';
-import { HAS_NATIVE_ROWS, NativeRows } from './NativeRows';
 import { barSlot } from './PageBar';
 import { NoteIcon } from './NoteIcon';
 import { switchPanel } from './SwitchPanel';
@@ -103,18 +102,10 @@ export function Paper({ n }: { n: Note }) {
   const scrollY = useScrollOffset(scrollRef); // 清單捲到哪（UI 執行緒逐格更新；只做看得到的行、拖到邊緣自動捲用）
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  // 改名字時輸入框的高度＝平常那行清單名量到的高（多米 2026-11-01：改名字時大字的上緣被切掉）。iOS 單行輸入框只會照它量到的高畫字，
-  // 量出來比 28 點粗體（再跟著系統字級放大）的實際字高矮，字頂就被切；拿同一行字、同字級的 Text 量到的高最準
-  const [titleH, setTitleH] = useState(0);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
   // 底部輸入框（多米 2026-11-01）：按 ＋ 升起、在裡面打；draft＝框裡現在的字（不受控輸入框，送出或收起時才拿）
   const [composing, setComposing] = useState(false);
   const draft = useRef('');
-  // 系統清單版（2026-11-02）：點一行＝輸入框帶著那行的字升起來改（fixId），⋯ →「排順序」＝系統的編輯模式（ordering）
-  const sysRows = HAS_NATIVE_ROWS && store.rowsMode === 'system';
-  const [fixId, setFixId] = useState<string | null>(null);
-  const fixRef = useRef<string | null>(null);
-  const [ordering, setOrdering] = useState(false);
   // 正在編輯哪一行：只有這一行的輸入框收得到觸控，其他行要經過點一下的手勢才會進來（捲動時手指有移動，手勢不成立）
   const [editing, setEditingState] = useState<string | null>(null);
   const editingRef = useRef<string | null>(null);
@@ -215,25 +206,8 @@ export function Paper({ n }: { n: Note }) {
     requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
-  function addLine() { if (composing) return; if (!roomOf(n)) { ui.toast(FULL_MSG); return; } haptic('add'); fixRef.current = null; setFixId(null); openComposer(); }
+  function addLine() { if (composing) return; if (!roomOf(n)) { ui.toast(FULL_MSG); return; } haptic('add'); openComposer(); }
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
-  // 改一行（系統清單版）：框裡先放那行的字；Return 或 ✓ 改好收起；清空了＝刪掉那行（進最近刪除，有復原）
-  function fixLine(id: string) {
-    const it = n.items.find(i => i.id === id);
-    if (!it || composing || ordering) return;
-    fixRef.current = id; setFixId(id);
-    draft.current = it.t;
-    setComposing(true);
-  }
-  function applyFix() {
-    const id = fixRef.current;
-    fixRef.current = null; setFixId(null);
-    const t = draft.current.trim(); draft.current = '';
-    const it = id ? n.items.find(i => i.id === id) : undefined;
-    if (!it) return;
-    if (!t) { remove(it.id); return; }
-    if (t !== it.t) { it.t = t; touch(); }
-  }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行，畫面捲回頂端讓你看到它（多米 2026-11-01 第八批改定：捲在下面記完畫面沒動，別人會以為壞了；
   // 推翻同日早上的「留在原地」）。動畫照 2-4：
@@ -250,7 +224,7 @@ export function Paper({ n }: { n: Note }) {
   // 那行還沒量好位置（剛換過來）就等 onLayoutRow，量好了就畫完直接捲（下面的 effect）。系統清單版捲不到，只換到這張
   const seekRow = useRef<string | null>(null);
   const sk = store.takeSeek(l => n.items.some(i => i.id === l));
-  if (sk && !sysRows) seekRow.current = sk;
+  if (sk) seekRow.current = sk;
   // 每次畫完都看（沒有相依陣列是故意的）；拿到一次就清掉 seekRow，不會一直重畫
   useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     const id = seekRow.current, l = id && layouts.current[id];
@@ -274,7 +248,6 @@ export function Paper({ n }: { n: Note }) {
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
-    if (fixRef.current) { applyFix(); setComposing(false); return false; }
     if (!roomOf(n)) { ui.toast(FULL_MSG); return false; } // 滿了：字留在輸入框裡，不送出、不清空
     const t = takeDraft();
     if (!t) { closeComposer(); return false; }
@@ -285,7 +258,6 @@ export function Paper({ n }: { n: Note }) {
   // 輸入框卸載時，它自己的鍵盤會跟著收。
   // 乙（2026-11-01，暗幕拿掉後）：點紙上的行也會走到這裡——草稿先送出、焦點進那一行，畫面留在原地
   function closeComposer() {
-    if (fixRef.current) { applyFix(); setComposing(false); return; }
     const t = takeDraft();
     if (t) addFromDraft(t);
     setComposing(false);
@@ -604,7 +576,7 @@ export function Paper({ n }: { n: Note }) {
   // 紙自己的彈出選單（茄記版行的長按、網頁的 ⋯）開著時也不畫：列畫在紙外面、疊在紙的選單上面，不收的話選單後面霧掉了列還清清楚楚、還點得到
   useLayoutEffect(() => {
     barSlot.set({ onAdd: addLine },
-      !kbUp && !composing && !ordering && !menu && !rowMenu);
+      !kbUp && !composing && !menu && !rowMenu);
   });
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
@@ -646,22 +618,11 @@ export function Paper({ n }: { n: Note }) {
         } });
       } },
     ] },
-    // 系統清單版：排順序進系統的編輯模式（右邊 ≡ 拖、左邊紅色 − 刪除），右上 ✓ 結束
-    { label: '排順序', icon: 'line.3.horizontal', hidden: !sysRows || n.items.length < 2, fn: () => { Keyboard.dismiss(); setOrdering(true); } },
     // 開發版才有（正式版看不到）：一次塞到 LINE_MAX 行，真機試幾百、上千行打開、換張、捲動、拖到邊緣自動捲順不順（2026-11-03）
     { label: '（開發）塞到上限', icon: 'plus', hidden: !__DEV__ || !roomOf(n), fn: () => {
       const add = Array.from({ length: roomOf(n) }, (_, i) => ({ id: uid(), t: `測試第 ${n.items.length + i + 1} 行${i % 7 === 0 ? '，這行寫長一點，看換行之後高度對不對、捲過去會不會跳' : ''}`, done: i % 5 === 0, b: false }));
       setItems([...n.items, ...add]);
     } },
-    // 兩套行的手勢都能試（多米 2026-11-02：「我測試後再看看哪個好」），iOS 有系統清單的原生碼才出現
-    { label: '清單名的樣子', icon: 'textformat', sub: [
-      { label: '大字', on: store.titleMode === 'big', fn: () => store.setTitleMode('big') },
-      { label: '小膠囊', on: store.titleMode === 'pill', fn: () => store.setTitleMode('pill') },
-    ] },
-    { label: '行的操作', icon: 'hand.draw', hidden: !HAS_NATIVE_ROWS, sub: [
-      { label: '系統清單', on: store.rowsMode === 'system', fn: () => { setOrdering(false); store.setRowsMode('system'); } },
-      { label: '茄記版', on: store.rowsMode === 'qieji', fn: () => { setOrdering(false); store.setRowsMode('qieji'); } },
-    ] },
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
@@ -692,32 +653,22 @@ export function Paper({ n }: { n: Note }) {
             multiline submitBehavior="blurAndSubmit"
             // 網頁的 textarea 預設兩列高，限一列；iOS 不限（限了長名字打到一半會被藏起來）
             {...(Platform.OS === 'web' ? { numberOfLines: 1 } : null)}
-            placeholderTextColor={c.textMuted} style={[st.titleInput, { minHeight: Math.max(T.shape.hitMin, titleH), color: c.textPrimary }]} returnKeyType="done"
+            placeholderTextColor={c.textMuted} style={[st.titleInput, { minHeight: T.shape.hitMin, color: c.textPrimary }]} returnKeyType="done"
             accessibilityLabel="清單名"
             onChangeText={v => { n.title = v.replace(/\n/g, ' '); touch(true); }}
             onFocus={() => onFocus('title')} onBlur={() => { setRenaming(false); onBlur('title'); touch(); }}
             onSubmitEditing={dismissKb} />
         ) : (
           // 點清單名＝切換清單（2026-11-04 改版；改名照舊從 ⋯ 的「改名字」或目錄長按選單）。
-          // 兩種樣子（⋯ →「清單名的樣子」切換比較，多米要兩種都看）：大字標題＋▾，或照設計圖的小膠囊（小方磚＋名字＋▾）
+          // 清單名＝小膠囊（茄紫細框、小方磚＋名字＋▾）。2026-11-04 多米定案，大字那種拿掉
           <Pressable onPress={openSwitch} accessibilityRole="button" accessibilityLabel={`${name}，切換清單`}
             style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]}>
-            {store.titleMode === 'pill' ? (
-              <View style={[st.pill, { borderColor: c.accent }]}>
-                <NoteIcon n={n} size={T.shape.titleIcon} />
-                <Text style={[st.pillText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
-                  maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
-                <Sym name="chevron.down" size={12} color={c.textSecondary} weight="semibold" />
-              </View>
-            ) : (
-              <>
-                {n.pinned ? <Sym name="pin.fill" size={14} color={c.textSecondary} /> : null}
-                <Text style={[st.title, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
-                  onLayout={e => setTitleH(e.nativeEvent.layout.height)}
-                  maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
-                <Sym name="chevron.down" size={16} color={c.textSecondary} weight="semibold" />
-              </>
-            )}
+            <View style={[st.pill, { borderColor: c.accent }]}>
+              <NoteIcon n={n} size={T.shape.titleIcon} />
+              <Text style={[st.pillText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
+                maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
+              <Sym name="chevron.down" size={12} color={c.textSecondary} weight="semibold" />
+            </View>
           </Pressable>
         )}
         </View>
@@ -731,8 +682,6 @@ export function Paper({ n }: { n: Note }) {
         {/* 在行裡或清單名裡打字時才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。
             看「哪一格在編輯」不看 composing：按輸入框的 ✓ 收起時框先收、鍵盤晚一兩格才開始收，看 composing 會在那幾格閃出一顆 ✓ */}
         {kbUp && (editing !== null || renaming) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
-        {/* 系統清單版排順序中：右上 ✓ 結束（跟系統「完成」同一個位置） */}
-        {ordering && !kbUp && <DoneBtn onPress={() => setOrdering(false)} label="排好了" />}
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
@@ -751,24 +700,7 @@ export function Paper({ n }: { n: Note }) {
           listTop.value = y; listH.value = h; listBot.value = y + h - (T.shape.barH + insets.bottom + T.space.s * 2);
           kickWin();
         })}>
-        {sysRows ? (
-          n.items.length === 0 ? emptyView : (
-            <NativeRows items={n.items.slice()} colors={c} bg={nc.bg} rule={nc.rule} ordering={ordering}
-              style={{ flex: 1, marginBottom: T.shape.barH + insets.bottom + T.space.s * 2 }}
-              onTap={fixLine} onStrike={strike} onRemove={remove}
-              onMoveTo={id => { Keyboard.dismiss(); dirPanel.open(id); }}
-              onCopy={id => { const it = n.items.find(i => i.id === id); if (it) Clipboard.setStringAsync(it.t).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); }}
-              onMove={(from, dest) => {
-                // 系統給的目的地是「拿掉之前」的位置：往下搬要減一
-                const to = from < dest ? dest - 1 : dest;
-                if (from === to || !n.items[from]) return;
-                const [m] = n.items.splice(from, 1);
-                n.items.splice(to, 0, m);
-                touch();
-              }} />
-          )
-        ) : (
-        /* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */
+        {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
         <ListScroll ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           // scrollEventThrottle：iOS 不給的話捲動只回報一次，useScrollOffset 拿不到逐格的位置
@@ -814,7 +746,6 @@ export function Paper({ n }: { n: Note }) {
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
           <View style={{ flexGrow: 1, minHeight: 200 + kbPad + insets.bottom }} collapsable={false} />
         </ListScroll>
-        )}
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
@@ -834,7 +765,7 @@ export function Paper({ n }: { n: Note }) {
       {composing && (
         <Animated.View style={[st.kbarWrap, composerStyle]} pointerEvents="box-none">
           {/* maxH：框最高長到清單頂（標題列與時間列下面），再多才在框裡捲（多米 2026-11-01：打十幾行也要能沉浸，不要三行就捲） */}
-          <Composer key={fixId ?? 'new'} initial={fixId ? (n.items.find(i => i.id === fixId)?.t ?? '') : ''} calm={calm} maxH={winH - Math.max(kbPad, insets.bottom) - view.current.top - T.space.s * 2}
+          <Composer key="new" initial="" calm={calm} maxH={winH - Math.max(kbPad, insets.bottom) - view.current.top - T.space.s * 2}
             onChange={t => { draft.current = t; }} onSubmit={sendDraft} onDone={doneComposer} onBlur={closeComposer} />
         </Animated.View>
       )}
@@ -1248,7 +1179,6 @@ const st = StyleSheet.create({
   pill: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin,
     paddingLeft: T.space.s, paddingRight: T.space.m, borderWidth: T.shape.borderSelected / 2, borderRadius: T.shape.pill(T.shape.hitMin) },
   pillText: { ...T.font.headline, flexShrink: 1, minWidth: 0 },
-  title: { flexShrink: 1, minWidth: 0, ...T.font.title },
   titleInput: { flex: 1, minWidth: 0, ...T.font.title, paddingVertical: 0, paddingHorizontal: T.space.xs },
   // 一行就是紙上的一行：沒有卡片，底下一條淡格線，左右貼齊整頁
   // 陰影的顏色、模糊、位移先掛著，平常 shadowOpacity 是 0 看不到；排順序拿起來那一行由 shift 把它亮起來
