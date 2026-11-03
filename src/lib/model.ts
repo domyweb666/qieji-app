@@ -67,14 +67,21 @@ export const SORTS: Record<SortKey, string> = {
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const p2 = (x: number) => String(x).padStart(2, '0');
 
+// 外面進來的紙（iCloud 資料夾裡的檔、舊存檔）欄位型別不一定對（2026-11-04 程式審查）：以前 items 不是陣列、行是 null，
+// 整次 iCloud 同步就爆掉、之後每次都爆；名字或行的字是數字，畫面一碰 .trim() 就閃退。
+// 字：字串原樣不動（好的紙指紋才不會變）、數字轉成字、其他當成空的；行：不是物件的丟掉
+const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const idOf = (v: unknown) => (typeof v === 'string' && v ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : uid());
+
 export function fixNote(n: any): Note {
   if (!COLORS[n.color as ColorKey]) n.color = n.color === 'pink' ? 'red' : 'yellow';
-  const fixItem = (i: any): Item => ({ id: i.id || uid(), t: i.t || '', done: !!i.done, b: i.b === undefined ? true : !!i.b,
+  const fixItem = (i: any): Item => ({ id: idOf(i.id), t: str(i.t), done: !!i.done, b: i.b === undefined ? true : !!i.b,
     ...(typeof i.at === 'number' && Number.isFinite(i.at) && i.at > 0 ? { at: i.at } : {}) });
-  n.items = (n.items || []).map(fixItem);
-  n.bin = (Array.isArray(n.bin) ? n.bin : []).map(fixItem);
-  n.title = n.title || '';
-  n.body = n.body || '';
+  n.items = (Array.isArray(n.items) ? n.items : []).filter(isObj).map(fixItem);
+  n.bin = (Array.isArray(n.bin) ? n.bin : []).filter(isObj).map(fixItem);
+  n.title = str(n.title);
+  n.body = str(n.body);
   // 磚上的字只留一個字（emoji 也算一個）；空的、不是字串的拿掉，回到用名字的第一個字
   const g = typeof n.glyph === 'string' ? Array.from(n.glyph.trim())[0] : undefined;
   if (g) n.glyph = g; else delete n.glyph;
@@ -135,9 +142,14 @@ function dedupe(notes: Note[]) {
 }
 
 export function parseState(raw: string | null): State {
+  return readState(raw) ?? emptyState();
+}
+// 讀不出來（沒有存檔、JSON 壞掉、不是茄記的格式）回 null：有存檔卻讀不出來時，store 要先把原本那份另存起來，不能直接拿空的蓋掉
+export function readState(raw: string | null): State | null {
   try {
     const s = JSON.parse(raw as string);
     if (s && Array.isArray(s.notes)) {
+      s.notes = s.notes.filter(isObj); // 夾在裡面的 null、字串不是紙，丟掉（以前一個 null 就整份讀不出來）
       s.notes.forEach(fixNote);
       s.notes = dedupe(s.notes);
       fixGarden(s);
@@ -145,8 +157,8 @@ export function parseState(raw: string | null): State {
       s.gone = fixGone(s.gone);
       return s;
     }
-  } catch {}
-  return emptyState();
+  } catch { /* 壞掉的 JSON：回 null，交給呼叫的人決定 */ }
+  return null;
 }
 
 /* ---------------- dates ---------------- */
@@ -695,6 +707,27 @@ export function unbinItem(n: Note, id: string, at = 0): Item | undefined {
   n.items.splice(Math.max(0, Math.min(at, n.items.length)), 0, it);
   return it;
 }
+// 「清掉劃掉的行」的復原（2026-11-04 程式審查修）：只把清掉的那幾行（removed）放回去，接在它原本前面那行的後面
+// （前面那行也不在了就往前找，都不在就放最上面）。這段時間新記的、改的、刪的都照留。
+// 以前是整份換回清掉之前的陣列：中間新記的行會不見，中間刪掉的行會同時出現在紙上和最近刪除裡（同一個 id 兩份）。
+// 已經回到紙上、在最近刪除裡的不重放。回傳放回幾行
+export function putBack(n: Note, before: Item[], removed: Set<string>) {
+  const here = new Set(n.items.map(i => i.id)), binned = new Set(n.bin.map(i => i.id));
+  const after = new Map<string | null, Item[]>(); // 接在哪一行後面（null＝最上面）→ 要放回的行，照原本的先後
+  let anchor: string | null = null, back = 0;
+  for (const it of before) {
+    if (here.has(it.id)) { anchor = it.id; continue; }
+    if (!removed.has(it.id) || binned.has(it.id)) continue;
+    const list = after.get(anchor);
+    if (list) list.push(it); else after.set(anchor, [it]);
+    back++;
+  }
+  if (!back) return 0;
+  const out = [...(after.get(null) ?? [])];
+  for (const it of n.items) { out.push(it); const list = after.get(it.id); if (list) out.push(...list); }
+  n.items = out;
+  return back;
+}
 // 搬到別張紙：放到那張的最上面。同一張不動
 export function moveItem(from: Note, to: Note, id: string): Item | undefined {
   if (from === to) return undefined;
@@ -850,15 +883,25 @@ export function fingerprint(n: Note) {
   return fnv(c, 2166136261) + fnv(c, 3735928559);
 }
 
+// 指紋不重算（2026-11-04 效能，程式審查量過）：每次存檔、每次拉 iCloud 都要對每張紙的指紋，以前每次都從頭算
+// （照鍵名排好、整份字串跑兩次雜湊），1000 行的紙一張就要幾毫秒，打字停一下、回到 app 都要全部重算一遍。
+// 改成先比 JSON.stringify（原生做的，快很多）：跟上次對過的時候一字不差，指紋就一定一樣，不用再算；不一樣才重算，結果跟以前一模一樣。
+// 本機的紙照物件記（WeakMap，紙拿掉就跟著放掉）；iCloud 拉下來的每次都是新物件，照 id 記上次那份
+const seenLocal = new WeakMap<Note, string>();
+let seenRemote = new Map<string, { json: string; h: string }>();
+
 // 存檔前呼叫：內容變了的紙記下 mod＝現在。還沒算過指紋的（舊存檔、剛開的新紙）mod 從 updated 起算，
 // 不然升級後第一次存檔每張紙都變成「剛剛改的」，跟 iCloud 上的版本比會亂贏。回傳變了幾張
 export function stampMods(s: State, now: number) {
   let changed = 0;
   for (const n of s.notes) {
+    const json = JSON.stringify(n);
+    if (seenLocal.get(n) === json) continue; // 上次對完之後一個字都沒動：h 還是對的
     const f = fingerprint(n);
-    if (n.h === f) continue;
+    if (n.h === f) { seenLocal.set(n, json); continue; }
     n.mod = n.h === undefined ? (validTime(n.mod) ? n.mod : n.updated || now) : now;
     n.h = f;
+    seenLocal.set(n, JSON.stringify(n)); // h、mod 改過了，記改完的樣子
     changed++;
   }
   return changed;
@@ -949,14 +992,18 @@ export function mergeRemote(s: State, remote: { notes: any[]; gone?: any }, now:
   const gone = (s.gone ??= {});
   for (const [id, t] of Object.entries(fixGone(remote.gone))) gone[id] = Math.max(gone[id] ?? 0, t);
   const theirs = new Map<string, Note>();
+  const seen = new Map<string, { json: string; h: string }>(); // 這次拉到的（下次比對用；這次沒拉到的 id 就不留）
   for (const r0 of remote.notes || []) {
     if (!r0 || typeof r0.id !== 'string') continue;
     const r = fixNote(r0);
-    r.h = fingerprint(r);
+    const json = JSON.stringify(r), last = seenRemote.get(r.id);
+    r.h = last && last.json === json ? last.h : fingerprint(r); // iCloud 上那份跟上次拉到的一字不差：指紋照用
+    seen.set(r.id, { json, h: r.h });
     if (!validTime(r.mod)) r.mod = r.updated || 0;
     const o = theirs.get(r.id);
     if (!o || (r.mod ?? 0) > (o.mod ?? 0)) theirs.set(r.id, r);
   }
+  seenRemote = seen;
   const out: Note[] = [], push: string[] = [];
   let added = 0, taken = 0, united = 0, removed = 0;
   for (const l of s.notes) {

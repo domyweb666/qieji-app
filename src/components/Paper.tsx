@@ -23,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, plain, roomOf, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, putBack, roomOf, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
@@ -589,6 +589,7 @@ export function Paper({ n }: { n: Note }) {
   // 2026-11-03 多米：目錄裡這張那格留空位、別張不往前補；復原時站回那格（leaveHole、fillHole）
   function del() {
     Keyboard.dismiss();
+    const wasPinned = n.pinned; // 復原時釘回去（2026-11-04 程式審查：以前復原回來就沒釘了）
     markDeleted(n, Date.now()); n.pinned = false;
     leaveHole(store.s, n.id, Date.now());
     n.items = n.items.filter(i => i.t.trim());
@@ -598,7 +599,11 @@ export function Paper({ n }: { n: Note }) {
     const next = store.s.notes.filter(x => !x.deleted).sort((a, b) => b.updated - a.updated)[0] ?? newNote();
     store.open(next.id);
     store.change();
-    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); fillHole(store.s, n.id, Date.now()); store.open(n.id); store.change(); } });
+    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => {
+      markRestored(n);
+      if (wasPinned && pinnedNotes(store.s).length < PIN_MAX) n.pinned = true; // 這幾秒內又釘滿了就不擠掉別張
+      fillHole(store.s, n.id, Date.now()); store.open(n.id); store.change();
+    } });
   }
   const setItems = (items: Item[]) => { n.items = items; touch(); };
   const moreActs: Act[] = [
@@ -610,11 +615,13 @@ export function Paper({ n }: { n: Note }) {
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
-        const before = n.items;
+        const before = n.items.slice(), gone = new Set(before.filter(i => i.done).map(i => i.id));
         setItems(before.filter(i => !i.done));
+        // 復原只放回清掉的那幾行（model putBack）：以前整份換回清掉之前，這幾秒內新記的行會不見、刪掉的行會一行兩份（2026-11-04 程式審查）。
+        // 已經換到別張也照樣放回去（清掉的行不在最近刪除裡，這裡不放回就沒了）；這張已經永久拿掉了才不放
         ui.toast('已清掉劃掉的行', { label: '復原', fn: () => {
-          if (!mounted.current || closed.current) return;
-          setItems(before);
+          if (!store.s.notes.includes(n)) return;
+          if (putBack(n, before, gone)) touch();
         } });
       } },
     ] },

@@ -3,7 +3,7 @@
 // 改成自己做（多米選）：跟 ⋯ 選單同一種液態玻璃（Glass），排法照系統選單——左邊小方磚、右邊名字，組跟組之間一條線，小字標組名。
 // 內容：釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
 // 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -41,8 +41,12 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
   // p：0＝收著、1＝全開；h：面板量到的高（還沒量到先當整個螢幕高，從螢幕外開始）
   const p = useSharedValue(0), h = useSharedValue(height), drag = useSharedValue(0);
   useEffect(() => { p.value = calm ? withTiming(1, { duration: FADE }) : withSpring(1, SPRING); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // 收起，收完才卸載（then：收完要做的事，例如打開目錄）
+  // 收起，收完才卸載（then：收完要做的事，例如打開目錄）。
+  // 收到一半又叫一次（點了一張又馬上點外面）照第一次的收（2026-11-04 程式審查）：以前第二次的動畫蓋掉第一次，第一次要做的事（換到那張）就不做了
+  const closing = useRef(false);
   const close = (then?: () => void) => {
+    if (closing.current) return;
+    closing.current = true;
     const done = () => { onGone(); then?.(); };
     const fin = (f?: boolean) => { 'worklet'; if (f) scheduleOnRN(done); };
     drag.value = 0;

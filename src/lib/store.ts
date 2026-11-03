@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
-import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, packGrid, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, parseState, purgeExpiredBin, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
+import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, packGrid, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, purgeExpiredBin, readState, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 import { T } from './tokens';
 
@@ -17,6 +17,8 @@ type Box = {
   pulling?: boolean; synced?: Record<string, number>;
   noSeat?: boolean; // 原始存檔沒另存成功：這次打開不寫座位表（目錄照 C1 之前的樣子排），下次打開再試（C1）
   newCloud?: 'asking' | 'declined'; onNewCloud?: (adopt: () => void, decline: () => void) => void; onCloudOff?: () => void; // S5 // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
+  written?: string; // 手機裡現在存的那份（JSON 字串）：一字不差就不再寫（2026-11-04）
+  onUnreadable?: () => void; // 打開 app 時存檔讀不出來、原本那份已另存（2026-11-04）
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
@@ -26,6 +28,8 @@ const RECENT_KEY = 'cn.recent'; // 這台手機最近開過的紙（id 陣列，
 const RECENT_KEEP = 20;
 const LAST_FREE_KEY = 'cn.lastFree'; // 最近看的那張沒釘選的（左右滑最左邊那頁，swipeSet）
 const CLOUD_OFF_KEY = 'cn.cloudOffSeen'; // 「iCloud 雲碟沒開」提示過了（只跳一次，S5）
+// 打開 app 時讀不出來的存檔，原封不動另存在這裡（2026-11-04 程式審查）：以前讀不出來就當成空的，接著第一次存檔就把唯一的一份蓋掉。只留最新的一份
+const RESCUE_KEY = 'colornotes.v1.unreadable';
 
 // S5 多米選「提示一次」：iCloud 不能用、過 10 秒再確認還是不能用，才跳一次「紙只存在這台手機」，之後永遠不再跳
 let offT: ReturnType<typeof setTimeout> | undefined;
@@ -47,7 +51,13 @@ async function writeNow() {
   try {
     stampMods(box.state, Date.now()); // iCloud 同步用：內容變了的紙記下改動時間（S0；畫面上的 updated 不動）
     if (!box.noSeat) fixOrder(box.state); // 目錄座位表（C1）：新的一張、別台來的補在最後，永久拿掉的紙座位丟掉
-    await AsyncStorage.setItem(KEY, JSON.stringify(box.state));
+    const json = JSON.stringify(box.state);
+    // 跟手機裡存的一字不差就不再寫（2026-11-04 效能）：每次切出 app、每次拉完 iCloud 都會叫到這裡，以前每次都整份重寫（上千行時幾百 KB）。
+    // 寫之前先記下（寫到一半又存一次、內容一樣就不用再排一次）；沒寫成就清掉，下次一定重寫
+    if (json !== box.written) {
+      box.written = json;
+      try { await AsyncStorage.setItem(KEY, json); } catch (e) { box.written = undefined; throw e; }
+    }
     box.saveFailed = false;
     pushWidget(box.state, box.last); // 存檔成功才推給桌面小工具（多米 2026-10-31）
     // 存檔成功才把改過的紙傳上 iCloud（S2）；進背景時不等，馬上傳
@@ -119,7 +129,15 @@ export const store = {
     const [raw, hint, last, lastFree, recent] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(HINT_KEY), AsyncStorage.getItem(LAST_KEY), AsyncStorage.getItem(LAST_FREE_KEY), AsyncStorage.getItem(RECENT_KEY)]);
     try { const r = JSON.parse(recent ?? '[]'); if (Array.isArray(r)) box.recent = r.filter((x: unknown) => typeof x === 'string').slice(0, RECENT_KEEP); } catch { /* 壞了就當沒記過 */ }
     if (box.loaded) return;
-    const state = parseState(raw);
+    const read = readState(raw);
+    // 有存檔卻讀不出來（JSON 壞掉、格式不認得）：原本那份先原封不動另存（RESCUE_KEY），接下來的存檔才不會把唯一的一份蓋掉
+    let rescued = false;
+    if (raw !== null && !read) {
+      try { await AsyncStorage.setItem(RESCUE_KEY, raw); rescued = true; } catch (e) { console.warn('讀不出來的存檔另存失敗：', e); }
+      if (box.loaded) return;
+    }
+    const state = read ?? emptyState();
+    box.written = read ? raw! : undefined; // 讀得出來的那份就是手機裡現在存的；整理過（補欄位、轉座位表）第一次存檔就會不一樣、照寫
     // C1 第一次轉成座位表（🔴 動真資料）：先把整份原始存檔原封不動另存一份，只存一次（已經有就不蓋）；另存失敗這次就不轉
     const convert = raw !== null && !Array.isArray(state.order);
     if (convert) {
@@ -150,6 +168,7 @@ export const store = {
     box.version++;
     emit();
     if (first || packed || (convert && !box.noSeat)) writeNow(); // 轉好的座位表馬上存，不等第一次改字
+    if (rescued) box.onUnreadable?.();
     store.purgeTrash();
     store.pullCloud();
   },
@@ -187,6 +206,9 @@ export const store = {
       }
       if (r.changed || moved) { box.version++; emit(); }
       await writeNow();
+    } catch (e) {
+      // 以前沒人接：合併爆掉就變成沒人處理的錯誤（2026-11-04 程式審查）。這次先不合，下次回到 app 再拉
+      console.warn('iCloud 合併失敗（下次再試）：', e);
     } finally {
       box.pulling = false;
       cloudPulled();
@@ -201,6 +223,7 @@ export const store = {
     store.pullCloud();
   },
   onNewCloud(fn: (adopt: () => void, decline: () => void) => void) { box.onNewCloud = fn; },
+  onUnreadable(fn: () => void) { box.onUnreadable = fn; },
   onCloudOff(fn: () => void) { box.onCloudOff = fn; },
   // 這行的字被同步改過幾次：畫面加進輸入框的 key，字被換掉時重掛才看得到新字
   syncRev(id: string) { return box.synced?.[id] ?? 0; },

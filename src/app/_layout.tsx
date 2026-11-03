@@ -18,6 +18,8 @@ store.onNewCloud((adopt, decline) => ui.ask(
   '紙都還在這台手機上。可能換了 Apple ID，或「檔案」裡的茄記資料夾被刪掉了。要把這台的紙放進現在這個 iCloud 嗎？選「先不要」的話，這次只存在手機上，下次打開會再問',
   { label: '放進去', fn: adopt }, '先不要', decline));
 store.onCloudOff(() => ui.toast('iCloud 雲碟沒開，紙只存在這台手機'));
+// 打開 app 時存檔讀不出來（2026-11-04 程式審查）：原本那份已經另存（store 的 RESCUE_KEY），先講沒有損失，再講紙會從哪裡回來
+store.onUnreadable(() => ui.alert('手機裡原本的紙讀不出來', '原本那份已經另存起來，沒有被蓋掉。開著 iCloud 的話，紙會從 iCloud 回來'));
 
 const ios = Platform.OS === 'ios';
 // iOS 26 起標題列是玻璃材質，自己加模糊反而會蓋掉；舊版 iOS 才補上系統模糊
@@ -33,7 +35,15 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   const c = useColors();
   const [ready, setReady] = useState(store.loaded);
-  useEffect(() => { store.load().then(() => setReady(true)); }, []);
+  useEffect(() => {
+    store.load().then(() => setReady(true), e => {
+      // 讀手機裡的資料失敗（很少見）：以前啟動畫面永遠收不掉、什麼都不講（2026-11-04 程式審查）。收起來說一聲；
+      // 紙先不畫：沒讀完就不准存檔（store），讓人在這時候記東西會存不進去
+      console.warn('讀存檔失敗：', e);
+      SplashScreen.hide();
+      ui.alert('讀不到手機裡的紙', '紙沒有被動到。把茄記從多工畫面滑掉，再打開一次');
+    });
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.page }}>

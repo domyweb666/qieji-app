@@ -6,7 +6,7 @@
 import { requireOptionalNativeModule } from 'expo';
 import { BlurView } from 'expo-blur';
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useSyncExternalStore, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, StyleSheet, View, type ColorValue, type StyleProp, type ViewStyle } from 'react-native';
 import { T, useColors } from '../lib/tokens';
 
@@ -16,17 +16,20 @@ const HAS_GLASS_MOD = IOS && !!requireOptionalNativeModule('ExpoGlassEffect');
 // 有些 iOS 26 測試版沒有液態玻璃的 API、硬畫會閃退（官方文件），兩個都要問過
 const HAS_GLASS = HAS_GLASS_MOD && (() => { try { return isGlassEffectAPIAvailable() && isLiquidGlassAvailable(); } catch { return false; } })();
 
-// 系統設定「減少透明度」（輔助使用 → 顯示與文字大小）：開著就不霧化、不玻璃，改用不透明的底（HIG：Materials）
+// 系統設定「減少透明度」（輔助使用 → 顯示與文字大小）：開著就不霧化、不玻璃，改用不透明的底（HIG：Materials）。
+// 整個 app 只問一次、只聽一次（2026-11-04 程式審查）：以前每個浮層掛上時才各自去問，問到之前一律當成沒開——
+// 開著這個設定的人，每次打開選單、跳提示條、右下 ＋ 回來，都會先閃一下玻璃再變不透明。app 一啟動就問，紙畫出來之前就知道了
+let reduceOn = false;
+const reduceSubs = new Set<() => void>();
+const setReduce = (v: boolean) => { if (v === reduceOn) return; reduceOn = v; reduceSubs.forEach(f => f()); };
+if (IOS) { // 只有 iOS 有這個設定（網頁預覽沒有這個方法）
+  AccessibilityInfo.isReduceTransparencyEnabled().then(setReduce, e => console.warn('讀不到「減少透明度」設定：', e));
+  AccessibilityInfo.addEventListener('reduceTransparencyChanged', setReduce);
+}
+const subscribeReduce = (f: () => void) => { reduceSubs.add(f); return () => { reduceSubs.delete(f); }; };
+const getReduce = () => reduceOn;
 export function useReduceTransparency() {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    if (!IOS) return; // 只有 iOS 有這個設定（網頁預覽沒有這個方法）
-    let live = true;
-    AccessibilityInfo.isReduceTransparencyEnabled().then(v => { if (live) setOn(v); }).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOn);
-    return () => { live = false; sub.remove(); };
-  }, []);
-  return on;
+  return useSyncExternalStore(subscribeReduce, getReduce, getReduce);
 }
 
 export type Surface = 'glass' | 'blur' | 'solid';

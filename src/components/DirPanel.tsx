@@ -19,7 +19,7 @@ import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  FlatList, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance,
 } from 'react-native';
 import { GestureDetector, useExclusiveGestures, useLongPressGesture, usePanGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
@@ -30,7 +30,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
-  col, dropNotes, FULL_MSG, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
+  col, dropNotes, FULL_MSG, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, PIN_MAX, pinnedNotes, placeInFolder,
   placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, setGlyph, glyphOf, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
@@ -613,13 +613,18 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   // 刪除：跟紙的 ⋯「刪除這張」同一套（進最近刪除、30 天、空白的直接拿掉），toast 復原。刪的是現在這張，紙自己換到最近改過的。
   // 2026-11-03 多米：刪掉的那格留空位、別張不往前補；復原時站回那格（leaveHole、fillHole）
   function del(n: Note) {
+    const wasPinned = n.pinned; // 復原時釘回去（2026-11-04 程式審查，同紙的 ⋯「刪除這張」）
     markDeleted(n, Date.now()); n.pinned = false;
     leaveHole(store.s, n.id, Date.now());
     n.items = n.items.filter(i => i.t.trim());
     const empty = isEmpty(n);
     if (empty) dropNotes(store.s, x => x === n, Date.now());
     store.change();
-    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => { markRestored(n); fillHole(store.s, n.id, Date.now()); store.change(); } });
+    if (!empty) ui.toast('已移到最近刪除', { label: '復原', fn: () => {
+      markRestored(n);
+      if (wasPinned && pinnedNotes(store.s).length < PIN_MAX) n.pinned = true;
+      fillHole(store.s, n.id, Date.now()); store.change();
+    } });
   }
   // 抖動中點紙磚左上角的「−」（照 iOS 主畫面移除 App，多米 2026-11-02 選跳確認框）：按「刪除」才刪，刪法跟長按選單的刪除一樣（進最近刪除、toast 復原）
   function askDel(n: Note) {
@@ -988,12 +993,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       )}
 
       {searching && !moving ? (
-        // 搜尋筆記（多米 2026-11-03）：直接列出符合的那幾行，上面標是哪一張；點一行＝換到那張、捲到那行亮一下，點清單名＝打開那張
-        <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
-          {searchLines(s, q).map(h => <HitGroup key={h.note.id} h={h} q={q.trim()}
-            onNote={() => pick(h.note)} onLine={id => { if (id) store.openAt(h.note.id, id); else store.open(h.note.id); dirPanel.close(); }} />)}
-          {notes.length === 0 && <Empty lines={[`找不到含「${q.trim()}」的筆記`]} />}
-        </ScrollView>
+        // 搜尋筆記（多米 2026-11-03）：直接列出符合的那幾行，上面標是哪一張；點一行＝換到那張、捲到那行亮一下，點清單名＝打開那張。
+        // 只畫看得到附近的列（2026-11-04 效能，程式審查量過：1000 行的紙搜「測」一次畫出近千列，網頁上每打一個字卡 100～270 毫秒）；結果一列都沒少
+        <FlatList style={{ flex: 1 }} data={hitRows(searchLines(s, q))} keyExtractor={r => r.key}
+          keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}
+          initialNumToRender={HIT_FIRST} windowSize={HIT_WINDOW}
+          renderItem={({ item: r }) => <HitRowView r={r} q={q.trim()}
+            onNote={() => pick(r.h.note)} onLine={id => { if (id) store.openAt(r.h.note.id, id); else store.open(r.h.note.id); dirPanel.close(); }} />}
+          ListEmptyComponent={<Empty lines={[`找不到含「${q.trim()}」的筆記`]} />} />
       ) : searching ? (
         // 搬行模式的搜尋：找要搬到哪一張，照舊列磚，所有頁的紙一起找、上下捲，不分頁（不能拖：搜到的只是一部分）
         <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
@@ -1431,34 +1438,50 @@ function Marked({ t, q, style, lines }: { t: string; q: string; style: object; l
     </Text>
   );
 }
-function HitGroup({ h, q, onNote, onLine }: { h: LineHit; q: string; onNote: () => void; onLine: (id: string) => void }) {
+// 搜尋結果攤平成一列一列給 FlatList（2026-11-04 效能）：每張一列標題、接著它符合的每一行。
+// 以前一張是一整塊（上下內距、底下一條線包著）；攤平之後內距與線分給那張的第一列、最後一列，看起來跟以前一樣
+const HIT_FIRST = 20, HIT_WINDOW = 5; // 一開始先畫幾列；畫面上下各多留幾個螢幕高（FlatList 預設 21 個螢幕，上千列時打一個字還是要重畫幾百列）
+type HitRow = { key: string; h: LineHit; line?: LineHit['lines'][number]; first: boolean; last: boolean };
+function hitRows(hits: LineHit[]): HitRow[] {
+  const out: HitRow[] = [];
+  for (const h of hits) {
+    out.push({ key: h.note.id, h, first: true, last: !h.lines.length });
+    h.lines.forEach((l, i) => out.push({ key: `${h.note.id}/${l.id || i}`, h, line: l, first: false, last: i === h.lines.length - 1 }));
+  }
+  return out;
+}
+function HitRowView({ r, q, onNote, onLine }: { r: HitRow; q: string; onNote: () => void; onLine: (id: string) => void }) {
   const c = useColors();
-  const nc = useNoteColors(h.note.color);
+  const nc = useNoteColors(r.h.note.color);
+  const { h, line: l } = r;
   return (
-    <View style={[st.hitGroup, { borderBottomColor: c.separator }]}>
-      <Pressable onPress={onNote} accessibilityRole="button" accessibilityLabel={`打開「${label(h.note)}」`}
-        style={({ pressed }) => [st.hitHead, pressed && { opacity: T.motion.pressDim }]}>
-        <View style={[st.dot, { backgroundColor: nc.hd }]} />
-        {h.title ? <Marked t={label(h.note)} q={q} style={[st.hitTitle, { color: c.textSecondary }]} lines={1} />
-          : <Text style={[st.hitTitle, { color: c.textSecondary }]} numberOfLines={1}>{label(h.note)}</Text>}
-      </Pressable>
-      {h.lines.map((l, i) => (
-        <Pressable key={l.id || i} onPress={() => onLine(l.id)} accessibilityRole="button" accessibilityLabel={`${l.t}，在「${label(h.note)}」`}
+    <View style={[r.first && st.hitFirst, r.last && [st.hitLast, { borderBottomColor: c.separator }]]}>
+      {l ? (
+        <Pressable onPress={() => onLine(l.id)} accessibilityRole="button" accessibilityLabel={`${l.t}，在「${label(h.note)}」`}
           style={({ pressed }) => [st.hitLine, pressed && { backgroundColor: c.pressedFill }]}>
           <Marked t={l.t} q={q} lines={2} style={[st.hitText, { color: l.done ? c.textStrike : c.textPrimary }, l.done && st.hitDone]} />
         </Pressable>
-      ))}
+      ) : (
+        <Pressable onPress={onNote} accessibilityRole="button" accessibilityLabel={`打開「${label(h.note)}」`}
+          style={({ pressed }) => [st.hitHead, pressed && { opacity: T.motion.pressDim }]}>
+          <View style={[st.dot, { backgroundColor: nc.hd }]} />
+          {h.title ? <Marked t={label(h.note)} q={q} style={[st.hitTitle, { color: c.textSecondary }]} lines={1} />
+            : <Text style={[st.hitTitle, { color: c.textSecondary }]} numberOfLines={1}>{label(h.note)}</Text>}
+        </Pressable>
+      )}
     </View>
   );
 }
 
-// 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名
+// 打開的資料夾上面的名字：點了就能打，打一個字存一次（框收起時輸入框直接拿掉，等不到 blur）；清空不存，收鍵盤時變回原名。
+// 打字只存檔、不重畫（2026-11-04 效能，跟紙上打字同一個做法）：以前每打一個字整個 app 重畫一次，目錄裡每塊磚的手勢都重設一遍。
+// 框裡的字自己顯示；後面目錄那塊磚上的名字，框收起時目錄重畫就換成新的
 function FolderName({ f, focus, inset }: { f: Folder; focus: boolean; inset: number }) {
   const c = useColors();
   const [draft, setDraft] = useState(f.name);
   return (
     <TextInput value={draft} autoFocus={focus} selectTextOnFocus={focus} returnKeyType="done" accessibilityLabel="資料夾名字"
-      onChangeText={v => { setDraft(v); if (renameFolder(store.s, f.id, v, Date.now())) store.change(); }}
+      onChangeText={v => { setDraft(v); if (renameFolder(store.s, f.id, v, Date.now())) store.save(); }}
       onBlur={() => { if (!draft.trim()) setDraft(f.name); }}
       style={[st.folderName, { color: c.textPrimary, width: '100%', paddingLeft: inset, paddingRight: inset }]} />
   );
@@ -1482,7 +1505,9 @@ const st = StyleSheet.create({
   page: { paddingHorizontal: T.space.l, paddingTop: T.space.s },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: T.space.s, paddingVertical: T.space.s },
   dot: { width: T.shape.pageDot, height: T.shape.pageDot, borderRadius: T.shape.pill(T.shape.pageDot) },
-  hitGroup: { paddingVertical: T.space.s, borderBottomWidth: StyleSheet.hairlineWidth },
+  // 一張的第一列、最後一列（攤平之前是包住整張的那塊：上下內距 s、底下一條線）
+  hitFirst: { paddingTop: T.space.s },
+  hitLast: { paddingBottom: T.space.s, borderBottomWidth: StyleSheet.hairlineWidth },
   hitHead: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin },
   hitTitle: { ...T.font.callout, fontWeight: T.font.semibold, flex: 1 },
   hitLine: { justifyContent: 'center', minHeight: T.shape.hitMin, paddingVertical: T.space.s, paddingHorizontal: T.space.m, borderRadius: T.shape.radiusMd },
