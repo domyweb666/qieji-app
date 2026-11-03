@@ -30,8 +30,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
-  col, dropNotes, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
-  placeTop, renameFolder, reseat, searchLines, seatNew, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
+  col, dropNotes, FULL_MSG, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, placeInFolder,
+  placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -567,6 +567,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   function pick(n: Note, x?: number, y?: number, w?: number) {
     if (from && moving) {
       const name = label(n);
+      if (n !== from && !roomOf(n)) { ui.toast(FULL_MSG); return; } // 那張滿了：不搬，目錄留著讓你挑別張
       if (moveItem(from, n, moving.id)) { n.updated = from.updated = Date.now(); store.change(); ui.toast(`已搬到「${name}」`); }
       dirPanel.close();
       return;

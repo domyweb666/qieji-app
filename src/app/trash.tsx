@@ -6,7 +6,7 @@ import { Empty } from '../components/Empty';
 import { ListGroup, ListRow, listStyles, NoteSections } from '../components/NoteList';
 import { ui } from '../components/Overlay';
 import { GlassBtn, WebTop } from '../components/WebBars';
-import { dropNotes, fillHole, label, markRestored, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
+import { dropNotes, FULL_MSG, fillHole, label, markRestored, roomOf, TRASH_DAYS, unbinItem, visibleNotes, type Item, type Note } from '../lib/model';
 import { store, useStore } from '../lib/store';
 import { noteColors, T, useColors } from '../lib/tokens';
 
@@ -29,7 +29,7 @@ export default function Trash() {
   }
   function onPressLine(n: Note, it: Item) {
     ui.sheet([
-      { label: `還原到「${label(n)}」`, fn: () => { unbinItem(n, it.id); n.updated = Date.now(); store.change(); ui.toast('已還原'); } },
+      { label: `還原到「${label(n)}」`, fn: () => { if (!roomOf(n)) { ui.toast(FULL_MSG); return; } unbinItem(n, it.id); n.updated = Date.now(); store.change(); ui.toast('已還原'); } },
       { label: '永久刪除', danger: true, fn: () => { n.bin = n.bin.filter(x => x !== it); store.change(); } },
     ], it.t.trim() || undefined);
   }

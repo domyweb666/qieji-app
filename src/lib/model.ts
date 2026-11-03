@@ -631,6 +631,13 @@ export function convertNote(n: Note) {
   }
 }
 
+/* ---------------- 一張紙最多幾行（2026-11-03 多米：每張清單上限一千筆） ---------------- */
+// 記一行、Return 開新行、貼上拆行、搬行進來、從最近刪除救回來都先看這裡；滿了就擋下、跳提示。
+// 不擋的兩個：iCloud 同步進來的（擋了會丟掉別台寫的字）、收起輸入框時打到一半的字（2-8：字不能丟），這兩個可能暫時超過一點
+export const LINE_MAX = 1000;
+export const FULL_MSG = `這張已經滿 ${LINE_MAX} 行，開一張新的吧`;
+export const roomOf = (n: Note) => Math.max(0, LINE_MAX - n.items.length);
+
 /* ---------------- 刪掉的行：進這張紙的 bin（最近刪除），不是直接消失 ---------------- */
 // 回傳被移走的那行；找不到回 undefined
 export function binItem(n: Note, id: string, now: number): Item | undefined {

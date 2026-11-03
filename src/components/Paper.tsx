@@ -23,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { ago, binItem, caretAt, convertNote, dropNotes, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, plain, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, plain, roomOf, splitPasted, swipeSet, uid, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
@@ -148,6 +148,7 @@ export function Paper({ n }: { n: Note }) {
     touch();
     ui.toast('已移到最近刪除', { label: '復原', fn: () => {
       if (!mounted.current || closed.current) return;
+      if (!roomOf(n)) { ui.toast(FULL_MSG); return; }
       unbinItem(n, id, idx); // 放回原來的位置
       touch();
     } });
@@ -202,7 +203,7 @@ export function Paper({ n }: { n: Note }) {
     requestAnimationFrame(() => placeCaret(inp, at)); // iOS 對焦後會把游標放到最後，下一格再放回去（行首 Backspace 併行要停在接點）
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
-  function addLine() { if (composing) return; haptic('add'); fixRef.current = null; setFixId(null); openComposer(); }
+  function addLine() { if (composing) return; if (!roomOf(n)) { ui.toast(FULL_MSG); return; } haptic('add'); fixRef.current = null; setFixId(null); openComposer(); }
   function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
   // 改一行（系統清單版）：框裡先放那行的字；Return 或 ✓ 改好收起；清空了＝刪掉那行（進最近刪除，有復原）
   function fixLine(id: string) {
@@ -262,6 +263,7 @@ export function Paper({ n }: { n: Note }) {
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
   function sendDraft() {
     if (fixRef.current) { applyFix(); setComposing(false); return false; }
+    if (!roomOf(n)) { ui.toast(FULL_MSG); return false; } // 滿了：字留在輸入框裡，不送出、不清空
     const t = takeDraft();
     if (!t) { closeComposer(); return false; }
     addFromDraft(t);
@@ -383,7 +385,11 @@ export function Paper({ n }: { n: Note }) {
       if (parts.length > 1) {
         it.t = parts[0];
         revs.current[id] = (revs.current[id] ?? 0) + 1; // 原行被程式改字，輸入框要重掛
-        const rest: Item[] = parts.slice(1).map(t => ({ id: uid(), t, done: false, b: false }));
+        // 一張最多 LINE_MAX 行：貼到滿為止，多的不貼、說還有幾行沒貼進去（滿了的話只留第一段在原行）
+        const room = roomOf(n), cut = parts.length - 1 - room;
+        if (cut > 0) ui.toast(`${FULL_MSG}（還有 ${cut} 行沒貼進去）`);
+        const rest: Item[] = parts.slice(1, 1 + room).map(t => ({ id: uid(), t, done: false, b: false }));
+        if (!rest.length) { touch(); return; }
         n.items.splice(idx + 1, 0, ...rest);
         touch();
         const last = rest[rest.length - 1];
@@ -401,6 +407,7 @@ export function Paper({ n }: { n: Note }) {
     if (idx < 0) return;
     const it = n.items[idx];
     if (!it.t.trim()) { Keyboard.dismiss(); return; }
+    if (!roomOf(n)) { ui.toast(FULL_MSG); return; }
     const at = Math.max(0, Math.min(caret, it.t.length));
     const after = it.t.slice(at);
     if (after) { it.t = it.t.slice(0, at); revs.current[id] = (revs.current[id] ?? 0) + 1; }
