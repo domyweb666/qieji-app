@@ -1,55 +1,66 @@
-# Handoff: 11/04 手感改版——準則寫進規矩檔、切換清單、清單引擎重寫、改磚上的字；拖把手在 iPhone 一拿起就被取消，根因已從真機訊息推出、修法已放，還沒驗
+# Handoff: 11/04 雲端 iOS 模擬器跑起來了（Limrun）：拖把手修法模擬器驗過，抓到並修掉目錄拖磚不跟手；全部還沒真機，H1～H11 照舊待驗
 
-> 產出時間：2026-11-04 10:11（電腦時鐘，+08:00）
+> 產出時間：2026-11-04 11:47（電腦時鐘，+08:00）
 > 專案：`E:\茄記\qieji-app`（Expo SDK 58／RN 0.88，iOS app；多米沒有 Mac、不太看程式、用開發版＋tunnel 真機測）
 > 分支：`perf/feel-engine`（從 master 切出，**沒有合併、沒有推上去**；合併要問多米）
-> 上一版交接：`.vibe/handoff/archive/2026-11-04-0820.md`，那份第 🚧 2～8 點（F2、D1 等提案題目、README 截圖、送審卡住的事）**都還成立**，這份不重抄
+> 寫這份的是雲端模擬器那個側邊會話；主會話是 `local_276594f2-536c-499e-b079-8707829e82b2`。主會話如果之後也寫過交接，以 `git log` 新的為準
+> 上一版交接：`.vibe/handoff/archive/2026-11-04-1011.md`（手感改版做了什麼、`Paper.tsx` 架構）。`2026-11-04-0820.md` 第 🚧 2～8 點（F2、D1 等提案題目、README 截圖、送審卡住的事）**都還成立**，這份不重抄
 
 ## ✅ 這次完成了什麼
-- 規矩檔加「手感是最高標準」七條（多米：「我的唯一標準就是極致的手感體驗」），記憶也存了
-- 切換清單：點了紙馬上換、面板同時讓開（以前等面板收完約半秒才換）；收起中清單不重排；往下撥收起不先跳回去；換紙時底下墊上一張的顏色；卸載有改才重畫；小工具晚 0.8 秒才推；⋯ 系統選單晚一格才掛
-- 清單引擎重寫（`Paper.tsx` 的 `LineList`、`Rows`、`Row`、`SwipeUnder`，`lib/rows.ts` 位置表）：只掛畫面附近的行、一行只畫字和六個點、輸入框只有正在打的行才有、點／長按／左右滑／拖把手整張共用一組手勢、位置全在 UI 執行緒
-- 改磚上的字：自己畫的卡片，超過一個字按「好」留在當頁（紅字、紅框、晃一下、震動、字還在）；emoji 看起來一個就算一個（`model.ts graphemes`）
-- 捲到底刪一行整頁跳：捲動位置跟其他行同一個時鐘退回去，撐高的那塊等滑完才收（多米回報「下方的筆記刪除會跳一下」；原因是推斷的，網頁逐格驗過）
-- 寫了診斷、標準、代決、待驗：`.vibe/送審前總驗.md` 最上面 H1～H11
-- 測試 125+ → 150 條全過，tsc、lint、check-tokens 過
+- 評估雲端模擬器四條路（Expo、GitHub Actions、租 Mac、Limrun），多米選 Limrun。帳號已註冊，`lim` 已登入，金鑰在 `~/.lim/config.yaml`
+- 茄記開發版跑上雲端 iPhone 模擬器（iOS 26）：EAS 建一份模擬器版（本月 4／15），JS 從本機 Metro 經 tunnel 連過去，原始碼沒上傳給 Limrun
+- 拖把手考題：`2e3ebc5` 3 次都不動（紅）；`7ccedc3` 3 次都換順序（綠，`[dbg]` `ended 4 1 0`）。仿 Maestro 的快拖也是壞版紅、修好的綠
+- 模擬器上過的：右滑劃掉、左滑刪除＋提示條、復原回原位、按住一行跳選單、點一行打字（游標落在點的位置）、開新的一張、關掉重開順序和字都在。H5 前後截圖差 0.00 點，H6 逐格 49 格鍵盤都在，放手時其他行不動（錄影約 30 格／秒）
+- 抓到並修掉目錄跳出選單後接著拖磚不跟手（`1058605`，只動 `DirPanel.tsx`）：選單開關時切換 `zIndex`，關選單那一刻目錄被拆下來重裝，手勢被取消。修前 `canceled=true dx=22`，修後 `canceled=false dx=184`。選單暗幕、點把手、往下撥、疊成資料夾、資料夾開著點把手都回頭驗過；tsc、lint、150 條測試、裸數字檢查都過
+- 坑寫進 `.vibe/規矩檔.md`（拖把手那條也算進去了），`.vibe/送審前總驗.md` 第 19 條註明修過，`.vibe/代決清單.md` 記 VoiceOver 念的順序變了，`.vibe/切片帳本.md`「進行中」加一行
 
 ## 🚧 還沒做完 / 待決定
-1. **拖把手還沒驗（最優先）**。真機訊息（終端機 `[dbg]`）是 `grip begin → grip activate → began → grip finalize → ended 3 3 0`：手勢有接到手指、也查對行，但一啟動就被取消（幾乎每次 from＝to）。
-   **推斷的根因**：`began` 裡 `setHeldId` 讓那行拿到 `zIndex: 5`，Fabric 換順序時把排在它後面的兄弟 Remove＋Insert；把手的偵測元件當時是兄弟，被拆下來時 `RNGestureHandlerDetector willMoveToWindow:nil` → `detachAllHandlers`，手勢就取消。網頁的 zIndex 是 CSS，不會拆，所以網頁一直正常。舊版把手在被拖那一行裡面，那行本身不會被移動，所以沒事。
-   **已放的修法**：`Rows` 把所有行包進自己一層 `<View collapsable={false}>`，換順序只動這層裡面。**還沒真機驗，根因也還沒被證實。**
-2. **`Paper.tsx` 有 6 處暫時的 `[dbg]` 訊息**（`grep -n "\[dbg\]"`），拖把手驗過就要拿掉再提交
-3. **H1～H11 只有零星回報**：多米說過「上方的行刪除很順」「切換清單沒再抱怨」；其他都還沒回。最想知道：H3 放手不閃、H5 點一行字不跳（`T.font.lineInputDrop` 2.86 是讀 RN 原始碼算的）、H6 換點別行鍵盤不收
-4. 真機數字（開發版）：打開千行紙 496 → 129 毫秒；掉格多半 1～2 格、最長 26～44 毫秒（資料少，操作也不完全一樣，等多米多玩再比一次）
-5. **別的會話**：[查雲端 iOS 模擬器自動測手勢](#local_ddbbe202-eb51-41d6-8aca-eb23c5d3e08d)（`local_ddbbe202-eb51-41d6-8aca-eb23c5d3e08d`）在同一個資料夾跑，只寫 `.vibe/待審-雲端模擬器自動測.md`，不改程式。它的檔案不要一起提交，也不要動。報告出來要問多米怎麼決定
-6. 手感真的都過了才走：合併 `perf/feel-engine` 回 master（問多米）→ 總驗第一到八節 → 送審那一串
+1. **真機還沒驗（最優先）**：拖把手（總驗 H3）、目錄跳出選單後接著拖（總驗第 19 條後半）。模擬器綠不等於 iPhone 沒問題，真手指和手感只有多米驗得到
+2. **`Paper.tsx` 還有 6 處暫時的 `[dbg]`**（`grep -n "\[dbg\]" src/components/Paper.tsx`），拖把手真機驗過就拿掉再提交
+3. **H1～H11 只有零星回報**：多米說過「上方的行刪除很順」「切換清單沒再抱怨」，其他都還沒回。最想知道：H3 放手不閃、H5 點一行字不跳、H6 換點別行鍵盤不收（這三條模擬器上都過，手感要真機）
+4. **模擬器順手看到、還沒處理**（細節在報告附錄）：
+   - 把手的 `dragActivate: 1` 在 iOS 沒生效：手指走約 13 點才啟動，之後行跟手指一直差約 10 點，像是系統 pan 的起動距離。可能影響跟手感，要不要處理還沒問多米
+   - 拖磚時終端機一直跳 `(ADVICE) View #… has a shadow set but cannot calculate shadow efficiently`，可能影響手感
+   - 復原那行回來時 `[Reanimated] Property "opacity" ... may be overwritten by a layout animation`
+5. **⋯ 選單沒測到**：開發版的齒輪浮鈕蓋在 ⋯ 和 ✓ 上。下次先在開發選單關 Tools button，或改跑 Release
+6. **Limrun 點數**：茄記用了約 43 點，120 點還剩不到 77 點。整個帳號共用，11:46 時 `nienie-slime`、`doujian` 兩台模擬器還開著（別的會話開的，我沒動），每分鐘合扣 4 點，可能很快用完。用完要多米決定：每月 20 美金（500 點）、開超額每分鐘 0.12 美金（要綁卡），或改走報告裡的 GitHub／Expo 備案。目前沒綁卡
+7. **測試腳本和模擬器建置設定還沒進 repo**：腳本在下面「檔案」那個筆記資料夾，`sim-dev` 設定只在暫存副本，內容寫在報告附錄。要不要收進專案還沒問多米。筆記資料夾是 app 的暫存位置，不保證久留
+8. **`expo-doctor` 報 8 個套件小版本落後**：規矩是建置前要 `--fix`，這次為了跟手機開發版同版本刻意沒修。下次重建開發版前要處理，模擬器版也要跟著重建
+9. **暫存副本還在**：`git worktree list` 會看到 scratchpad 下的 `wt`（`7ccedc3`，不用了）。那是專案外路徑，刪之前要問多米；刪完 `git worktree prune`
+10. 手感真的都過了才走：合併 `perf/feel-engine` 回 master（問多米）→ 總驗第一到八節 → 送審那一串
 
-## 📌 關鍵決策（這次定下來的，別再爭論）
-- 手感 > 功能多寡 > 程式好不好寫；擋到手感的定案可以推翻（`.vibe/規矩檔.md`、記憶 `feedback_feel_is_top_standard`）
-- 不再在舊架構上補，清單引擎就是這套：**行的位置只有一套（UI 執行緒的 `pos`＋位移）**，React 順序不決定畫面位置
+## 📌 關鍵決策（定下來的，別再爭論）
+- 雲端模擬器用 Limrun（多米 2026-11-04「改用 Limrun 試」）。理由：能自己排按下、等待、移動、放開，AI 能直接讀畫面和記錄，幾分鐘有結果。Expo Starter＋Maestro、租 Mac 不走，GitHub Actions 和 Expo 當備案
+- 不用 `lim run`（會寫 skill 進專案、上傳原始碼、馬上扣點），不用 `lim xcode build`：模擬器版用 EAS 建，JS 走本機 Metro
+- 碰手勢的改動先上雲端模擬器驗，再交多米真機。手感好不好還是只有多米真機說了算（規矩檔手感第 7 條不變）
+- 手勢進行中會變的狀態，不准拿來切換 `zIndex`（`.vibe/規矩檔.md` 踩過的坑）
+- 手感 > 功能多寡 > 程式好不好寫；擋到手感的定案可以推翻
+- 清單引擎就是這套：行的位置只有一套（UI 執行緒的 `pos`＋位移），React 順序不決定畫面位置
 - 結果當下發生，動畫只是過場：動畫完成的回呼不准放使用者要的結果
-- 改磚上的字按「好」才檢查：注音組字中字數會暫時變多，邊打邊檢查會一直跳紅字
-- 其他 AI 自己定的（格線跟著行走、目錄和切換清單同時動、搜尋很遠直接跳、選單刪除先淡出）在 `.vibe/代決清單.md`
 
 ## 📂 下個會話最重要的檔案
 - `.vibe/安全標準.md` ← **下一個會話必讀**（加網路、存新資料、加權限、加套件時先自查）
-- `src/components/Paper.tsx`：`LineList`（手勢、`publish`）、`Rows`（位置表、掛哪幾行、撐高）、`Row`（`place` 動畫樣式）
-- `src/lib/rows.ts`、`tests/rows.test.mjs`
-- `.vibe/手感診斷-2026-11-04.md`：為什麼這樣改、驗到哪裡、下一層要重建的選項
-- `.vibe/送審前總驗.md` 最上面 H1～H11：真機要測的
-- `.vibe/網頁測試小工具.md`：窗格隱藏時怎麼在網頁測手勢（會省很多時間）
-- `node_modules/react-native-gesture-handler/apple/RNGestureHandlerDetector.mm`、`shared/shadowNodes/.../RNGestureHandlerDetectorShadowNode.cpp`：偵測元件怎麼掛手勢、怎麼排版
+- `.vibe/待審-雲端模擬器自動測.md`：試驗結果、費用；附錄有重跑做法和踩到的坑
+- `C:\Users\fcharlie\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_276594f2-536c-499e-b079-8707829e82b2\limrun-e2e\`：測試腳本（`sdk.mjs`、`exam.mjs`、`tile-final.mjs` 等）、`patch-dbg.mjs`、`evidence/`
+- `.vibe/送審前總驗.md`：最上面 H1～H11、第 19 條
+- `src/components/DirPanel.tsx`（`DirPanelHost` 的順序、`useDragPan`）、`src/components/Paper.tsx`（`LineList`、`Rows`、`Row`）
+- `.vibe/手感診斷-2026-11-04.md`、`.vibe/網頁測試小工具.md`
 
 ## ⏭️ 下一步從哪繼續
-1. **確認 tunnel 還在**：這個會話開在終端機分頁，舊會話關掉可能跟著斷。用 run_in_terminal 在 `E:\茄記\qieji-app` 跑 `npx expo start --tunnel`（確認 8081 沒被占；tunnel 網址會變，手機要重掃 QR）。
-2. **請多米把茄記從多工畫面滑掉再開，按住右邊六個點上下拖一次**，然後用 read_terminal 讀 `[dbg]`：
-   - **修好的樣子**：`began` 之後要等手放開才有 `grip finalize`，`ended` 的 from、to 會不一樣，順序真的換了
-   - **修好了**：拿掉 6 處 `[dbg]`，跑 `npm test`、`npm run typecheck`、`npm run lint`、`npm run check:tokens`；把這個坑寫進 `.vibe/規矩檔.md`「踩過的坑」（zIndex 變了會把後面的兄弟拆下來重裝，RNGH 偵測元件被拆手勢就取消；網頁測不出來）；提交；請多米走 H1～H11
-   - **還是一 began 就 finalize**：根因猜錯。下一個嫌疑是 `began` 裡同一輪的 `setDragging(true)`（`scrollEnabled` 變了）和 `setHeldId` 造成的重畫。逐一暫時拿掉（先不設 `held`、再不設 `scrollEnabled`）看 `[dbg]` 哪一個讓 finalize 不再馬上來，不要憑感覺改
-3. 多米回 H 幾有怪就修；動手感先讀 `[perf]`，改完貼前後對照。覺得還是卡，先用 `npx expo start --tunnel --no-dev --minify` 看正式版的 JS 再判斷（這個模式終端機看不到 `[perf]`）
+1. **先問多米真機測了沒**：H3 拖把手、總驗第 19 條後半。還沒測就請多米把茄記從多工畫面滑掉再開（只改 JS，不用重建）。先確認 8081 上的 tunnel 還在；不在就用 run_in_terminal 在 `E:\茄記\qieji-app` 跑 `npx expo start --tunnel`，tunnel 網址會變，手機要重掃 QR
+2. **拖把手真機**，用 read_terminal 讀 `[dbg]`：
+   - 修好的樣子：`began` 之後等手放開才有 `grip finalize`，`ended` 的 from、to 不一樣
+   - 修好了：拿掉 6 處 `[dbg]`，跑 `npm test`、`npm run typecheck`、`npm run lint`、`npm run check:tokens`，提交（坑已經寫了，不用再寫），請多米走 H1～H11
+   - 還是一 `began` 就 `finalize`：模擬器綠、真機紅，差別在真手指。下一個嫌疑是 `began` 裡同一輪的 `setDragging(true)`（`scrollEnabled` 變了）。逐一暫時拿掉看 `[dbg]`，不要憑感覺改
+3. **第 19 條還是不跟手**：用 `limrun-e2e/patch-dbg.mjs` 加記錄看 `deactivate canceled`，模擬器修後是 `canceled=false`
+4. **之後動到手勢**：照報告附錄先跑模擬器。開之前先 `lim ios list` 看有沒有別的專案開著、點數夠不夠，一定帶 `--hard-timeout`，用完 `lim ios delete`
+5. 多米回 H 幾有怪就修；動手感先讀 `[perf]`，改完貼前後對照
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
-- 網頁預覽窗格隱藏（多米的視窗最小化）時，rAF、ResizeObserver、scroll 事件都不跑，看起來像程式壞了（位置表沒交過去、捲動空白、進場動畫卡住），其實是環境。做法見 `.vibe/網頁測試小工具.md`
-- 網頁過了不代表 iPhone 過：這次拖把手就是。多米問過為什麼老說要真機：一半因為沒有 Mac 跑不了模擬器，一半因為手感本來就只能真機
-- 我說過「每畫一行都要同步問十幾個值」是講太重了，只有值變過才同步問，診斷文件已更正
+- Expo 自訂工作、GitHub Actions、租 Mac 都只評估沒實跑，結論和價格在報告裡，不用重查
+- 多米貼的文章：AgentCloud 已經收了；`@limrun/mcp-server` 在 npm 是 404，官方是 `claude mcp add --transport http limrun https://mcp.limrun.com/mcp`
+- `lim ios` 指令在這台 Windows 每次多等 15 秒（背景連線起不來），測試改用 `@limrun/api` 的 SDK
+- 考題拖到第 2 行不是 bug，是上面那差的 10 點；要到第 1 行得多拖過 12 點以上
+- 第一版逐格分析的字位漂移是我 ffmpeg 用錯（crop 在 yuv420 上切格錯位），那份數字不算
+- 網頁預覽窗格隱藏時 rAF、ResizeObserver、scroll 都不跑，看起來像程式壞了，其實是環境（`.vibe/網頁測試小工具.md`）
 - `.vibe/.turn-count` 不進 git；commit 時的「LF will be replaced by CRLF」不用管
