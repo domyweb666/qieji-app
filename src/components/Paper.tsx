@@ -902,7 +902,6 @@ function LineList(p: ListProps) {
       if (i >= 0) api.menu(g.ids[i], view.current.top + g.ys[i] + g.hs[i] - scrollY.value);
     };
     const began = (id: string) => {
-      console.log('[dbg] began', id);
       dragLive.current = true;
       setHeldId(id);
       autoDrag.setActive(true);
@@ -911,7 +910,6 @@ function LineList(p: ListProps) {
       dragBegan();
     };
     const ended = (from: number, to: number, y: number) => {
-      console.log('[dbg] ended', from, to, y);
       dragLive.current = false;
       autoDrag.setActive(false);
       setHeldId(null);
@@ -1015,12 +1013,9 @@ function LineList(p: ListProps) {
       block: [press, tap],
       activeOffsetY: [-DRAG_ACTIVATE, DRAG_ACTIVATE],
       failOffsetX: [-DRAG_FAIL_X, DRAG_FAIL_X],
-      onBegin: e => { 'worklet'; console.log('[dbg] grip begin', e.x, e.y, ysA.value.length); },
-      onFinalize: () => { 'worklet'; console.log('[dbg] grip finalize'); },
       onActivate: e => {
         'worklet';
         const ys = ysA.value, hs = hsA.value, i = hitRow(ys, hs, e.y - e.translationY);
-        console.log('[dbg] grip activate', e.y, e.translationY, i);
         if (i < 0) return;
         dragMids.value = midsOf(ys, hs);
         dragH.value = hs[i]; dragFy.value = e.translationY; dragAy.value = e.absoluteY; dragDy.value = e.translationY;
@@ -1092,7 +1087,7 @@ function LineList(p: ListProps) {
         <Rows {...p} sv={sv} publish={publish} dragLive={dragLive} skipShift={skipShift} heldId={heldId} linesOf={linesOf} itemsRef={itemsRef} />
         <View collapsable={false} style={st.gripCol} pointerEvents="box-none">
           <GestureDetector gesture={grip}>
-            <View collapsable={false} style={st.gripFill} onLayout={e => console.log('[dbg] gripCol', JSON.stringify(e.nativeEvent.layout))} accessible={false} importantForAccessibility="no-hide-descendants" />
+            <View collapsable={false} style={st.gripFill} accessible={false} importantForAccessibility="no-hide-descendants" />
           </GestureDetector>
         </View>
       </View>
