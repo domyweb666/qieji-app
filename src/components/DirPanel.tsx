@@ -833,8 +833,6 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         else aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       };
       aimT.current = setTimeout(whenStill, T.timing.swapPoll);
-      };
-      aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       return;
     }
     const k = -a - 1, F = flatOf(d), under = F[(paginate(F)[d.page] ?? [])[k] ?? -1];
