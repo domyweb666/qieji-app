@@ -599,11 +599,6 @@ export function Paper({ n }: { n: Note }) {
         } });
       } },
     ] },
-    // 開發版才有（正式版看不到）：一次塞到 LINE_MAX 行，真機試幾百、上千行打開、換張、捲動、拖到邊緣自動捲順不順（2026-11-03）
-    { label: '（開發）塞到上限', icon: 'plus', hidden: !__DEV__ || !roomOf(n), fn: () => {
-      const add = Array.from({ length: roomOf(n) }, (_, i) => ({ id: uid(), t: `測試第 ${n.items.length + i + 1} 行${i % 7 === 0 ? '，這行寫長一點，看換行之後高度對不對、捲過去會不會跳' : ''}`, done: i % 5 === 0, b: false }));
-      setItems([...n.items, ...add]);
-    } },
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
