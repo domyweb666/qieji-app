@@ -47,7 +47,9 @@ export function NativeMenu({ acts, label, icon = 'ellipsis', color, onColor }: {
   return (
     <Glass style={st.btn} interactive>
       {ready ? (
-        <Host style={st.host}>
+        // alignment 一定要 center：系統選單的按鈕比這格大（圖示 44 再加系統的內距），@expo/ui 58.0.27 起放不下時會靠 alignment 擺，
+        // 預設靠左上，⋯ 就偏到圓圈右下（多米 2026-11-05 正式版截圖；58.0.26 是系統自動置中）
+        <Host style={st.host} alignment="center">
           <Menu
             label={<Image systemName={icon} size={20} color={c.textPrimary} modifiers={[frame({ width: BTN, height: BTN }), contentShape(shapes.circle())]} />}
             modifiers={[menuOrder('fixed'), accessibilityLabel(label)]}>
