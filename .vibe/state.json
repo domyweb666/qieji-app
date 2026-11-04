@@ -1,10 +1,10 @@
 {
   "station": "audit-batch",
-  "updated_at": "2026-11-04T02:13:00+08:00",
-  "updated_by": "vibe-traffic-control",
+  "updated_at": "2026-11-04T08:20:00+08:00",
+  "updated_by": "vibe-handoff",
   "pieces": {
     "todo": 0,
-    "machine_verified": 14,
+    "machine_verified": 17,
     "human_verified": 11
   },
   "chunks": [
@@ -33,6 +33,13 @@
       "name": "D 資料夾",
       "total": 4,
       "machine_done": 4,
+      "human_verified": false,
+      "approved": true
+    },
+    {
+      "name": "送審前小修 F1、F3、F4",
+      "total": 3,
+      "machine_done": 3,
       "human_verified": false,
       "approved": true
     }
@@ -139,7 +146,13 @@
       "what": "程式審查一批修正的計畫覆誦",
       "why": "多米 2026-11-04「都幫我修復」",
       "since": "2026-11-04",
-      "status": "真機第 201～210 條一併確認"
+      "status": "併進 .vibe/送審前總驗.md 一併確認"
+    },
+    {
+      "what": "送審前小修 F1、F3、F4 的真實情境走查＋計畫覆誦",
+      "why": "多米 2026-11-04「如果還沒就幫我修」",
+      "since": "2026-11-04",
+      "status": "併進 .vibe/送審前總驗.md 一併確認；AI 自己定的在 .vibe/代決清單.md"
     }
   ],
   "decisions": [
@@ -150,6 +163,10 @@
     {
       "what": "只上 iPhone，關掉 iPad 支援（supportsTablet false）",
       "since": "2026-11-01"
+    },
+    {
+      "what": "定位＝隨手記，不是待辦清單",
+      "since": "2026-11-04"
     }
   ],
   "security_c": {
