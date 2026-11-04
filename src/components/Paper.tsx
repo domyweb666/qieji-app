@@ -19,7 +19,7 @@ import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture,
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
   Easing, Extrapolation, FadeIn, interpolate, LayoutAnimationConfig, LinearTransition,
-  scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type AnimatedRef, type SharedValue,
+  scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type AnimatedRef, type FrameInfo, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
@@ -851,7 +851,8 @@ function LineList(p: ListProps) {
 
   /* ---------- 排順序 ---------- */
   // 每一格畫面算一次：碰到上下緣自己捲、被拖的行對到第幾個位置（手指不動、紙在捲時也要算）
-  const autoDrag = useFrameCallback(f => {
+  const autoTick = useMemo(() => (f: FrameInfo) => {
+    'worklet';
     const from = dragIdx.value;
     if (!dragOn.value || from < 0) return;
     const ay = dragAy.value, top = listTop.value, bot = listBot.value;
@@ -869,7 +870,8 @@ function LineList(p: ListProps) {
     if (to === dragTo.value) return;
     dragTo.value = to;
     scheduleOnRN(hapticPass);
-  }, false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoDrag = useFrameCallback(autoTick, false);
 
   const gestures = useMemo(() => {
     const { strike, removed, dragBegan, dragEnded } = api;
