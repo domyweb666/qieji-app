@@ -1020,7 +1020,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
           initialNumToRender={HIT_FIRST} windowSize={HIT_WINDOW}
           renderItem={({ item: r }) => <HitRowView r={r} q={q.trim()}
             onNote={() => pick(r.h.note)} onLine={id => { if (id) store.openAt(r.h.note.id, id); else store.open(r.h.note.id); dirPanel.close(); }} />}
-          ListEmptyComponent={<Empty lines={[`找不到含「${q.trim()}」的筆記`]} />} />
+          ListEmptyComponent={<Empty lines={[`找不到含「${q.trim()}」的清單或行`]} />} />
       ) : searching ? (
         // 搬行模式的搜尋：找要搬到哪一張，照舊列磚，所有頁的紙一起找、上下捲，不分頁（不能拖：搜到的只是一部分）
         <ScrollView style={{ flex: 1 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={st.body}>
