@@ -235,7 +235,7 @@ export const motion = {
   // 目錄編輯（C4，抖動）：每塊磚左右轉 deg 度來回（單程 half 毫秒），相鄰兩塊方向相反才像 iOS 主畫面。減少動態：不抖
   jiggle:        { deg: 1.2, half: 120 },
   // 目錄拖磚時其他磚讓位滑過去（C4）。減少動態：直接到位
-  tileShift:     { duration: 200 },
+  tileShift:     { stiffness: 484, damping: 37, mass: 1 }, // 磚互換、讓位的滑動（2026-11-04 照多米錄的真機主畫面逐格量：約 0.1 秒走七成、0.18 秒走九成、0.27 秒到位，尾端多衝約 1 點）
   sheetBackdrop: { in: 180, out: 180 },
   menuPop:       { in: 170, out: 120 },
   menuBackdrop:  { in: 160, out: 140 },

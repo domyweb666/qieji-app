@@ -48,7 +48,7 @@ const M = T.motion, G = T.gesture;
 // useAnimatedStyle 的相依陣列只有網頁用得到，iOS 上傳了會一直跳警告（同 Paper）
 const WEB_DEPS = Platform.OS === 'web';
 // 拖磚時其他磚讓位滑過去（C4）
-const TILE_MOVE = LinearTransition.duration(M.tileShift.duration);
+const TILE_MOVE = LinearTransition.springify().stiffness(M.tileShift.stiffness).damping(M.tileShift.damping).mass(M.tileShift.mass);
 // 給手勢（UI 執行緒）呼叫的放模組層級（規矩檔：worklet 裡不准直接叫 tokens 的函式）
 const hapticLand = () => haptic('dragDrop');
 // 格子裡第 k 格的左上角（兩欄，磚高 TILE、間距 GAP），與拖到哪一格：看被拖那塊的中心落在哪一格
