@@ -45,6 +45,8 @@ function cloudOffOnce() {
   }, T.timing.cloudOffGrace);
 }
 
+let widgetT: ReturnType<typeof setTimeout> | undefined;
+
 async function writeNow() {
   clearTimeout(box.saveT);
   if (!box.loaded) return; // 還沒讀完舊資料前絕對不寫，免得蓋掉
@@ -86,7 +88,8 @@ export const store = {
     }
     if (id && box.state.notes.some(n => n.id === id && !n.pinned)) store.setLastFree(id);
     (id ? AsyncStorage.setItem(LAST_KEY, id) : AsyncStorage.removeItem(LAST_KEY)).catch(() => {});
-    if (box.loaded) pushWidget(box.state, id); // 換了一張紙，小工具跟著換
+    // 換了一張紙，小工具跟著換。等畫面換完、停一下才推（2026-11-04 手感第 5 條）：推一次要叫醒小工具重畫，不准疊在換紙那一刻；連續換好幾張也只推最後一張。切到背景時 writeNow 會立刻推
+    if (box.loaded) { clearTimeout(widgetT); widgetT = setTimeout(() => pushWidget(box.state, box.last), T.timing.widgetPushDelay); }
   },
   // 最近看的那張沒釘選的：左右滑時最左邊那頁（swipeSet）。開到沒釘選的那張、或從沒釘選的那張滑走時記
   get recent(): string[] { return box.recent ?? []; },

@@ -512,16 +512,20 @@ export function Paper({ n }: { n: Note }) {
 
   /* ---------- open / close ---------- */
   // 換到別張紙（這個元件卸載）時收尾：空行拿掉，整張是空的就不留
+  // 2026-11-04（手感第 5 條）：以前不管有沒有改都 store.change()、馬上整份寫存檔，換一次紙就多重畫一次、多一次整份 JSON，全疊在新紙出來那一刻。
+  // 現在真的有改才重畫，存檔照一般的慢一拍（切到背景時會立刻寫，字不會丟）
   function closeNote() {
     if (closed.current) return;
     closed.current = true;
     Keyboard.dismiss();
     const t = takeDraft();
     if (t) n.items.unshift({ id: uid(), t, done: false, b: false }); // 輸入框裡打到一半的字跟著這張紙走，不丟
-    n.items = n.items.filter(i => i.t.trim());
-    if (isEmpty(n)) dropNotes(store.s, x => x === n, Date.now()); // 立墓碑（iCloud 同步 S0）
-    store.change();
-    store.flush();
+    const keep = n.items.filter(i => i.t.trim());
+    let changed = keep.length !== n.items.length;
+    n.items = keep;
+    if (isEmpty(n)) { dropNotes(store.s, x => x === n, Date.now()); changed = true; } // 立墓碑（iCloud 同步 S0）
+    if (changed) store.change();
+    else store.save();
   }
   useEffect(() => {
     mounted.current = true;

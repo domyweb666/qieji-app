@@ -3,6 +3,7 @@
 // 改成自己做（多米選）：跟 ⋯ 選單同一種液態玻璃（Glass），排法照系統選單——左邊小方磚、右邊名字，組跟組之間一條線，小字標組名。
 // 內容：最上面「新的一張」（F3，2026-11-04）；釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
 // 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
+// 2026-11-04 多米真機：「切換清單有 lag，要延遲一下才切換」。以前等面板收完（約半秒）才開始換紙，現在點下去面板馬上讓開、紙同時換（規矩檔手感第 1 條）
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -18,7 +19,7 @@ import { NoteIcon } from './NoteIcon';
 import { Sym } from './Sym';
 
 const M = T.motion, G = T.gesture;
-const SPRING = { ...M.dirPanel.spring }, FADE = M.dirPanel.reducedFade;
+const SPRING = { ...M.dirPanel.spring }, CLOSE = { ...M.switchClose.spring }, FADE = M.dirPanel.reducedFade;
 const PULL = G.pullActivate, CLOSE_RATIO = G.pushCloseRatio, FLICK = G.flick;
 
 let host: { open: () => void } | null = null;
@@ -37,36 +38,40 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const calm = useReducedMotion();
-  const { pinned, recent } = switchList(s, store.recent);
+  // 收起中清單就不再變（換了紙「最近」會重排，面板正在往下走時行不准跳）；只有打勾跟著移到點的那張
+  const closing = useRef(false);
+  const list = useRef<ReturnType<typeof switchList> | null>(null);
+  if (!closing.current || !list.current) list.current = switchList(s, store.recent);
+  const { pinned, recent } = list.current;
   // p：0＝收著、1＝全開；h：面板量到的高（還沒量到先當整個螢幕高，從螢幕外開始）
   const p = useSharedValue(0), h = useSharedValue(height), drag = useSharedValue(0);
   useEffect(() => { p.value = calm ? withTiming(1, { duration: FADE }) : withSpring(1, SPRING); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // 收起，收完才卸載（then：收完要做的事，例如打開目錄）。
-  // 收到一半又叫一次（點了一張又馬上點外面）照第一次的收（2026-11-04 程式審查）：以前第二次的動畫蓋掉第一次，第一次要做的事（換到那張）就不做了
-  const closing = useRef(false);
-  const close = (then?: () => void) => {
+  // 收起：面板馬上開始讓開，收完才卸載。then＝使用者要的結果（換紙、開目錄），不等面板收完：下一格畫面就做（這一格先讓收起的動畫起跑，換紙卡 JS 也不影響它，動畫在 UI 執行緒）。
+  // 收到一半又叫一次（點了一張又馬上點外面）照第一次的收。v＝手指放開的速度（換算成 p 每秒走多少），往下甩就接著那個速度走
+  const close = (then?: () => void, v = 0) => {
     if (closing.current) return;
     closing.current = true;
-    const done = () => { onGone(); then?.(); };
-    const fin = (f?: boolean) => { 'worklet'; if (f) scheduleOnRN(done); };
-    drag.value = 0;
-    p.value = calm ? withTiming(0, { duration: FADE }, fin) : withSpring(0, SPRING, fin);
+    const fin = (f?: boolean) => { 'worklet'; if (f) scheduleOnRN(onGone); };
+    p.value = calm ? withTiming(0, { duration: FADE }, fin) : withSpring(0, { ...CLOSE, velocity: v }, fin);
+    if (then) requestAnimationFrame(then);
   };
+  const flick = (v: number) => close(undefined, v);
   const pick = (n: Note) => close(n.id === store.last ? undefined : () => store.open(n.id));
   const all = () => close(() => dirPanel.open());
-  // 新的一張（F3，2026-11-04）：收完才開（跟點一張同一個時機）。黃色、放進目錄第一個空位；fresh＝紙打開後直接升起輸入框（跟目錄的 ＋ 一樣）
+  // 新的一張（F3，2026-11-04）：黃色、放進目錄第一個空位；fresh＝紙打開後直接升起輸入框（跟目錄的 ＋ 一樣）
   const add = () => close(() => {
     const n = newNote('yellow', 'check');
     if (seatFirstHole(store.s, n.id, Date.now())) store.change();
     store.open(n.id, true);
   });
-  // 往下撥上緣那條（小橫條＋組名那段）：跟著手指往下，撥過一段或往下甩就收起，不然彈回
+  // 往下撥上緣那條（小橫條＋組名那段）：跟著手指往下，撥過一段或往下甩就收起，不然彈回。
+  // 收起時手指拉下來的那段（drag）留著不歸零：歸零的話面板會先跳回上面再往下走
   const pan = usePanGesture({
     activeOffsetY: PULL,
     onUpdate: e => { 'worklet'; drag.value = Math.max(0, e.translationY); },
     onDeactivate: e => {
       'worklet';
-      if (!e.canceled && (e.translationY > h.value * CLOSE_RATIO || e.velocityY > FLICK)) scheduleOnRN(close);
+      if (!e.canceled && (e.translationY > h.value * CLOSE_RATIO || e.velocityY > FLICK)) scheduleOnRN(flick, -e.velocityY / Math.max(1, h.value));
       else drag.value = withSpring(0, SPRING);
     },
   });

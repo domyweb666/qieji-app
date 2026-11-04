@@ -83,7 +83,7 @@ export function fixNote(n: any): Note {
   n.title = str(n.title);
   n.body = str(n.body);
   // 磚上的字只留一個字（emoji 也算一個）；空的、不是字串的拿掉，回到用名字的第一個字
-  const g = typeof n.glyph === 'string' ? Array.from(n.glyph.trim())[0] : undefined;
+  const g = typeof n.glyph === 'string' ? graphemes(n.glyph.trim())[0] : undefined;
   if (g) n.glyph = g; else delete n.glyph;
   n.b = n.b === undefined ? true : !!n.b;
   // 30 天自動清（2026-11-01 接上）：不在最近刪除裡就不該留著刪除時間——網頁版還原只改 deleted、不清 deletedAt，殘留的舊時間會讓它下次被刪時立刻過期。
@@ -186,12 +186,33 @@ export const plain = (n: Note) =>
 export const label = (n: Note) => n.title.trim() || '未命名';
 // 磚正中間的字：自己設的（glyph），沒設就是名字的第一個字（沒取名是「未」）
 export const glyphOf = (n: Note) => n.glyph || Array.from(label(n))[0] || '';
-// 改磚上的字：只取第一個字；清空＝回到用名字的第一個字。回傳有沒有改
+// 把字串切成「看起來一個字」：❤️、🇹🇼、👍🏽、👨‍👩‍👧 這類 emoji 由好幾個碼位組成，也算一個（手機的 JS 引擎沒有 Intl.Segmenter，自己併）
+export function graphemes(s: string): string[] {
+  const out: string[] = [];
+  let afterJoin = false, flagOpen = false;
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) ?? 0;
+    const flag = cp >= 0x1F1E6 && cp <= 0x1F1FF;
+    const attach = cp === 0x200D || (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0x1F3FB && cp <= 0x1F3FF)
+      || (cp >= 0x300 && cp <= 0x36F) || cp === 0x20E3 || (cp >= 0xE0020 && cp <= 0xE007F);
+    if (out.length && (attach || afterJoin || (flag && flagOpen))) out[out.length - 1] += ch;
+    else out.push(ch);
+    afterJoin = cp === 0x200D;
+    flagOpen = flag && !flagOpen;
+  }
+  return out;
+}
+// 改磚上的字：超過一個字由輸入框當頁擋下（glyphProblem），這裡保險只取第一個；清空＝回到用名字的第一個字。回傳有沒有改
 export function setGlyph(n: Note, v: string) {
-  const g = Array.from(v.trim())[0];
+  const g = graphemes(v.trim())[0];
   if ((g ?? undefined) === n.glyph) return false;
   if (g) n.glyph = g; else delete n.glyph;
   return true;
+}
+// 磚上的字打超過一個：回傳要提醒的話；沒問題回傳 null（清空也沒問題）
+export function glyphProblem(v: string): string | null {
+  const k = graphemes(v.trim()).length;
+  return k > 1 ? `只能打一個字，現在有 ${k} 個` : null;
 }
 // 要在選單裡分出是哪張：沒名字的寫「未命名・」＋第一行開頭，不單用第一行（理由同上）
 const PEEK = 8;

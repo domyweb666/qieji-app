@@ -129,6 +129,9 @@ export const font = {
   // 輸入框的字（iOS）：行高貼著字型自己的行距（17 點的中文約 21～22），iOS 輸入框把字放在每行底部，行高拉大字就偏下；
   // 而且要明寫，不寫的話隱形量高度的文字和輸入框各用各的預設行距（真機量到一行 23 對 28），框永遠比字矮（2026-11-01 第六版）
   input:    { fontSize: 17, lineHeight: 22 },
+  // 紙上一行沒在打字時是一般文字、點下去才換成輸入框（2026-11-04 手感引擎）。iOS 的一般文字會把字往上抬（行高 − 字型行距）÷ 2 置中，輸入框不抬，
+  // 兩邊差這麼多點（(26 − 17 × 1.1934) ÷ 2）。一般文字往下移這麼多，點下去字才不會跳（會跟著系統字級放大）
+  lineInputDrop: 2.86,
   callout:  { fontSize: 15, lineHeight: 20, fontWeight: '400' as const }, // 次要：提示條、空狀態、說明句
   footnote: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const }, // 註記：修改時間、分組名（分組名加 semibold）
   label:    { fontSize: 12, lineHeight: 16, fontWeight: '500' as const }, // 標籤：目錄磚下面的名字
@@ -221,6 +224,10 @@ export const motion = {
   sheetSlide:    { in: 220, out: 180 },
   // 目錄面板（B3）從上面垂下來／收上去：放手後帶著手指速度彈到底，不過頭（原型 340ms）。減少動態：不滑，淡入淡出
   dirPanel:      { spring: { duration: 340, dampingRatio: 1, overshootClamping: true }, reducedFade: 200 },
+  // 切換清單收起（2026-11-04）：點了一張紙馬上換，面板只是讓開，比升起快。減少動態同 dirPanel.reducedFade
+  switchClose:   { spring: { duration: 240, dampingRatio: 1, overshootClamping: true } },
+  // 輸入框裡的內容不合格按下確定：卡片左右晃一下（像填密碼不達標），每段這麼久、晃這麼遠。減少動態：不晃，只有紅字
+  reject:        { dist: 8, step: 50 },
   // 標題區左右撥換張（B4；多米 2026-11-02 改成整頁一起換，照 iOS 分頁捲動）：放手後整頁帶著手指的速度滑到下一張，不過頭（跟目錄面板同一組，原型 340ms）。
   // 沒撥夠放手彈回用 snapBack。減少動態：撥的當下照樣跟手，放手不滑過去，交給換紙本來就有的整張淡入
   pageTurn:      { spring: { duration: 340, dampingRatio: 1, overshootClamping: true } },
@@ -246,6 +253,7 @@ const HAPTIC = {
   color: Haptics.selectionAsync,    // ⋯ 選單換紙的顏色
   dragPass: Haptics.selectionAsync, // 排順序時拖過另一行
   swipeArm: Haptics.selectionAsync, // 滑動時手指越過劃掉／刪除門檻那一刻（放手不再震）；第三輪加
+  reject: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error), // 輸入框內容不合格、按確定被擋下（2026-11-04）
 };
 export function haptic(event: keyof typeof HAPTIC) { HAPTIC[event]().catch(() => {}); }
 
@@ -284,6 +292,7 @@ export const gesture = {
 };
 export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700,
   cloudOffGrace: 10000,
+  widgetPushDelay: 800, // 換紙之後停這麼久才通知桌面小工具（2026-11-04）
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
   swapDwell: 100,  // 2026-11-02：重疊超過一半停這麼久就互換（推過去就換，不用刻意停）

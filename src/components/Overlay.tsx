@@ -1,9 +1,10 @@
 // 疊在所有畫面上面的一層：選單、確認框、toast。其他畫面用 ui.sheet() / ui.confirm() / ui.toast() 呼叫。
-import { useEffect, useState } from 'react';
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useReducedMotion } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { ActionSheetIOS, Alert, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useKeyboardHandler } from 'react-native-keyboard-controller';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, T, useColors } from '../lib/tokens';
+import { colors, haptic, T, useColors } from '../lib/tokens';
 import { Glass } from './Glass';
 
 export type Row = { label: string; fn: () => void; danger?: boolean; dot?: string; on?: boolean };
@@ -11,11 +12,13 @@ type SheetSpec = { title?: string; rows: Row[] };
 // title 有值＝只有一顆按鈕的提示框（存檔失敗這類要讀完的訊息），沒有「取消」
 type ConfirmSpec = { title?: string; msg: string; ok: () => void; okLabel: string };
 type ToastSpec = { msg: string; action?: { label: string; fn: () => void } };
+export type PromptSpec = { title: string; msg: string; initial: string; okLabel: string; placeholder?: string; check: (v: string) => string | null; ok: (v: string) => void };
 
 let host: {
   sheet: (s: SheetSpec | null) => void;
   confirm: (c: ConfirmSpec | null) => void;
   toast: (t: ToastSpec | null) => void;
+  prompt: (p: PromptSpec | null) => void;
 } | null = null;
 
 export const ui = {
@@ -47,21 +50,73 @@ export const ui = {
     Alert.alert(title, msg, [{ text: noLabel, style: 'cancel', onPress: no }, { text: yes.label, onPress: yes.fn }]);
   },
   toast: (msg: string, action?: ToastSpec['action']) => host?.toast({ msg, action }),
-  // 打一小段字（改磚上的字，2026-11-03）：iOS 用系統的輸入提示框；網頁預覽用瀏覽器的 prompt
-  prompt: (title: string, msg: string, initial: string, ok: (v: string) => void, okLabel = '好') => {
-    if (Platform.OS !== 'ios') {
-      const v = (globalThis as { prompt?: (m: string, d: string) => string | null }).prompt?.(`${title}\n${msg}`, initial);
-      if (v !== null && v !== undefined) ok(v);
+  // 打一小段字（改磚上的字）：自己畫的卡片，不用系統的輸入提示框（2026-11-04 多米：要像填密碼不達標那樣，就在這一頁提醒、不讓通過；系統提示框一按按鈕就關，留不住）
+  prompt: (spec: PromptSpec) => host?.prompt(spec),
+};
+
+// 按「好」時 check 回傳要提醒的話就留在這一頁（紅字＋輸入框紅框＋晃一下＋震一下），字都還在；回傳 null 才收起來、交給 ok
+function PromptCard({ spec, onClose }: { spec: PromptSpec; onClose: () => void }) {
+  const c = useColors();
+  const calm = useReducedMotion();
+  const [err, setErr] = useState<string | null>(null);
+  const val = useRef(spec.initial);
+  // 卡片停在鍵盤上方那段的正中，跟著鍵盤一起動（鍵盤高度逐格來，跟輸入框 Composer 同一個來源）
+  const kbH = useSharedValue(0), nudge = useSharedValue(0);
+  useKeyboardHandler({
+    onMove: e => { 'worklet'; kbH.value = e.height; },
+    onInteractive: e => { 'worklet'; kbH.value = e.height; },
+    onEnd: e => { 'worklet'; kbH.value = e.height; },
+  }, []);
+  const lift = useAnimatedStyle(() => ({ transform: [{ translateY: -kbH.value / 2 }] }));
+  const shake = useAnimatedStyle(() => ({ transform: [{ translateX: nudge.value }] }));
+  const leave = () => { Keyboard.dismiss(); onClose(); };
+  const submit = () => {
+    const bad = spec.check(val.current);
+    if (bad) {
+      setErr(bad);
+      haptic('reject');
+      if (!calm) {
+        const { dist: d, step } = T.motion.reject, t = { duration: step };
+        nudge.value = withSequence(withTiming(-d, t), withTiming(d, t), withTiming(-d / 2, t), withTiming(0, t));
+      }
       return;
     }
-    Alert.prompt(title, msg, [{ text: '取消', style: 'cancel' }, { text: okLabel, onPress: v => ok(v ?? '') }], 'plain-text', initial);
-  },
-};
+    leave();
+    spec.ok(val.current);
+  };
+  return (
+    <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)}
+      style={[StyleSheet.absoluteFill, s.center, { backgroundColor: c.scrim }]} accessibilityViewIsModal>
+      <Animated.View style={[s.promptWrap, lift]}>
+        <Animated.View style={[s.dlg, { backgroundColor: c.surface }, shake]}>
+          <Text style={[s.dlgText, { color: c.textPrimary }]}>{spec.title}</Text>
+          <Text style={[s.dlgBody, { color: c.textSecondary }]}>{spec.msg}</Text>
+          <TextInput autoFocus defaultValue={spec.initial} selectTextOnFocus submitBehavior="submit" returnKeyType="done"
+            placeholder={spec.placeholder} placeholderTextColor={c.textMuted} accessibilityLabel={spec.title}
+            style={[s.promptInput, { color: c.textPrimary, backgroundColor: c.searchFill, borderColor: err ? c.danger : 'transparent' }]}
+            onChangeText={v => { val.current = v; if (err) setErr(spec.check(v)); }}
+            onSubmitEditing={submit} />
+          {/* 永遠佔一行高：紅字出現時卡片不會變高、不會跳 */}
+          <Text style={[s.promptErr, { color: c.danger }]} accessibilityLiveRegion="polite">{err ?? ' '}</Text>
+          <View style={[s.acts, { borderTopColor: c.separator }]}>
+            <Pressable style={s.promptAct} hitSlop={T.space.s} onPress={leave} accessibilityRole="button">
+              <Text style={[s.act, { color: c.accent }]}>取消</Text>
+            </Pressable>
+            <Pressable style={s.promptAct} hitSlop={T.space.s} onPress={submit} accessibilityRole="button">
+              <Text style={[s.act, s.promptOk, { color: c.accent }]}>{spec.okLabel}</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 export function OverlayHost() {
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [confirm, setConfirm] = useState<ConfirmSpec | null>(null);
   const [toast, setToast] = useState<ToastSpec | null>(null);
+  const [prompt, setPrompt] = useState<PromptSpec | null>(null);
   const insets = useSafeAreaInsets();
   const c = useColors();
   // 減少動態：滑入滑出改成淡入淡出（替換，不是關掉）
@@ -75,6 +130,7 @@ export function OverlayHost() {
       sheet: setSheet,
       confirm: setConfirm,
       toast: setToast,
+      prompt: setPrompt,
     };
     host = mine;
     return () => { if (host === mine) host = null; };
@@ -144,6 +200,8 @@ export function OverlayHost() {
           </View>
         </Animated.View>
       )}
+
+      {prompt && <PromptCard spec={prompt} onClose={() => setPrompt(null)} />}
     </View>
   );
 }
@@ -163,6 +221,12 @@ const s = StyleSheet.create({
   dlgBody: { ...T.font.callout, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
   acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
   act: { flex: 1, ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
+  promptWrap: { width: '100%', alignItems: 'center' },
+  promptInput: { ...T.font.body, minHeight: T.shape.hitMin, marginHorizontal: T.space.l, paddingHorizontal: T.space.m, textAlign: 'center',
+    borderRadius: T.shape.radiusSm, borderWidth: T.shape.borderCard },
+  promptErr: { ...T.font.footnote, textAlign: 'center', paddingHorizontal: T.space.l, marginTop: T.space.xs, marginBottom: T.space.s },
+  promptAct: { flex: 1 },
+  promptOk: { fontWeight: T.font.semibold },
   // 長的提示（例如存檔失敗）要能換行，不能超出螢幕
   toastAt: { position: 'absolute', alignSelf: 'center', maxWidth: '90%', zIndex: 50 }, // 50 只用一次
   toast: { paddingVertical: T.space.m, paddingHorizontal: T.space.l,

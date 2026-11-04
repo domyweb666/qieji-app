@@ -31,7 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import {
   col, dropNotes, FULL_MSG, fillHole, folderOf, intoFolder, isBreak, isEmpty, isHole, label, leaveHole, markDeleted, markRestored, moveItem, newBreak, newFolder, newHole, outOfFolder, PIN_MAX, pinnedNotes, placeInFolder,
-  placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, setGlyph, glyphOf, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
+  placeTop, renameFolder, reseat, roomOf, searchLines, seatNew, setGlyph, glyphOf, glyphProblem, seatedEntries, seatedLayout, seatedNotes, type ColorKey, type Entry, type LineHit, type Folder, type Note,
 } from '../lib/model';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
@@ -667,13 +667,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
       { label: '刪除', icon: 'trash', destructive: true, fn: () => del(n) },
     ];
   };
-  // 改磚上的字（2026-11-03 多米：改磚正中間那個字，不是改全名）：系統輸入框，打的字只取第一個；清空＝回到用名字的第一個字
-  // 只能一個字（2026-11-03 多米）：打超過一個字按「好」→ 跳提示、不收，按「知道了」回到輸入框（打的字還在）重打
-  function editGlyph(n: Note, draft = n.glyph ?? '') {
-    ui.prompt('磚上的字', '打一個字（emoji 也可以）；清空就用名字的第一個字', draft, v => {
-      if (Array.from(v.trim()).length > 1) { ui.alert('只能打一個字', `「${v.trim()}」有 ${Array.from(v.trim()).length} 個字，留一個就好`, '知道了', () => editGlyph(n, v)); return; }
-      if (setGlyph(n, v)) { n.updated = Date.now(); store.change(); }
-    }, '好');
+  // 改磚上的字（2026-11-03 多米：改磚正中間那個字，不是改全名）；清空＝回到用名字的第一個字。
+  // 只能一個字：打超過一個按「好」就在這一頁提醒、不讓通過（2026-11-04 多米：像填密碼不達標那樣；以前是另外跳一個提示框）
+  function editGlyph(n: Note) {
+    ui.prompt({
+      title: '磚上的字', msg: '打一個字（emoji 也可以）；清空就用名字的第一個字', initial: n.glyph ?? '', okLabel: '好', placeholder: glyphOf(n),
+      check: glyphProblem,
+      ok: v => { if (setGlyph(n, v)) { n.updated = Date.now(); store.change(); } },
+    });
   }
   // 長按資料夾（2026-11-02：資料夾的選單項目都拿掉了）：直接進抖動，手指一動就拖得走；改名字＝打開資料夾點名字
   function holdFolder() {
