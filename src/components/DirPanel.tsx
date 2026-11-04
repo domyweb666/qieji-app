@@ -346,13 +346,15 @@ export function DirPanelHost() {
       <Animated.View style={[StyleSheet.absoluteFill, sheet]} pointerEvents="box-none" accessibilityViewIsModal onAccessibilityEscape={tapOut}>
         {/* 面板的底：上緣圓角，從 dirPeek 往下鋪到底（點到面板空白處不會穿過去收起） */}
         <View style={[st.panel, { top: T.shape.dirPeek, backgroundColor: c.surface }]} />
-        <Directory move={move} padTop={T.shape.dirPeek + T.shape.hitMin} padBottom={insets.bottom} editing={editing} setEditing={setEditing}
-          onMenuOpen={fn => setCloseMenu(() => fn)} />
+        {/* 把手排在目錄前面、順序永遠不變：目錄整塊是 box-none，把手那截沒有目錄的東西，點得到；選單的暗幕、打開的資料夾自然蓋在把手上面。
+            不准再用 zIndex 切換兩者的先後：關選單時順序一換，Fabric 會把目錄整塊拆下來重裝，裡面的手勢當場被取消（2026-11-04 模擬器：跳出選單後接著拖，磚不跟手） */}
         <GestureDetector gesture={pull}>
           <Pressable style={[st.grabBox, { top: T.shape.dirPeek }]} onPress={tapOut} accessibilityRole="button" accessibilityLabel={editing ? '完成編輯' : '收起目錄'}>
             <View style={[st.grab, { backgroundColor: c.textSecondary }]} />
           </Pressable>
         </GestureDetector>
+        <Directory move={move} padTop={T.shape.dirPeek + T.shape.hitMin} padBottom={insets.bottom} editing={editing} setEditing={setEditing}
+          onMenuOpen={fn => setCloseMenu(() => fn)} />
       </Animated.View>
     </View>
   );
@@ -979,7 +981,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
 
   return (
     // 整個螢幕那麼大（上面 padTop 那段是露出的紙和把手，box-none 讓觸控穿過去）
-    <View style={[StyleSheet.absoluteFill, { paddingBottom: padBottom }, (!!menu || !!openEntry?.folder) && st.above]} collapsable={false} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, { paddingBottom: padBottom }]} collapsable={false} pointerEvents="box-none">
       <View style={[st.top, { marginTop: padTop }]}>
         {/* 搜尋列照 iOS 的樣子（2026-11-02 系統元件化）：淡灰膠囊、放大鏡、打字時右邊有系統的清除鈕、鍵盤右下是「搜尋」 */}
         <View style={[st.search, { backgroundColor: c.searchFill }, editing && { opacity: T.motion.pressDim }]}>
@@ -1586,8 +1588,7 @@ const st = StyleSheet.create({
   // 資料夾磚裡 3×3 小方塊（2026-11-03 改 1×1）
   minis: { flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start' },
   mini: { borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  above: { zIndex: 1 },
-  parked: { position: 'absolute', left: 0, top: 0 }, // 長按選單開著：目錄整塊蓋在底部把手上面（暗幕才蓋得到把手那截）
+  parked: { position: 'absolute', left: 0, top: 0 },
   launch: { position: 'absolute', borderWidth: T.shape.borderCard, padding: T.space.m, overflow: 'hidden' },
   folderWrap: { justifyContent: 'center' },
   // 「−」壓在磚的左上角、一半露在外面（像 iOS）
