@@ -83,7 +83,7 @@ test('列表只分已釘選和其他，不用時間分組；最近刪除整頁�
   assert.deepEqual(g.map(x => [x.title, x.notes.map(n => n.id).join('')]),
     [['已釘選', 'p'], ['其他', 'tywo']]);
   const gt = groupNotes(notes, { trash: true });
-  assert.deepEqual(gt.map(x => [x.title, x.notes.length]), [['最近刪除', 5]]);
+  assert.deepEqual(gt.map(x => [x.title, x.notes.length]), [['刪掉的清單', 5]]);
   assert.equal(rowDate(at(2026, 9, 27), now), '昨天');
   assert.equal(rowDate(at(2026, 9, 26), now), '星期一');
 });

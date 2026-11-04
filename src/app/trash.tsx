@@ -45,7 +45,6 @@ export default function Trash() {
   return (
     <View style={{ flex: 1, backgroundColor: c.page }} collapsable={false}>
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={listStyles.wrap}>
-        <Stack.Title large largeStyle={{ color: c.textPrimary }} style={{ color: c.textPrimary }}>{title}</Stack.Title>
         {total > 0 && (
           <Stack.Toolbar placement="right">
             <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="選單">{menuItems(acts)}</Stack.Toolbar.Menu>

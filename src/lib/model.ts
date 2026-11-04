@@ -831,7 +831,7 @@ export function groupNotes(notes: Note[], o: { trash: boolean }): Section[] {
     if (last && last.title === title) last.notes.push(n); else out.push({ title, notes: [n] });
   };
   for (const n of notes) {
-    if (o.trash) push('最近刪除', n);
+    if (o.trash) push('刪掉的清單', n);
     else push(n.pinned ? '已釘選' : '其他', n);
   }
   return out;

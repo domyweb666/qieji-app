@@ -281,6 +281,7 @@ export const gesture = {
   // 停 timing.stackHover＝準備疊（放手縮進去）；再遠一點（還在那格裡）停 timing.swapDwell＝互換（只有這兩張動）。
   // 準備疊之後要離到 stackHold × 邊長外才取消（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
   stackRadius: 0.34, stackHold: 0.5,
+  swapStill: 3, // 每 timing.swapDwell 毫秒手指移動不超過這麼多點才算停下來、才互換（2026-11-04：手還在動就換，往別張正中間慢慢拖會先被換走，疊不起來）
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
@@ -295,7 +296,7 @@ export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, fr
   widgetPushDelay: 800, // 換紙之後停這麼久才通知桌面小工具（2026-11-04）
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
-  swapDwell: 100,  // 2026-11-02：重疊超過一半停這麼久就互換（推過去就換，不用刻意停）
+  swapDwell: 100,  // 互換：手指停下來（gesture.swapStill）多久才換（2026-11-04 起要停下來，見 swapStill）；放進空格仍是進去待這麼久就放
   stackHover: 250, // 2026-11-02：重疊兩成到一半停這麼久就準備疊。拖到資料夾上不再自己打開（多米：顯示合併就好）
   folderLeave: 350 }; // D4：資料夾開著時手指離開框這麼久，資料夾收起、回到目錄繼續拖 // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 

@@ -99,12 +99,13 @@ function holeAt(holes: number, k: number) {
 // fopen＝資料夾開著在對準；bx…bh＝資料夾框；svx、svy＝框裡格子那層的位置；fsy＝框裡捲下去多少；fcount、flast＝資料夾裡幾格、讓出來的是第幾格；
 // ready＝這次拿起後 JS 把格子位置、資料夾開沒開寫好了（拿起那一刻手勢先跑、JS 晚一步，寫好之前不算瞄哪）；
 // gcap＝這頁最多幾格；fold＝拖的是資料夾（不能疊）；fpg＝打開的資料夾現在在第幾頁；fedge＝在資料夾框的左右邊（停一下翻頁）；
-// sink＝疊上去放手時縮小淡掉（0→1）（2026-11-02）；holes＝這頁哪幾格是空位（位元表，見 holeAt；2026-11-03 自由擺放）
+// sink＝疊上去放手時縮小淡掉（0→1）（2026-11-02）；holes＝這頁哪幾格是空位（位元表，見 holeAt；2026-11-03 自由擺放）；
+// gbase＝拖的那張拿起時在這頁第幾格（−1＝不在這頁）：那格現在站的是被換過去的那張，停回來是復原，不算疊
 type DG = Record<'x0' | 'y0' | 'dx' | 'dy' | 'sw' | 'lift' | 'edge' | 'aim' | 'stackK' | 'gx' | 'gy' | 'gcount' | 'glast' | 'gcap' | 'fold'
-  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink' | 'holes', SharedValue<number>>;
+  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink' | 'holes' | 'gbase', SharedValue<number>>;
 function useDG(): DG {
   return {
-    gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0), holes: useSharedValue(0),
+    gbase: useSharedValue(-1), gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0), holes: useSharedValue(0),
     x0: useSharedValue(0), y0: useSharedValue(0), dx: useSharedValue(0), dy: useSharedValue(0), sw: useSharedValue(0), lift: useSharedValue(0),
     edge: useSharedValue(0), aim: useSharedValue(0), stackK: useSharedValue(-1), gx: useSharedValue(0), gy: useSharedValue(0),
     gcount: useSharedValue(1), glast: useSharedValue(-1), fopen: useSharedValue(0), bx: useSharedValue(0), by: useSharedValue(0),
@@ -151,7 +152,7 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
   const s = sizeOf(gw);
   const dx = cx - (dg.gx.value + slotX(c, gw) + gw / 2), dy = cy - (dg.gy.value + slotY(c, gw) + s / 2);
   const r = (dg.aim.value === -c - 1 ? STACK_HOLD : STACK_R) * s;
-  if (!dg.fold.value && dx * dx + dy * dy < r * r) return -c - 1;
+  if (!dg.fold.value && c !== dg.gbase.value && dx * dx + dy * dy < r * r) return -c - 1;
   return c;
 }
 
@@ -556,6 +557,8 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     dg.fold.value = dragEntryOf(d)?.folder ? 1 : 0;
     // 拖的那張在這頁第幾格（不在這頁＝−1）；這頁哪幾格是空位
     dg.glast.value = P.findIndex(i => flat[i].id === d.id);
+    const flatBase = d.base ? flatOf({ ...d, cells: d.base }) : flat;
+    dg.gbase.value = (paginate(flatBase)[d.page] ?? []).findIndex(i => flatBase[i].id === d.id);
     dg.holes.value = P.reduce((bits, i, k) => (flat[i].hole && k < HOLE_BITS ? bits | (1 << k) : bits), 0);
     const fe = d.inF ? entriesRef.current.find(e => e.id === d.inF) : undefined;
     if (fe) { dg.fcount.value = Math.max(1, folderNotes(fe, d).length); dg.flast.value = d.fto; }
@@ -785,13 +788,24 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     if (a <= CELL_AIM || a >= 0) {
       // 放進空格（CELL_AIM−k）或跟第 a 格那張互換（多米 2026-11-02：拖的那張跟底下那張對調，其他都不動）：都是 placeAt
       const k = a >= 0 ? a : CELL_AIM - a;
-      aimT.current = setTimeout(() => {
+      const place = () => {
         const cur = dragRef.current;
         const cells = cur?.cells ? placeAt(cur, cur.page, k) : null;
         if (!cur || !cells || sameCells(cells, cur.cells)) return;
         setD({ ...cur, cells });
         haptic('dragPass');
-      }, T.timing.swapDwell);
+      };
+      if (a < 0) { aimT.current = setTimeout(place, T.timing.swapDwell); return; }
+      // 跟別張互換：手還在動就先不換（2026-11-04 多米真機：疊資料夾的功能不見了）。往別張正中間拖一定會先經過這一圈，
+      // 以前待滿 swapDwell 就換，手指慢一點（網頁量到約 150 點／秒以下）底下那張就被換走，永遠疊不起來
+      let px = dg.dx.value, py = dg.dy.value;
+      const whenStill = () => {
+        const x = dg.dx.value, y = dg.dy.value, moved = Math.hypot(x - px, y - py) > G.swapStill;
+        px = x; py = y;
+        if (moved) aimT.current = setTimeout(whenStill, T.timing.swapDwell);
+        else place();
+      };
+      aimT.current = setTimeout(whenStill, T.timing.swapDwell);
       return;
     }
     const k = -a - 1, F = flatOf(d), under = F[(paginate(F)[d.page] ?? [])[k] ?? -1];
