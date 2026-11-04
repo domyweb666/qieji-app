@@ -62,8 +62,9 @@ function sizeOf(cw: number) { 'worklet'; return Math.min(TILE_MAX, cw - TILE_GAP
 function tileHOf(cw: number) { 'worklet'; return sizeOf(cw) + LABEL_GAP + LABEL_H; } // 一塊磚（方磚＋名字）的高
 function rowOf(cw: number) { 'worklet'; return tileHOf(cw) + ROW_GAP; } // 列距
 const GROW = T.motion.stackTarget.scale;
-// 疊還是換（2026-11-03 改 1×1，照 iPhone）：中心離別張方磚的中心多近（邊長的幾成），見 tokens 的 gesture.stackRadius
-const STACK_R = G.stackRadius, STACK_HOLD = G.stackHold;
+// 疊還是換（2026-11-04 照量到的 iPhone）：上下對齊就疊，見 tokens 的 gesture.stackY
+const STACK_Y = G.stackY, STACK_Y_HOLD = G.stackYHold, STACK_FAR = G.stackFar, STACK_FAR_HOLD = G.stackFarHold, CATCH_MS = M.dragCatch.duration;
+const CUE_MS = M.stackTarget.cue, CUE_DIM = M.stackTarget.dim, PLATE = M.stackTarget.plate;
 const SINK_MS = M.sink.duration, SINK_SCALE = M.sink.scale;
 // 打開的資料夾：一頁 FCOLS 欄 × FROWS 列；框內距 FPAD（磚離框邊）
 const FROWS = T.shape.folderRows, FPER = FROWS * FCOLS, FPAD = T.space.l;
@@ -100,12 +101,12 @@ function holeAt(holes: number, k: number) {
 // ready＝這次拿起後 JS 把格子位置、資料夾開沒開寫好了（拿起那一刻手勢先跑、JS 晚一步，寫好之前不算瞄哪）；
 // gcap＝這頁最多幾格；fold＝拖的是資料夾（不能疊）；fpg＝打開的資料夾現在在第幾頁；fedge＝在資料夾框的左右邊（停一下翻頁）；
 // sink＝疊上去放手時縮小淡掉（0→1）（2026-11-02）；holes＝這頁哪幾格是空位（位元表，見 holeAt；2026-11-03 自由擺放）；
-// gbase＝拖的那張拿起時在這頁第幾格（−1＝不在這頁）：那格現在站的是被換過去的那張，停回來是復原，不算疊
+// cx、cy＝拿起時磚補上手指的那段（lift 動到 0，磚畫在 dx＋cx 的位置）；gbase＝拖的那張拿起時在這頁第幾格（−1＝不在這頁）：那格現在站的是被換過去的那張，停回來是復原，不算疊
 type DG = Record<'x0' | 'y0' | 'dx' | 'dy' | 'sw' | 'lift' | 'edge' | 'aim' | 'stackK' | 'gx' | 'gy' | 'gcount' | 'glast' | 'gcap' | 'fold'
-  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink' | 'holes' | 'gbase', SharedValue<number>>;
+  | 'fopen' | 'bx' | 'by' | 'bw' | 'bh' | 'fpg' | 'fedge' | 'fcount' | 'flast' | 'ready' | 'sink' | 'holes' | 'gbase' | 'cx' | 'cy', SharedValue<number>>;
 function useDG(): DG {
   return {
-    gbase: useSharedValue(-1), gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0), holes: useSharedValue(0),
+    cx: useSharedValue(0), cy: useSharedValue(0), gbase: useSharedValue(-1), gcap: useSharedValue(1), fold: useSharedValue(0), fpg: useSharedValue(0), fedge: useSharedValue(0), sink: useSharedValue(0), holes: useSharedValue(0),
     x0: useSharedValue(0), y0: useSharedValue(0), dx: useSharedValue(0), dy: useSharedValue(0), sw: useSharedValue(0), lift: useSharedValue(0),
     edge: useSharedValue(0), aim: useSharedValue(0), stackK: useSharedValue(-1), gx: useSharedValue(0), gy: useSharedValue(0),
     gcount: useSharedValue(1), glast: useSharedValue(-1), fopen: useSharedValue(0), bx: useSharedValue(0), by: useSharedValue(0),
@@ -143,16 +144,20 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
     if (i >= dg.fcount.value) return FOLDER_END;
     return i === dg.flast.value ? AIM_NONE : FOLDER_AIM + i;
   }
-  const c = cellAt(cx - dg.gx.value, cy - dg.gy.value, gw);
+  // 看中心離哪一列的方磚最近（2026-11-04）：方磚上下的空隙各半，上面那段也算這一格
+  const s = sizeOf(gw), lx = cx - dg.gx.value, row = Math.round((cy - dg.gy.value - s / 2) / rowOf(gw));
+  const c = row < 0 || lx < 0 ? -1 : row * COLS + Math.min(COLS - 1, Math.floor(lx / gw));
   if (c < 0 || c === dg.glast.value) return AIM_NONE;
   // 中心落在空格（這頁的空位，或最後一張後面、這頁還放得下的格子）：放進那格（2026-11-03 自由擺放，照 iOS 放哪停哪）
   if (c < dg.gcount.value ? holeAt(dg.holes.value, c) : c < dg.gcap.value) return CELL_AIM - c;
   if (c >= dg.gcount.value) return AIM_NONE;
-  // 落在有東西的格子：離那張方磚的中心夠近＝準備疊（已經準備疊了就放寬到 STACK_HOLD，手晃一下不會丟掉）；不然＝互換。拖的是資料夾不能疊
-  const s = sizeOf(gw);
+  // 落在有東西的格子（2026-11-04 照量到的 iPhone）：上下對齊＝準備疊；上下錯開＝互換。同一列穿過中心再往前也是互換。已經準備疊了就放寬，手晃一下不會丟掉。
+  // 拿起那格站的是被換過去的那張，停回來是復原，不算疊。拖的是資料夾不能疊
   const dx = cx - (dg.gx.value + slotX(c, gw) + gw / 2), dy = cy - (dg.gy.value + slotY(c, gw) + s / 2);
-  const r = (dg.aim.value === -c - 1 ? STACK_HOLD : STACK_R) * s;
-  if (!dg.fold.value && c !== dg.gbase.value && dx * dx + dy * dy < r * r) return -c - 1;
+  const on = dg.aim.value === -c - 1, last = dg.glast.value;
+  const past = last >= 0 && Math.floor(last / COLS) === Math.floor(c / COLS) && (c < last ? dx < 0 : dx > 0);
+  const yMax = (on ? STACK_Y_HOLD : STACK_Y) * s, xMax = past ? (on ? STACK_FAR_HOLD : STACK_FAR) * s : gw;
+  if (!dg.fold.value && c !== dg.gbase.value && Math.abs(dy) < yMax && Math.abs(dx) < xMax) return -c - 1;
   return c;
 }
 
@@ -170,9 +175,15 @@ function useDragPan(o: DragOpts) {
   // 所以「長按後再拖多遠才拿起」只能自己在 onUpdate 算。網頁版長按也是時間到就啟動，兩邊一樣
   const armed = useSharedValue(0);
   // 拿起來：記下磚的左上角（螢幕座標）、歸零這次拖的狀態、浮起，回 JS 寫格子位置（dragStart）
+  const bx = useSharedValue(0), by = useSharedValue(0); // 手指按下的位置：磚跟手指，不跟 translation（iOS 的 translation 從手勢啟動才算，磚會一直落後手指）
   const lift = (e: { absoluteX: number; absoluteY: number; x: number; y: number }) => {
     'worklet';
-    dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.dx.value = 0; dg.dy.value = 0; dg.sw.value = w;
+    dg.x0.value = e.absoluteX - e.x; dg.y0.value = e.absoluteY - e.y; dg.sw.value = w;
+    // 手指已經走了一段才拿起：磚從原位用很短的動畫補上，不跳一下（減少動態：直接到）
+    const fx = e.absoluteX - bx.value, fy = e.absoluteY - by.value;
+    dg.dx.value = fx; dg.dy.value = fy;
+    dg.cx.value = -fx; dg.cy.value = -fy;
+    dg.cx.value = calm ? 0 : withTiming(0, { duration: CATCH_MS }); dg.cy.value = calm ? 0 : withTiming(0, { duration: CATCH_MS });
     dg.edge.value = 0; dg.fedge.value = 0; dg.aim.value = AIM_NONE; dg.stackK.value = -1; dg.ready.value = 0; dg.sink.value = 0;
     // 抖動中手指一按下磚就放大了（held）：拿起來那張從一樣大接著浮，不會先縮回去再長大
     if (!calm) dg.lift.value = held.value;
@@ -189,8 +200,9 @@ function useDragPan(o: DragOpts) {
     // 抖動中手指一按下就放大、左上的「−」收起（2026-11-03 多米真機：按住沒動畫，不知道按到了沒；資料夾裡的磚也是按住那張才變）；
     // 拖著照樣大、沒有「−」（畫的是浮著那張，見 DragGhost），放手才縮回、「−」回來。
     // 沒抖動時長按是跳選單，選單那塊自己會浮起（Lifted），這裡不動
-    onBegin: () => {
+    onBegin: e => {
       'worklet';
+      bx.value = e.absoluteX; by.value = e.absoluteY;
       if (editing) held.value = calm ? 1 : withSpring(1, LIFT_SPRING);
     },
     onFinalize: () => {
@@ -210,11 +222,12 @@ function useDragPan(o: DragOpts) {
         armed.value = 0;
         lift(e);
       }
-      dg.dx.value = e.translationX; dg.dy.value = e.translationY;
+      const tx = e.absoluteX - bx.value, ty = e.absoluteY - by.value;
+      dg.dx.value = tx; dg.dy.value = ty;
       // JS 還沒把這次的格子位置、資料夾開沒開寫好（dragStart → setD）：只跟手，不算邊緣和瞄哪。
       // 不然用的是上一次拖留下的值：資料夾裡拿起時被當成在目錄某一格，稍微一動放手就被拿出資料夾（多米 2026-11-02 真機記錄 aim:0、fopen:1）
       if (!dg.ready.value) return;
-      const ax = dg.x0.value + e.translationX, ay = dg.y0.value + e.translationY;
+      const ax = dg.x0.value + tx, ay = dg.y0.value + ty;
       // 拖到左右邊緣停一下翻頁（C5）：資料夾開著的時候看框的左右邊（翻資料夾的頁，2026-11-02），框外是收起資料夾。
       // 看的是手指，不是磚的中心（2026-11-03 多米真機：拖不到隔壁頁）：磚很寬，抓著右半邊往右拖，手指到螢幕邊了磚的中心還差五十幾點，永遠到不了邊緣
       const fx = e.absoluteX, fy = e.absoluteY;
@@ -233,6 +246,8 @@ function useDragPan(o: DragOpts) {
     onDeactivate: e => {
       'worklet';
       if (armed.value) { armed.value = 0; return; } // 長按了沒拖：只開了選單，磚沒拿起來，什麼都不動
+      // 還在補的時候放手：從畫面上的位置接著滑
+      dg.dx.value += dg.cx.value; dg.dy.value += dg.cy.value; dg.cx.value = 0; dg.cy.value = 0;
       if (dg.edge.value || dg.fedge.value) { dg.edge.value = 0; dg.fedge.value = 0; scheduleOnRN(onEdge, 0); }
       scheduleOnRN(hapticLand);
       dg.lift.value = calm ? 0 : withSpring(0, LIFT_SPRING);
@@ -752,7 +767,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     onAim(a);
   }
   // 瞄的地方變了（2026-11-02 改成看重疊，原型對過）：先取消還在等的互換／疊、縮回放大的那塊。
-  // 目錄：重疊過半停 swapDwell＝跟那張互換；兩成到一半停 stackHover＝那張放大（放手就縮進去；資料夾不打開）；
+  // 目錄：上下對齊停 stackHover＝準備疊（放手就縮進去；資料夾不打開）；上下錯開手停下來＝跟那張互換（見 aimOf）；
   // 中心在空格裡停 swapDwell＝放進那格（2026-11-03 自由擺放：原本那格留空位）。
   // 資料夾裡：重疊過三成停 swapDwell＝互換；框外停 folderLeave＝收起
   function onAim(a: number) {
@@ -796,21 +811,29 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         haptic('dragPass');
       };
       if (a < 0) { aimT.current = setTimeout(place, T.timing.swapDwell); return; }
-      // 跟別張互換：手還在動就先不換（2026-11-04 多米真機：疊資料夾的功能不見了）。往別張正中間拖一定會先經過這一圈，
-      // 以前待滿 swapDwell 就換，手指慢一點（網頁量到約 150 點／秒以下）底下那張就被換走，永遠疊不起來
-      let px = dg.dx.value, py = dg.dy.value;
+      // 跟別張互換：手還在動就先不換（2026-11-04 多米真機：疊資料夾的功能不見了）。連續兩次沒動才換，約 0.25 秒
+      let px = dg.dx.value, py = dg.dy.value, stills = 0;
       const whenStill = () => {
-        const x = dg.dx.value, y = dg.dy.value, moved = Math.hypot(x - px, y - py) > G.swapStill;
+        const x = dg.dx.value, y = dg.dy.value;
+        stills = Math.hypot(x - px, y - py) > G.swapStill ? 0 : stills + 1;
         px = x; py = y;
-        if (moved) aimT.current = setTimeout(whenStill, T.timing.swapDwell);
-        else place();
+        if (stills === 2) place();
+        else aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       };
-      aimT.current = setTimeout(whenStill, T.timing.swapDwell);
+      aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       return;
     }
     const k = -a - 1, F = flatOf(d), under = F[(paginate(F)[d.page] ?? [])[k] ?? -1];
     if (!under || under.id === d.id) return;
-    aimT.current = setTimeout(() => { dg.stackK.value = k; setStackOn(under.id); haptic('dragStart'); }, T.timing.stackHover);
+    // 拖著經過不算：這段時間手還走得快就再等一輪，底板才不會一路閃、一路震
+    let sx = dg.dx.value, sy = dg.dy.value;
+    const whenSlow = () => {
+      const x = dg.dx.value, y = dg.dy.value, fast = Math.hypot(x - sx, y - sy) > G.stackSlow;
+      sx = x; sy = y;
+      if (fast) { aimT.current = setTimeout(whenSlow, T.timing.stackHover); return; }
+      dg.stackK.value = k; setStackOn(under.id); haptic('dragStart');
+    };
+    aimT.current = setTimeout(whenSlow, T.timing.stackHover);
   }
   // 在邊緣停 edgeFlip 就翻一頁；一直停著就再翻。翻過去後格子對到哪格照手指現在的位置重算（手指不動也要算）
   function onEdge(z: number) {
@@ -1244,10 +1267,10 @@ function Tile(p: TileProps) {
     rot.value = withRepeat(withSequence(withTiming(a, { duration: M.jiggle.half }), withTiming(-a, { duration: M.jiggle.half })), -1, true);
     return () => cancelAnimation(rot);
   }, [p.editing, calm]); // eslint-disable-line react-hooks/exhaustive-deps
-  // D2：被瞄著要疊的那張放大一點。減少動態：直接變大
-  const grow = useSharedValue(1);
+  // 被瞄著要疊的那張（2026-11-04 照 iPhone）：後面長出底板、自己變淡，名字和「−」收起；離開就還原。減少動態：直接變
+  const grow = useSharedValue(1), cue = useSharedValue(0);
   useEffect(() => {
-    grow.value = calm ? (p.target ? GROW : 1) : withSpring(p.target ? GROW : 1, LIFT_SPRING);
+    cue.value = calm ? (p.target ? 1 : 0) : withTiming(p.target ? 1 : 0, { duration: CUE_MS });
   }, [p.target, calm]); // eslint-disable-line react-hooks/exhaustive-deps
   // 有東西縮進來：放大一下再彈回（減少動態：不彈）
   useEffect(() => {
@@ -1260,6 +1283,9 @@ function Tile(p: TileProps) {
     transform: [{ rotate: `${rot.value}deg` }, { scale: grow.value * (1 + held.value * (HOLD_SCALE - 1)) }],
     opacity: ghost ? 0 : 1 - pressed.value * (1 - PRESS_DIM),
   }), WEB_DEPS ? [ghost] : undefined);
+  const plateStyle = useAnimatedStyle(() => ({ opacity: cue.value, transform: [{ scale: 1 + cue.value * (PLATE - 1) }] }));
+  const faceStyle = useAnimatedStyle(() => ({ opacity: 1 - cue.value * (1 - CUE_DIM) }));
+  const c = useColors(), size = sizeOf(w);
 
   return (
     <GestureDetector gesture={gesture}>
@@ -1267,9 +1293,12 @@ function Tile(p: TileProps) {
         accessible accessibilityRole="button" accessibilityLabel={p.label}
         accessibilityState={{ selected: p.selected }} accessibilityActions={p.acts}
         onAccessibilityAction={(ev: AccessibilityActionEvent) => (isFolder ? api.a11yFolder(id, ev.nativeEvent.actionName) : api.a11yNote(id, ev.nativeEvent.actionName))}>
-        {isFolder ? <FolderFace f={e.folder!} notes={e.notes} w={w} cur={p.cur} /> : <TileFace n={e.note!} w={w} cur={p.cur} />}
+        <Animated.View pointerEvents="none" style={[st.plate, plateStyle, { left: (w - size) / 2, width: size, height: size, borderRadius: size * RADIUS, backgroundColor: c.menuSep }]} />
+        <Animated.View style={faceStyle}>
+          {isFolder ? <FolderFace f={e.folder!} notes={e.notes} w={w} cur={p.cur} hideName={p.target} /> : <TileFace n={e.note!} w={w} cur={p.cur} hideName={p.target} />}
+        </Animated.View>
         {/* 抖動中左上角的「−」只有紙磚有（資料夾磚沒有，照 iOS） */}
-        {p.editing && !isFolder && <Minus onPress={() => api.minusNote(id)} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
+        {p.editing && !isFolder && !p.target && <Minus onPress={() => api.minusNote(id)} held={held} inset={(p.w - sizeOf(p.w)) / 2} />}
       </Animated.View>
     </GestureDetector>
   );
@@ -1431,7 +1460,7 @@ function Launch({ x, y, w, color, title, W, H, onDone }: LaunchProps) {
 function DragGhost({ dg, calm, children }: { dg: DG; calm: boolean; children: ReactNode }) {
   const style = useAnimatedStyle(() => ({
     opacity: calm && dg.sink.value > 0 ? 0 : 1 - dg.sink.value,
-    transform: [{ translateX: dg.x0.value + dg.dx.value }, { translateY: dg.y0.value + dg.dy.value },
+    transform: [{ translateX: dg.x0.value + dg.dx.value + dg.cx.value }, { translateY: dg.y0.value + dg.dy.value + dg.cy.value },
       { scale: (1 + dg.lift.value * (HOLD_SCALE - 1)) * (1 - dg.sink.value * (1 - SINK_SCALE)) }],
   }));
   return <Animated.View pointerEvents="none" style={[st.ghost, st.ghostAt, style]}>{children}</Animated.View>;
@@ -1439,7 +1468,7 @@ function DragGhost({ dg, calm, children }: { dg: DG; calm: boolean; children: Re
 
 // 一塊磚的樣子（2026-11-03 改 1×1，照 iPhone 主畫面的 App）：w＝格子寬。上面是置中的方磚——整塊是紙的主色（hd，UI 範本 v2 拿掉右下角的色圓）、正中間名字的第一個字；
 // 下面是名字（一行，太長尾巴變「…」）。正在看的那張方磚用 accent 框起來（面板上唯一的 accent），釘選的右上角一個圖釘（次要字色，C1）
-function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
+function TileFace({ n, w, cur, hideName }: { n: Note; w: number; cur: boolean; hideName?: boolean }) {
   const c = useColors();
   const nc = useNoteColors(n.color);
   const s = sizeOf(w);
@@ -1453,17 +1482,17 @@ function TileFace({ n, w, cur }: { n: Note; w: number; cur: boolean }) {
         {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={nc.ink} /></View> : null}
       </View>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
-      <TileName t={label(n)} color={n.title.trim() ? c.textPrimary : c.textSecondary} />
+      <TileName t={label(n)} color={n.title.trim() ? c.textPrimary : c.textSecondary} hide={hideName} />
     </View>
   );
 }
-function TileName({ t, color }: { t: string; color: string }) {
-  return <Text style={[st.tileName, { color }]} numberOfLines={1} maxFontSizeMultiplier={T.font.titleMaxScale}>{t}</Text>;
+function TileName({ t, color, hide }: { t: string; color: string; hide?: boolean }) {
+  return <Text style={[st.tileName, { color }, hide && st.nameHidden]} numberOfLines={1} maxFontSizeMultiplier={T.font.titleMaxScale}>{t}</Text>;
 }
 
 // 資料夾磚（2026-11-03 改 1×1，照 iOS 檔案夾）：跟紙磚一樣大，方磚裡 3×3 小方塊、每塊是裡面一張紙的顏色（最多九張），名字在下面。
 // 底用整頁底色、框用分隔線色，跟紙磚的紙色分得開；正在看的紙在裡面就用 accent 框
-function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number; cur: boolean }) {
+function FolderFace({ f, notes, w, cur, hideName }: { f: Folder; notes: Note[]; w: number; cur: boolean; hideName?: boolean }) {
   const c = useColors();
   const s = sizeOf(w), N = T.shape.folderMinis, gap = T.shape.folderMiniGap, pad = T.shape.folderMiniPad;
   const mini = Math.floor((s - pad * 2 - gap * (N - 1) - T.shape.borderSelected * 2) / N);
@@ -1473,7 +1502,7 @@ function FolderFace({ f, notes, w, cur }: { f: Folder; notes: Note[]; w: number;
         borderColor: cur ? c.accent : c.separator, borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
         {notes.slice(0, N * N).map(n => <Mini key={n.id} n={n} w={mini} />)}
       </View>
-      <TileName t={f.name} color={c.textPrimary} />
+      <TileName t={f.name} color={c.textPrimary} hide={hideName} />
     </View>
   );
 }
@@ -1585,6 +1614,8 @@ const st = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: T.shape.tileRowGap, marginTop: T.space.m },
   ghost: { position: 'absolute', ...T.shape.shadowSoft },
   ghostAt: { left: 0, top: 0 },
+  plate: { position: 'absolute', top: 0 },
+  nameHidden: { opacity: 0 },
   hidden: { opacity: 0 },
   // 一格（方磚＋名字）：方磚置中在上面，名字在下面
   cell: { alignItems: 'center', gap: T.shape.tileLabelGap },

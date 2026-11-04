@@ -211,7 +211,8 @@ export const motion = {
   dragLand:      { spring: { duration: 250, dampingRatio: 1 } }, // 放下時被拖的行滑進落點。減少動態：直接到位
   launch:        { duration: 260 }, // 2026-11-02 照 iOS 開 App：目錄點一張，那塊磚放大鋪滿面板這麼久，然後面板淡出（dirPanel.reducedFade）。減少動態：不放大
   menuLift:      { scale: 1.04 }, // 2026-11-02 照虛擬手機原型：目錄長按跳選單時，那塊磚在原位浮起來放大這麼多（彈簧用 dragLift 那組）。減少動態：直接到位
-  stackTarget:   { scale: 1.1 }, // D2：準備疊，底下那張放大一點＝放手就縮進去（2026-11-02 照原型 1.08→1.1；彈簧用 dragLift 那組）。減少動態：直接變大
+  stackTarget:   { scale: 1.1, plate: 1.25, dim: 0.6, cue: 120 }, // plate、dim、cue（2026-11-04 照 iPhone）：準備疊時底下那張後面長出多大的底板、磚變多淡、多快；scale 是東西縮進來時彈一下； // D2：準備疊，底下那張放大一點＝放手就縮進去（2026-11-02 照原型 1.08→1.1；彈簧用 dragLift 那組）。減少動態：直接變大
+  dragCatch:     { duration: 120 }, // 拿起時磚補上手指已經走的那段（iOS 手勢要走一段才啟動），之後磚的位置就是手指的位置
   sink:          { duration: 260, scale: 0.3 }, // 2026-11-02 照 iOS：疊上去放手，浮著那張滑到底下那張上、縮小淡掉。減少動態：直接消失
   dragLift:      { scale: 1.02, spring: { duration: 150, dampingRatio: 1 } }, // 拿起來浮起：放大一點＋陰影（shape.shadowSoft）。減少動態：不放大，只有陰影
   tileHold:      { scale: 1.08 }, // 2026-11-03 多米真機：抖動中手指一按住目錄的磚就放大這麼多（看得出按到了），拖著也一樣大，放手才縮回（彈簧用 dragLift 那組，1.02 太小看不出來）。減少動態：直接變大、不彈
@@ -277,11 +278,12 @@ export const gesture = {
   tileDragHeld: 18, tileDragEdit: 12,
   edgeZone: 36, // 拖著磚、磚的中心離螢幕左右邊不到這麼多＝在邊緣（C5），停 timing.edgeFlip 就翻頁
   // 2026-11-02（多米：磚是寬的，左右上下都難換；原型對過）：看拖著那張跟底下那張「重疊多少」（面積比），不看中心落在哪。
-  // 2026-11-03 改 1×1、照 iPhone（多米選）：拖著那張的中心落在別張的格子裡——離那張方磚的中心不到 stackRadius × 邊長，
-  // 停 timing.stackHover＝準備疊（放手縮進去）；再遠一點（還在那格裡）停 timing.swapDwell＝互換（只有這兩張動）。
-  // 準備疊之後要離到 stackHold × 邊長外才取消（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
-  stackRadius: 0.5, stackHold: 0.65, // 2026-11-04 從 0.34、0.5 放大（模擬器：蓋住七成還在互換；多米真機：磚碰在一起要變資料夾）：蓋過一半就算要疊
-  swapStill: 3, // 每 timing.swapDwell 毫秒手指移動不超過這麼多點才算停下來、才互換（2026-11-04：手還在動就換，往別張正中間慢慢拖會先被換走，疊不起來）
+  // 疊還是換（2026-11-04 多米選「照 iPhone」，量真主畫面定的，見 .uiux/iOS主畫面編輯-官方規範對照.md 第十二節）：拖著那張的中心進到別張那格，
+  // 上下差不到 stackY × 邊長就準備疊（停 timing.stackHover）；上下錯開、或穿過中心再往前超過 stackFar × 邊長，手停下來才互換。
+  // 準備疊之後放寬到 stackYHold、stackFarHold（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
+  stackY: 0.375, stackYHold: 0.5, stackFar: 0.25, stackFarHold: 0.36,
+  stackSlow: 12, // timing.stackHover 毫秒內手指移動超過這麼多點算還在經過，先不出準備疊的回饋
+  swapStill: 3, // timing.swapPoll 毫秒內手指移動不超過這麼多點算停著；連續兩次才互換（手還在動就換，往別張正中間拖會先被換走）
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
@@ -296,8 +298,9 @@ export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, fr
   widgetPushDelay: 800, // 換紙之後停這麼久才通知桌面小工具（2026-11-04）
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
-  swapDwell: 100,  // 互換：手指停下來（gesture.swapStill）多久才換（2026-11-04 起要停下來，見 swapStill）；放進空格仍是進去待這麼久就放
-  stackHover: 250, // 2026-11-02：重疊兩成到一半停這麼久就準備疊。拖到資料夾上不再自己打開（多米：顯示合併就好）
+  swapDwell: 100,  // 放進空格、資料夾裡換位：進去待這麼久就做
+  swapPoll: 125,   // 目錄裡互換：每隔這麼久看一次手停了沒，連續兩次（約 0.25 秒，iPhone 量到 0.2～0.4 秒）才換
+  stackHover: 120, // 準備疊的回饋多快出現（iPhone 量到 0.1～0.2 秒）。拖到資料夾上不再自己打開（多米：顯示合併就好）
   folderLeave: 350 }; // D4：資料夾開著時手指離開框這麼久，資料夾收起、回到目錄繼續拖 // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
 /* ---------- 桌面小工具（expo-widgets，多米 2026-10-31 第一版只讀不寫）：各尺寸最多放幾行 ---------- */
