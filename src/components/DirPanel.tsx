@@ -113,11 +113,11 @@ function useDG(): DG {
     bw: useSharedValue(0), bh: useSharedValue(0), fcount: useSharedValue(1), flast: useSharedValue(0), ready: useSharedValue(0),
   };
 }
-// aim 的編碼（2026-11-03 改成看中心落在哪格）：k≥0＝跟這頁第 k 格那張互換；−k−1＝準備疊到第 k 格那張；CELL_AIM−k＝放進這頁第 k 格的空格
+// aim 的編碼（2026-11-03 改成看中心落在哪格）：k≥0＝跟這頁第 k 格那張互換（手慢下來才換）；PAST_AIM＋k＝推過第 k 格那張的中心，馬上換；−k−1＝準備疊到第 k 格那張；CELL_AIM−k＝放進這頁第 k 格的空格
 // （空位，或最後一張後面、這頁還放得下的格子；2026-11-03 自由擺放，取代原本的「排到最後」）；
 // FOLDER_AIM＋i＝跟資料夾裡第 i 張互換；FOLDER_END＝資料夾這頁的空格（排到最後）；AIM_OUT＝資料夾開著、手指在框外（停一下收起）；
 // AIM_NONE＝什麼都不做（落在自己那格、格子外面、還沒量好）
-const FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000, FOLDER_END = -400000, CELL_AIM = -500000;
+const PAST_AIM = 200000, FOLDER_AIM = 100000, AIM_OUT = -100000, AIM_NONE = -200000, FOLDER_END = -400000, CELL_AIM = -500000;
 // 打開的資料夾裡第 i 張的左上角（螢幕座標，扣掉翻到第幾頁）
 function folderSlot(i: number, dg: DG, fw: number) {
   'worklet';
@@ -151,14 +151,17 @@ function aimOf(ax: number, ay: number, dg: DG, gw: number, fw: number, fx: numbe
   // 中心落在空格（這頁的空位，或最後一張後面、這頁還放得下的格子）：放進那格（2026-11-03 自由擺放，照 iOS 放哪停哪）
   if (c < dg.gcount.value ? holeAt(dg.holes.value, c) : c < dg.gcap.value) return CELL_AIM - c;
   if (c >= dg.gcount.value) return AIM_NONE;
-  // 落在有東西的格子（2026-11-04 照量到的 iPhone）：上下對齊＝準備疊；上下錯開＝互換。同一列穿過中心再往前也是互換。已經準備疊了就放寬，手晃一下不會丟掉。
+  // 落在有東西的格子（2026-11-04 照多米錄的真機主畫面）：看「前進的方向」，從磚現在站的那格往這格。還沒推過對方中心太遠、也沒偏太多＝準備疊；
+  // 推過中心約三分之一塊磚＝馬上互換，手不用停（PAST_AIM）；偏太多（從旁邊錯開經過）＝手慢下來才互換。上下左右都一樣。已經準備疊了就放寬，手晃一下不會丟掉。
   // 拿起那格站的是被換過去的那張，停回來是復原，不算疊。拖的是資料夾不能疊
   const dx = cx - (dg.gx.value + slotX(c, gw) + gw / 2), dy = cy - (dg.gy.value + slotY(c, gw) + s / 2);
   const on = dg.aim.value === -c - 1, last = dg.glast.value;
-  const past = last >= 0 && Math.floor(last / COLS) === Math.floor(c / COLS) && (c < last ? dx < 0 : dx > 0);
-  const yMax = (on ? STACK_Y_HOLD : STACK_Y) * s, xMax = past ? (on ? STACK_FAR_HOLD : STACK_FAR) * s : gw;
-  if (!dg.fold.value && c !== dg.gbase.value && Math.abs(dy) < yMax && Math.abs(dx) < xMax) return -c - 1;
-  return c;
+  const vx = last >= 0 ? slotX(c, gw) - slotX(last, gw) : 0, vy = last >= 0 ? slotY(c, gw) - slotY(last, gw) : 0, len = Math.hypot(vx, vy);
+  const along = len ? (dx * vx + dy * vy) / len : 0, across = len ? Math.abs(dx * vy - dy * vx) / len : Math.max(Math.abs(dx), Math.abs(dy));
+  if (c === dg.gbase.value) return c;
+  if (across >= (on ? STACK_Y_HOLD : STACK_Y) * s) return c;
+  if (along >= (on ? STACK_FAR_HOLD : STACK_FAR) * s) return PAST_AIM + c;
+  return dg.fold.value ? c : -c - 1;
 }
 
 // 目錄的磚、資料夾裡的磚共用的拖（D4）：長按後一拖（抖動中直接拖）拿起來；手指每動一格算一次瞄著哪，變了才回 JS 計時讓位／疊／開關資料夾；
@@ -781,6 +784,15 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     }
     clearTimeout(leaveT.current);
     leaveT.current = undefined;
+    if (a >= PAST_AIM) {
+      aimT.current = setTimeout(() => {
+        const cur = dragRef.current, cells = cur?.cells ? placeAt(cur, cur.page, a - PAST_AIM) : null;
+        if (!cur || !cells || sameCells(cells, cur.cells)) return;
+        setD({ ...cur, cells });
+        haptic('dragPass');
+      }, T.timing.swapPast);
+      return;
+    }
     if (a === FOLDER_END || a >= FOLDER_AIM) {
       entered.current = true;
       if (!d.inF) return;
@@ -824,15 +836,7 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
     }
     const k = -a - 1, F = flatOf(d), under = F[(paginate(F)[d.page] ?? [])[k] ?? -1];
     if (!under || under.id === d.id) return;
-    // 拖著經過不算：這段時間手還走得快就再等一輪，底板才不會一路閃、一路震
-    let sx = dg.dx.value, sy = dg.dy.value;
-    const whenSlow = () => {
-      const x = dg.dx.value, y = dg.dy.value, fast = Math.hypot(x - sx, y - sy) > G.stackSlow;
-      sx = x; sy = y;
-      if (fast) { aimT.current = setTimeout(whenSlow, T.timing.stackHover); return; }
-      dg.stackK.value = k; setStackOn(under.id); haptic('dragStart');
-    };
-    aimT.current = setTimeout(whenSlow, T.timing.stackHover);
+    aimT.current = setTimeout(() => { dg.stackK.value = k; setStackOn(under.id); haptic('dragStart'); }, T.timing.stackHover);
   }
   // 在邊緣停 edgeFlip 就翻一頁；一直停著就再翻。翻過去後格子對到哪格照手指現在的位置重算（手指不動也要算）
   function onEdge(z: number) {
