@@ -283,7 +283,7 @@ export const gesture = {
   // 準備疊之後放寬到 stackYHold、stackFarHold（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
   stackY: 0.375, stackYHold: 0.5, stackFar: 0.25, stackFarHold: 0.36,
   stackSlow: 12, // timing.stackHover 毫秒內手指移動超過這麼多點算還在經過，先不出準備疊的回饋
-  swapStill: 3, // timing.swapPoll 毫秒內手指移動不超過這麼多點算停著；連續兩次才互換（手還在動就換，往別張正中間拖會先被換走）
+  swapStill: 4, // timing.swapPoll 毫秒內手指移動不超過這麼多點，就算慢下來、馬上互換（約 50 點／秒以下；手走得快先不換，往別張拖才不會半路被換走）
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
   dragActivate: 1,    // 把手上「上下」動超過這麼多＝拿起
@@ -299,7 +299,7 @@ export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, fr
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
   swapDwell: 100,  // 放進空格、資料夾裡換位：進去待這麼久就做
-  swapPoll: 125,   // 目錄裡互換：每隔這麼久看一次手停了沒，連續兩次（約 0.25 秒，iPhone 量到 0.2～0.4 秒）才換
+  swapPoll: 80,    // 目錄裡互換：每隔這麼久看一次手慢下來了沒（2026-11-04 多米真機「要早一點交換」，原本約 0.25 秒以上）
   stackHover: 120, // 準備疊的回饋多快出現（iPhone 量到 0.1～0.2 秒）。拖到資料夾上不再自己打開（多米：顯示合併就好）
   folderLeave: 350 }; // D4：資料夾開著時手指離開框這麼久，資料夾收起、回到目錄繼續拖 // D2：拖著停在別張磚正中間這麼久，底下那張放大＝放手就疊成資料夾（疊在資料夾上＝放進去） // 拖著磚停在左右邊緣多久翻頁（C5，iOS 主畫面差不多這麼久）；一直停著就每隔這麼久再翻一頁 // cloudOffGrace：iCloud 不能用要持續這麼久才提示（剛打開 app 時 iCloud 常常晚一點才準備好，S5）
 
