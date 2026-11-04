@@ -189,7 +189,7 @@ test('K1 游標落點：用 y 找行、行內用比例，夾在 0～max；沒有
   assert.equal(caretAt(lines, -50, 10, 15), 0);      // 點在左邊外面
 });
 
-test('第一次安裝的教學紙：一張有標題、六行都沒劃掉的黃色清單，每行 id 不重複', async () => {
+test('第一次安裝的教學紙：一張有標題、七行都沒劃掉的黃色清單，每行 id 不重複', async () => {
   const { tutorialNote, TUTORIAL, isEmpty } = await import('../src/lib/model.ts');
   const n = tutorialNote(1000);
   assert.equal(n.title, TUTORIAL.title);
@@ -201,4 +201,5 @@ test('第一次安裝的教學紙：一張有標題、六行都沒劃掉的黃�
   assert.equal(new Set(n.items.map(i => i.id)).size, n.items.length);
   assert.equal(isEmpty(n), false); // 關掉紙時不會被當成空紙收掉
   assert.ok(TUTORIAL.lines.some(t => t.includes('往右滑劃掉')) && TUTORIAL.lines.some(t => t.includes('往左滑刪掉')));
+  assert.ok(TUTORIAL.lines.some(t => t.includes('換一張紙'))); // 2026-11-05：切換清單是點左上，新使用者要有人告訴他
 });
