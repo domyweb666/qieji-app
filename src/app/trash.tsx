@@ -1,6 +1,6 @@
 // 「最近刪除」：從目錄面板最下面那列進來。上面是刪掉的清單（一張一張），下面是各張紙刪掉的行（帶那張紙的名字）。
 import { router, Stack } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { menuItems, showActs, type Act } from '../components/Acts';
 import { Empty } from '../components/Empty';
 import { ListGroup, ListRow, listStyles, NoteSections } from '../components/NoteList';
@@ -45,6 +45,8 @@ export default function Trash() {
   return (
     <View style={{ flex: 1, backgroundColor: c.page }} collapsable={false}>
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={listStyles.wrap}>
+        {/* 頁名畫在內容裡，跟內容一起滑進來、一起捲走（不用系統大標題，原因見 _layout）；網頁的頁名在 WebTop */}
+        {Platform.OS === 'ios' && <Text style={[st.title, { color: c.textPrimary }]} accessibilityRole="header">{title}</Text>}
         {total > 0 && (
           <Stack.Toolbar placement="right">
             <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="選單">{menuItems(acts)}</Stack.Toolbar.Menu>
@@ -71,5 +73,6 @@ export default function Trash() {
 }
 
 const st = StyleSheet.create({
+  title: { ...T.font.title, marginTop: T.space.s, marginLeft: T.space.l },
   note: { ...T.font.footnote, marginTop: T.space.s, marginLeft: T.space.l },
 });

@@ -280,7 +280,7 @@ export const gesture = {
   // 2026-11-03 改 1×1、照 iPhone（多米選）：拖著那張的中心落在別張的格子裡——離那張方磚的中心不到 stackRadius × 邊長，
   // 停 timing.stackHover＝準備疊（放手縮進去）；再遠一點（還在那格裡）停 timing.swapDwell＝互換（只有這兩張動）。
   // 準備疊之後要離到 stackHold × 邊長外才取消（手晃一下不會丟掉）。打開的資料夾裡不能疊，中心落在哪格就跟哪格互換
-  stackRadius: 0.34, stackHold: 0.5,
+  stackRadius: 0.5, stackHold: 0.65, // 2026-11-04 從 0.34、0.5 放大（模擬器：蓋住七成還在互換；多米真機：磚碰在一起要變資料夾）：蓋過一半就算要疊
   swapStill: 3, // 每 timing.swapDwell 毫秒手指移動不超過這麼多點才算停下來、才互換（2026-11-04：手還在動就換，往別張正中間慢慢拖會先被換走，疊不起來）
   strikeMax: 90, strikeRatio: 0.25,  // 往右滑超過 min(90, 寬 × 25%) 放手算劃掉
   deleteMax: 110, deleteRatio: 0.3,  // 往左滑超過 min(110, 寬 × 30%) 放手算刪除
