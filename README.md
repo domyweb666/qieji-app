@@ -97,6 +97,7 @@ src/
   components/        Paper、Composer、DirPanel（目錄）、SwitchPanel（切換清單）、PopMenu 等元件
   lib/
     model.ts           資料格式、排序、最近刪除、同步合併規則
+    rows.ts            紙上每一行站哪裡的位置表（清單引擎用）
     store.ts           讀寫本機、什麼時候上傳與拉取
     cloud.ts           iCloud 雲碟讀寫（每個呼叫都有逾時）
     widget.ts          算好小工具要顯示的內容推過去
