@@ -77,6 +77,7 @@ const TEXT_INSET = T.space.l + T.space.xs + T.shape.hitMin + T.space.xs * 2;
 const TEXT_DROP = Platform.OS === 'ios' ? T.font.lineInputDrop : 0; // 一般文字跟輸入框的字差多少，見 tokens
 const FRAME_MS = 16; // 第一格還不知道距離上一格多久，當成 16 毫秒
 const SEEK_NEAR = 3; // 搜尋點過來的那行在幾個螢幕內才用捲的，更遠就直接跳過去
+const SPACE_BELOW = 200; // 清單最下面留多少空白，最後一行才捲得上來
 // 清單照舊用 RNGH 的 ScrollView（行上的滑動、把手要跟它協調），包成 Animated 才拿得到逐格的捲動位置、在 UI 執行緒捲它
 // （RNGH v3 的 ScrollView 是函式元件、ref 照 React 19 當一般 prop 往下交，型別上當成 RN 的 ScrollView）
 const ListScroll = Animated.createAnimatedComponent(ScrollView as unknown as typeof RNScrollView);
@@ -691,13 +692,13 @@ export function Paper({ n }: { n: Note }) {
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             <LineList items={n.items} stamp={renders.current} api={api} ctl={listCtl} geoRef={geoRef} kickRef={kickRef} anchorNext={anchorNext}
-              bg={nc.bg} rule={nc.rule} colors={c} calm={calm} fs={fs} winH={winH} winW={winW}
+              spaceBelow={SPACE_BELOW + kbPad + insets.bottom} bg={nc.bg} rule={nc.rule} colors={c} calm={calm} fs={fs} winH={winH} winW={winW}
               editing={editing} freshId={freshId} focused={focused} pending={pending} revs={revs} view={view}
               scrollRef={scrollRef} scrollY={scrollY} listTop={listTop} listBot={listBot} listH={listH} contentH={contentH} />
           </LayoutAnimationConfig>
-          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。200 只用一次。行不多時撐滿到底（contentContainerStyle flexGrow），
+          {/* 留白讓最後一行能捲上來；點這裡不會新增一行。行不多時撐滿到底（contentContainerStyle flexGrow），
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
-          <View style={{ flexGrow: 1, minHeight: 200 + kbPad + insets.bottom }} collapsable={false} />
+          <View style={{ flexGrow: 1, minHeight: SPACE_BELOW + kbPad + insets.bottom }} collapsable={false} />
         </ListScroll>
       </View>
 
@@ -780,6 +781,8 @@ function useListShared(width: number) {
     // 其他行滑到新位置（長出一行、拿掉一行）：全部行共用一個時鐘 shiftT，0＝還在 shiftFrom、1＝到 pos
     shiftFrom: useSharedValue<Record<string, number>>({}), shiftT: useSharedValue(1),
     gone: useSharedValue<Record<string, boolean>>({}), // 滑出跑完、等 React 拿掉的行：先藏起來
+    // 內容變短、現在捲的位置會超過新的底（捲到最下面刪一行）：捲動位置跟其他行同一個時鐘一起退回去，不然系統會在內容變短那一刻一次拉回來，整頁跳一下
+    backFrom: useSharedValue(0), backTo: useSharedValue(0), backOn: useSharedValue(0),
     // 排順序：拖著哪一行、對到第幾個位置、跟手指差多少；浮起多少；每行中點；手指（dragFy 從拿起算往下多少、dragAy 在螢幕上多高）；
     // dragOn＝手指還按著；dragY＝自動捲捲到哪（拖的時候只有它在捲）
     dragId: useSharedValue(''), dragIdx: useSharedValue(-1), dragTo: useSharedValue(-1), dragDy: useSharedValue(0), dragH: useSharedValue(0),
@@ -795,6 +798,7 @@ type ListShared = ReturnType<typeof useListShared>;
 
 type ListProps = {
   items: Item[]; stamp: number; api: ListApi; ctl: RefObject<ListCtl>; geoRef: RefObject<Geo>; kickRef: RefObject<() => void>; anchorNext: RefObject<boolean>;
+  spaceBelow: number; // 清單下面那塊留白多高（算內容變短之後最多能捲到哪）
   bg: string; rule: string; colors: Colors; calm: boolean; fs: number; winH: number; winW: number;
   editing: string | null; freshId: string | null; focused: RefObject<string | null>; pending: RefObject<{ id: string; caret?: number } | null>; revs: RefObject<Record<string, number>>;
   view: RefObject<{ top: number; h: number; y: number; kb: number }>;
@@ -806,7 +810,7 @@ function LineList(p: ListProps) {
   const { api, ctl, calm, geoRef, view, focused, scrollRef, scrollY, listTop, listBot, listH, contentH, colors } = p;
   const made = useListShared(p.winW);
   const sv = useRef(made).current;
-  const { pos, idxOf, idsA, ysA, hsA, doneA, shiftFrom, shiftT, gone, dragId, dragIdx, dragTo, dragDy, dragH, dragLift, dragMids, dragFy, dragAy, dragOn, dragY0, dragY,
+  const { pos, idxOf, idsA, ysA, hsA, doneA, shiftFrom, shiftT, gone, backFrom, backTo, backOn, dragId, dragIdx, dragTo, dragDy, dragH, dragLift, dragMids, dragFy, dragAy, dragOn, dragY0, dragY,
     swipeId, swipeTx, swipeOp, swipeY, swipeH, swipeDone, underOp, armed, labelScale, exiting, listW } = sv;
   const dragLive = useRef(false), skipShift = useRef(false);
   const linesOf = useRef<Record<string, TextLine[]>>({}); // 每一行排版完回報的字（游標落點用）
@@ -815,8 +819,9 @@ function LineList(p: ListProps) {
   const [heldId, setHeldId] = useState<string | null>(null);
 
   // JS 算好的位置表交給 UI 執行緒。animate＝其他行滑過去（從現在看到的位置開始，滑到一半又變也接得上）；
-  // anchor＝畫面最上面那行不准動：它上面的行高度變了，同一格把捲動位置也補回來，看起來一動也不動
-  const publish = useMemo(() => (ids: string[], ys: number[], hs: number[], done: boolean[], animate: boolean, anchor: boolean) => {
+  // anchor＝畫面最上面那行不准動：它上面的行高度變了，同一格把捲動位置也補回來，看起來一動也不動；
+  // maxY＝這份位置表最多能捲到哪（內容變短時才有，其他是 -1）
+  const publish = useMemo(() => (ids: string[], ys: number[], hs: number[], done: boolean[], animate: boolean, anchor: boolean, maxY: number) => {
     'worklet';
     const m = maps(ids, ys);
     const g = gone.value;
@@ -830,7 +835,9 @@ function LineList(p: ListProps) {
       const k = hitRow(ysA.value, hsA.value, top);
       if (k >= 0) { const ny = m.pos[idsA.value[k]]; if (ny !== undefined) dy = ny - ysA.value[k]; }
     }
-    if (animate) {
+    // 其他行正滑到一半時又量到新的高度：接著滑，不准直接跳到終點
+    if (animate || shiftT.value < 1) {
+      if (animate && maxY >= 0 && top > maxY) { backFrom.value = top; backTo.value = maxY; backOn.value = 1; }
       const t0 = shiftT.value, P = pos.value, F = shiftFrom.value, from: Record<string, number> = {};
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i], a = P[id], b = F[id];
@@ -848,6 +855,13 @@ function LineList(p: ListProps) {
     idxOf.value = m.idx; idsA.value = ids; ysA.value = ys; hsA.value = hs; doneA.value = done;
     if (dy !== 0) scrollToUI(scrollRef, 0, top + dy, false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 捲動位置跟其他行同一個時鐘退回去（見 backOn）
+  useAnimatedReaction(() => shiftT.value, t => {
+    if (!backOn.value) return;
+    scrollToUI(scrollRef, 0, backFrom.value + (backTo.value - backFrom.value) * t, false);
+    if (t >= 1) backOn.value = 0;
+  });
 
   /* ---------- 排順序 ---------- */
   // 每一格畫面算一次：碰到上下緣自己捲、被拖的行對到第幾個位置（手指不動、紙在捲時也要算）
@@ -888,6 +902,7 @@ function LineList(p: ListProps) {
       if (i >= 0) api.menu(g.ids[i], view.current.top + g.ys[i] + g.hs[i] - scrollY.value);
     };
     const began = (id: string) => {
+      console.log('[dbg] began', id);
       dragLive.current = true;
       setHeldId(id);
       autoDrag.setActive(true);
@@ -896,6 +911,7 @@ function LineList(p: ListProps) {
       dragBegan();
     };
     const ended = (from: number, to: number, y: number) => {
+      console.log('[dbg] ended', from, to, y);
       dragLive.current = false;
       autoDrag.setActive(false);
       setHeldId(null);
@@ -999,9 +1015,12 @@ function LineList(p: ListProps) {
       block: [press, tap],
       activeOffsetY: [-DRAG_ACTIVATE, DRAG_ACTIVATE],
       failOffsetX: [-DRAG_FAIL_X, DRAG_FAIL_X],
+      onBegin: e => { 'worklet'; console.log('[dbg] grip begin', e.x, e.y, ysA.value.length); },
+      onFinalize: () => { 'worklet'; console.log('[dbg] grip finalize'); },
       onActivate: e => {
         'worklet';
         const ys = ysA.value, hs = hsA.value, i = hitRow(ys, hs, e.y - e.translationY);
+        console.log('[dbg] grip activate', e.y, e.translationY, i);
         if (i < 0) return;
         dragMids.value = midsOf(ys, hs);
         dragH.value = hs[i]; dragFy.value = e.translationY; dragAy.value = e.absoluteY; dragDy.value = e.translationY;
@@ -1071,9 +1090,11 @@ function LineList(p: ListProps) {
       <View collapsable={false}>
         <SwipeUnder sv={sv} colors={colors} />
         <Rows {...p} sv={sv} publish={publish} dragLive={dragLive} skipShift={skipShift} heldId={heldId} linesOf={linesOf} itemsRef={itemsRef} />
-        <GestureDetector gesture={grip}>
-          <View collapsable={false} style={st.gripCol} accessible={false} importantForAccessibility="no-hide-descendants" />
-        </GestureDetector>
+        <View collapsable={false} style={st.gripCol} pointerEvents="box-none">
+          <GestureDetector gesture={grip}>
+            <View collapsable={false} style={st.gripFill} onLayout={e => console.log('[dbg] gripCol', JSON.stringify(e.nativeEvent.layout))} accessible={false} importantForAccessibility="no-hide-descendants" />
+          </GestureDetector>
+        </View>
       </View>
     </GestureDetector>
   );
@@ -1085,7 +1106,7 @@ let rowHFor = '';
 
 type RowsProps = ListProps & {
   sv: ListShared;
-  publish: (ids: string[], ys: number[], hs: number[], done: boolean[], animate: boolean, anchor: boolean) => void;
+  publish: (ids: string[], ys: number[], hs: number[], done: boolean[], animate: boolean, anchor: boolean, maxY: number) => void;
   dragLive: RefObject<boolean>; skipShift: RefObject<boolean>; heldId: string | null;
   linesOf: RefObject<Record<string, TextLine[]>>; itemsRef: RefObject<Item[]>;
 };
@@ -1093,13 +1114,14 @@ type RowApi = ListApi & { rowLayout: (id: string, h: number) => void; lines: (id
 
 // 算位置、決定掛哪幾行、畫行。捲動時只有這裡重畫，手勢和紙都不動
 function Rows(p: RowsProps) {
-  const { items, stamp, api, geoRef, kickRef, anchorNext, bg, rule, colors, calm, fs, winH, winW, editing, freshId, focused, pending, revs, view, scrollY, listH, sv, publish, dragLive, skipShift, heldId, linesOf, itemsRef } = p;
+  const { items, stamp, api, geoRef, kickRef, anchorNext, spaceBelow, bg, rule, colors, calm, fs, winH, winW, editing, freshId, focused, pending, revs, view, scrollY, listH, sv, publish, dragLive, skipShift, heldId, linesOf, itemsRef } = p;
   const { dragOn, dragY } = sv;
   const [tick, measured] = useReducer((x: number) => x + 1, 0); // 量到新的高度
   const [, rerender] = useReducer((x: number) => x + 1, 0); // 捲到別的地方，要掛的行變了
 
   // 位置表：紙重畫了、量到新高度才重算，單純捲動不用
   const forKey = useRef(''), geoBox = useRef<Geo>(EMPTY_GEO);
+  const holdH = useRef(0), holdNew = useRef(false), holdT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const key = `${stamp}|${tick}`;
   if (forKey.current !== key) {
     forKey.current = key;
@@ -1107,6 +1129,7 @@ function Rows(p: RowsProps) {
     if (rowHFor !== scale) { ROW_H.clear(); rowHFor = scale; }
     const inputId = focused.current ?? editing;
     const minH = rowMinH(fs), width = winW - TEXT_INSET, em = T.font.line.fontSize * fs, lineH = LINE_H * fs;
+    const before = geoBox.current.total;
     geoBox.current = buildGeo(items, it => {
       const r = ROW_H.get(it.id);
       if (r && (r.t === it.t || it.id === inputId)) return r.h; // 正在打的那行字一直變，高度以量到的為準
@@ -1115,8 +1138,17 @@ function Rows(p: RowsProps) {
       return h;
     });
     geoRef.current = geoBox.current;
+    // 內容變短：撐高的那塊先留著舊的高，等其他行滑完才收（不然系統馬上把捲動位置拉回來，整頁跳一下）
+    if (geoBox.current.total < before) { holdH.current = Math.max(holdH.current, before); holdNew.current = true; }
   }
   const geo = geoBox.current;
+  useLayoutEffect(() => {
+    if (!holdNew.current) return;
+    holdNew.current = false;
+    clearTimeout(holdT.current);
+    holdT.current = setTimeout(() => { holdH.current = 0; rerender(); }, ROW_SHIFT_MS + FRAME_MS * 2);
+  });
+  useEffect(() => () => clearTimeout(holdT.current), []);
 
   // 上一次交給 UI 執行緒的那份：一樣就不交。拖著的時候不交（放手時 UI 執行緒自己換好）
   const published = useRef<Geo>(EMPTY_GEO), isFirst = useRef(true);
@@ -1133,7 +1165,11 @@ function Rows(p: RowsProps) {
     const anchored = anchorNext.current, skip = skipShift.current, first = isFirst.current;
     anchorNext.current = false; skipShift.current = false; isFirst.current = false;
     const animate = !first && !calm && !skip && !anchored && (structural || grew);
-    scheduleOnUI(publish, geo.ids, geo.ys, geo.hs, geo.done, animate, anchored || !structural);
+    // 內容變短之後最多能捲到哪（清單加上下面的留白；比畫面矮就是 0）
+    const listSeen = view.current.h || winH;
+    const maxY = geo.total < prev.total ? Math.max(0, geo.total + spaceBelow - listSeen) : -1;
+    if (animate && maxY >= 0) view.current.y = Math.min(view.current.y, maxY);
+    scheduleOnUI(publish, geo.ids, geo.ys, geo.hs, geo.done, animate, anchored || !structural, maxY);
     if (anchored && geo.hs.length) view.current.y += geo.hs[0]; // 輸入框送出、留在原地：捲動位置往下補了新行那麼高
     if (grew && inputId) api.ensure(inputId);
   });
@@ -1191,10 +1227,12 @@ function Rows(p: RowsProps) {
   }
   if (extra) idx.sort((a, b) => a - b);
 
+  // 行全部包在自己這一層（2026-11-04）：拿起一行時疊放順序變了（zIndex），原生會把排在它後面的兄弟拆下來再裝回去。
+  // 把手的偵測元件如果也是兄弟，一拆下來手勢就被取消（真機：began 之後馬上 finalize，拖不動）。包一層，換順序只動這裡面
   return (
-    <>
+    <View collapsable={false}>
       {/* 行都是疊在上面的（absolute），清單多高由這一塊撐 */}
-      <View style={{ height: geo.total }} pointerEvents="none" />
+      <View style={{ height: Math.max(geo.total, holdH.current) }} pointerEvents="none" />
       {idx.map(i => {
         const it = items[i], id = geo.ids[i];
         if (!it || it.id !== id) return null;
@@ -1205,7 +1243,7 @@ function Rows(p: RowsProps) {
             born={!!had.current && !had.current.has(id)} isFirst={i === 0} isLast={i === geo.ids.length - 1} sv={sv} rowApi={rowApi} />
         );
       })}
-    </>
+    </View>
   );
 }
 
@@ -1415,6 +1453,7 @@ const st = StyleSheet.create({
   rowText: { flex: 1, minWidth: 0 },
   // 把手的手勢：清單右邊一長條，蓋在每一行的六個點上面
   gripCol: { position: 'absolute', top: 0, bottom: 0, right: 0, width: T.shape.hitMin },
+  gripFill: { flex: 1 },
   // 左右滑時行底下露出的那一塊：墊在所有行底下，移到正在滑的那行後面（高度、位置在動畫樣式）
   under: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: T.space.gutter },
   underText: { ...T.font.callout, fontWeight: T.font.semibold },

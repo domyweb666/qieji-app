@@ -1,10 +1,10 @@
 {
   "station": "audit-batch",
-  "updated_at": "2026-11-04T08:20:00+08:00",
+  "updated_at": "2026-11-04T10:11:00+08:00",
   "updated_by": "vibe-handoff",
   "pieces": {
     "todo": 0,
-    "machine_verified": 17,
+    "machine_verified": 20,
     "human_verified": 11
   },
   "chunks": [
@@ -38,6 +38,13 @@
     },
     {
       "name": "送審前小修 F1、F3、F4",
+      "total": 3,
+      "machine_done": 3,
+      "human_verified": false,
+      "approved": true
+    },
+    {
+      "name": "手感改版",
       "total": 3,
       "machine_done": 3,
       "human_verified": false,
@@ -153,6 +160,12 @@
       "why": "多米 2026-11-04「如果還沒就幫我修」",
       "since": "2026-11-04",
       "status": "併進 .vibe/送審前總驗.md 一併確認；AI 自己定的在 .vibe/代決清單.md"
+    },
+    {
+      "what": "手感改版的真實情境走查＋計畫覆誦",
+      "why": "多米 2026-11-04 要的是「幫我思考怎麼改」，這批沒等點頭就動工；不動資料、有分支可退",
+      "since": "2026-11-04",
+      "status": "併進 .vibe/送審前總驗.md 的 H1～H11 一併確認"
     }
   ],
   "decisions": [
@@ -166,6 +179,10 @@
     },
     {
       "what": "定位＝隨手記，不是待辦清單",
+      "since": "2026-11-04"
+    },
+    {
+      "what": "手感是最高標準，蓋過功能多寡與程式好不好寫",
       "since": "2026-11-04"
     }
   ],
