@@ -72,7 +72,8 @@ export default function RootLayout() {
               {/* 根畫面就是一張紙（重新設計分支「紙是家」）：不用系統標題列，自己畫一條：清單名和 ⋯ 在同一行 */}
               <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: c.page } }} />
               {/* 目錄不是路由了：B3 起是紙畫面裡自己做的面板（components/DirPanel），從上面垂下來 */}
-              <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true }} />
+              {/* 上面的 headerTitle: '' 是字串，會蓋過畫面裡 Stack.Title 給的標題，這一頁要自己寫回來 */}
+              <Stack.Screen name="trash" options={{ headerLargeTitleEnabled: true, headerTitle: '最近刪除' }} />
             </Stack>
           </View>
         ) : <View style={{ flex: 1, backgroundColor: c.page }} />}

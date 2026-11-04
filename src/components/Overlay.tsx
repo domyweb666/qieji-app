@@ -1,6 +1,6 @@
 // 疊在所有畫面上面的一層：選單、確認框、toast。其他畫面用 ui.sheet() / ui.confirm() / ui.toast() 呼叫。
 import { useEffect, useRef, useState } from 'react';
-import { ActionSheetIOS, Alert, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActionSheetIOS, Alert, Appearance, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +30,7 @@ export const ui = {
     const destructiveButtonIndex = rows.map((r, i) => (r.danger ? i : -1)).filter(i => i >= 0);
     // 系統動作表單不在 React 樹裡，拿不到 hook，顏色照目前外觀算一次
     ActionSheetIOS.showActionSheetWithOptions(
-      { title, message, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: colors('light').accent },
+      { title, message, options: opts, cancelButtonIndex: rows.length, destructiveButtonIndex, tintColor: colors(Appearance.getColorScheme() === 'dark' ? 'dark' : 'light').accent },
       i => { if (i < rows.length) rows[i].fn(); },
     );
   },
@@ -191,10 +191,10 @@ export function OverlayHost() {
             <Text style={[confirm.title ? s.dlgBody : s.dlgText, { color: c.textPrimary }]}>{confirm.msg}</Text>
             <View style={[s.acts, { borderTopColor: c.separator }]}>
               {!confirm.title && (
-                <Pressable hitSlop={T.space.s} onPress={() => setConfirm(null)}><Text style={[s.act, { color: c.accent }]}>取消</Text></Pressable>
+                <Pressable hitSlop={T.space.s} onPress={() => setConfirm(null)}><Text style={[s.act, s.confirmAct, { color: c.accent }]}>取消</Text></Pressable>
               )}
               <Pressable hitSlop={T.space.s} onPress={() => { const ok = confirm.ok; setConfirm(null); ok(); }}>
-                <Text style={[s.act, { color: confirm.title ? c.accent : c.danger }]}>{confirm.okLabel}</Text>
+                <Text style={[s.act, s.confirmAct, { color: confirm.title ? c.accent : c.danger }]}>{confirm.okLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -220,7 +220,9 @@ const s = StyleSheet.create({
   dlgText: { ...T.font.headline, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
   dlgBody: { ...T.font.callout, textAlign: 'center', paddingHorizontal: T.space.l, marginBottom: T.space.l },
   acts: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  act: { flex: 1, ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
+  // 不放 flex：磚字卡片的字包在 Pressable 裡（直向），flex 會把字高壓成只剩上下留白、字被卡片切掉（2026-11-04 模擬器抓到）
+  act: { ...T.font.body, paddingVertical: T.space.m, paddingHorizontal: T.space.xl, textAlign: 'center' },
+  confirmAct: { flex: 1 },
   promptWrap: { width: '100%', alignItems: 'center' },
   promptInput: { ...T.font.body, minHeight: T.shape.hitMin, marginHorizontal: T.space.l, paddingHorizontal: T.space.m, textAlign: 'center',
     borderRadius: T.shape.radiusSm, borderWidth: T.shape.borderCard },

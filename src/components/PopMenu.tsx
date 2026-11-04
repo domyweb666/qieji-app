@@ -60,7 +60,7 @@ export function PopMenu({ acts, top, header, onClose, side = 'right', lifted }: 
               {g.rows.map((a, i) => (
                 <View key={a.label}>
                   {i > 0 && <View style={[st.sep, { backgroundColor: c.menuSep }]} />}
-                  <Pressable onPress={() => pick(a)} accessibilityRole="menuitem"
+                  <Pressable onPress={() => pick(a)} accessibilityRole="menuitem" accessibilityLabel={a.label}
                     accessibilityState={a.on == null ? undefined : { checked: a.on }}
                     style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
                     {/* 打勾的項目：勾在最前面（iOS 選單的位置） */}
