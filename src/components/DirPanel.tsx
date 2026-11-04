@@ -823,13 +823,16 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         haptic('dragPass');
       };
       if (a < 0) { aimT.current = setTimeout(place, T.timing.swapDwell); return; }
-      // 跟別張互換：手還走得快就先不換（2026-11-04 多米真機：疊資料夾的功能不見了；同一天又說要早一點換）。手一慢下來就換，約 0.1 秒
-      let px = dg.dx.value, py = dg.dy.value;
+      // 高度錯開經過的互換：手還在動就先不換（2026-11-04 多米真機：疊資料夾的功能不見了）。連續兩次沒動才換，約 0.25 秒
+      let px = dg.dx.value, py = dg.dy.value, stills = 0;
       const whenStill = () => {
         const x = dg.dx.value, y = dg.dy.value;
-        if (Math.hypot(x - px, y - py) <= G.swapStill) { place(); return; }
+        stills = Math.hypot(x - px, y - py) > G.swapStill ? 0 : stills + 1;
         px = x; py = y;
-        aimT.current = setTimeout(whenStill, T.timing.swapPoll);
+        if (stills === 2) place();
+        else aimT.current = setTimeout(whenStill, T.timing.swapPoll);
+      };
+      aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       };
       aimT.current = setTimeout(whenStill, T.timing.swapPoll);
       return;
