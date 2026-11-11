@@ -1,9 +1,9 @@
 {
-  "station": "audit-batch",
-  "updated_at": "2026-11-04T14:42:00+08:00",
-  "updated_by": "vibe-handoff",
+  "station": "spec-standards",
+  "updated_at": "2026-11-11T00:00:00+08:00",
+  "updated_by": "vibe-traffic-control",
   "pieces": {
-    "todo": 0,
+    "todo": 10,
     "machine_verified": 20,
     "human_verified": 11
   },
@@ -49,9 +49,41 @@
       "machine_done": 3,
       "human_verified": false,
       "approved": true
+    },
+    {
+      "name": "1.1-A 買得到、解鎖得了",
+      "total": 2,
+      "machine_done": 0,
+      "human_verified": false,
+      "approved": true
+    },
+    {
+      "name": "1.1-B 沒買鎖住、買了解開",
+      "total": 5,
+      "machine_done": 0,
+      "human_verified": false,
+      "approved": true
+    },
+    {
+      "name": "1.1-C 關於與評分提示",
+      "total": 2,
+      "machine_done": 0,
+      "human_verified": false,
+      "approved": true
+    },
+    {
+      "name": "1.1-D 對外文字",
+      "total": 1,
+      "machine_done": 0,
+      "human_verified": false,
+      "approved": true
     }
   ],
-  "pending_immediate_verify": [],
+  "pending_immediate_verify": [
+    "A1",
+    "A2",
+    "B1"
+  ],
   "skipped_gates": [
     {
       "what": "閘門 1、2（沒看過的人測）",
@@ -196,6 +228,14 @@
     {
       "what": "資料夾兩張刪一張維持現狀；釘選的紙從最近刪除還原不恢復釘選",
       "since": "2026-11-04"
+    },
+    {
+      "what": "1.1 付費（Apple 內購 org.domyweb.qieji.full）走守門三選一的第 3 條：AI 照常寫，但購買判斷與 iCloud／小工具／控制中心鎖定那幾個檔，送審前要找會寫 iOS 或 React Native 的人看過；判斷出錯寧可鎖住，絕不刪紙",
+      "since": "2026-11-11"
+    },
+    {
+      "what": "第一版免費改成：不放廣告＋NT$150 一次買斷茄記完整版（1.1 起）",
+      "since": "2026-11-08"
     }
   ],
   "security_c": {
