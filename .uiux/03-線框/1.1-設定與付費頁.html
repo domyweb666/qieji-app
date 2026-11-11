@@ -1,0 +1,310 @@
+<title>茄記 1.1 線框</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 版面：說明＋校正方塊＋切換列，下面一格一支手機（402 × 874 pt，iPhone 17），窄螢幕一欄一支。全螢幕＝實際尺寸 */
+:root{
+  --bg:#ECEBE8; --fg:#1E1E1D; --mute:#62625F; --rule:#A3A29E; --panel:#FFFFFF; --chip:#E3E2DF;
+  /* 手機畫面裡的灰階：刻意固定，深色模式也不換（線框只有黑白灰） */
+  --s-screen:#FFFFFF; --s-ink:#1E1E1D; --s-mute:#6A6A67; --s-line:#A3A29E; --s-fill:#E9E8E5; --s-fill2:#C9C8C4; --s-group:#F2F2F0; --s-dim:rgba(30,30,29,.38); --s-hit:#3D3D3B;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1B1B1A; --fg:#ECEBE8; --mute:#A6A5A1; --rule:#4A4A47; --panel:#262625; --chip:#333331; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#1B1B1A; --fg:#ECEBE8; --mute:#A6A5A1; --rule:#4A4A47; --panel:#262625; --chip:#333331; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--font)}
+.wrap{max-width:1320px;margin:0 auto;padding-block:24px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-start;justify-content:space-between}
+header.top>div:first-child{min-width:0;flex:1 1 420px}
+h1{font-size:26px;margin:0 0 6px;text-wrap:balance}
+.lede{margin:0;color:var(--mute);font-size:14px;line-height:1.65;max-width:64ch}
+.cal{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--mute);line-height:1.4}
+.cal i{display:block;width:44px;height:44px;border:1.5px solid var(--fg);flex:none}
+h2{font-size:15px;letter-spacing:.06em;color:var(--mute);margin:40px 0 6px;font-weight:600}
+.sub{margin:0 0 14px;color:var(--mute);font-size:14px;line-height:1.6;max-width:72ch}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:4px 0 16px}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--chip);border-radius:10px;padding:3px}
+.seg button{font:inherit;font-size:14px;border:0;background:none;color:var(--fg);padding:7px 12px;border-radius:8px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);box-shadow:0 1px 2px rgba(0,0,0,.18);font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.tog{display:inline-flex;gap:6px;align-items:center;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),402px));gap:28px;justify-content:center}
+figure{margin:0;min-width:0;display:grid;gap:10px;align-content:start}
+figcaption{font-size:14px;line-height:1.55}
+figcaption b{display:block;font-size:15px}
+figcaption span{color:var(--mute)}
+.fsbtn{font:inherit;font-size:13px;justify-self:start;border:1px solid var(--rule);background:var(--panel);color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer}
+.slot{width:100%;max-width:402px;position:relative;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--rule)}
+.scaler{width:402px;height:874px;transform-origin:top left;position:absolute;left:0;top:0}
+
+/* ---- 手機畫面（座標 pt） ---- */
+.frame{position:relative;width:402px;height:874px;background:var(--s-screen);overflow:hidden;font-family:var(--font);color:var(--s-ink)}
+.frame.grouped{background:var(--s-group)}
+.b{position:absolute;box-sizing:border-box}
+.island{background:var(--s-ink);border-radius:20px}
+.clock{font-size:16px;font-weight:600;text-align:center;line-height:22px}
+.batt{border:1.5px solid var(--s-ink);border-radius:4px}
+.homebar{background:var(--s-ink);border-radius:3px}
+.circ{border-radius:50%;background:var(--s-fill);display:grid;place-items:center;font-size:20px;line-height:1;color:var(--s-ink)}
+.lt{font-size:34px;font-weight:700;line-height:41px}
+.gh{font-size:13px;color:var(--s-mute);line-height:18px}
+.card{background:var(--s-screen);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:10px;padding:0 16px;font-size:17px;line-height:22px;border-bottom:.5px solid var(--s-line)}
+.row:last-child{border-bottom:0}
+.row .t{flex:1;min-width:0}
+.row .t small{display:block;font-size:13px;color:var(--s-mute);line-height:18px}
+.row .r{color:var(--s-mute);font-size:15px;white-space:nowrap}
+.row .chev{color:var(--s-fill2);font-size:20px}
+.row.action .t{font-weight:600}
+.ico{width:28px;height:28px;border-radius:7px;background:var(--s-fill2);flex:none}
+.sw{width:51px;height:31px;border-radius:16px;background:var(--s-fill);position:relative;flex:none;border:1px solid var(--s-line)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:25px;height:25px;border-radius:50%;background:var(--s-screen);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.sw.on{background:var(--s-ink);border-color:var(--s-ink)}
+.sw.on::after{left:22px}
+.sw.lock::before{content:"鎖";position:absolute;left:30px;top:6px;font-size:11px;color:var(--s-mute)}
+.foot{font-size:13px;color:var(--s-mute);line-height:18px}
+.btn{background:var(--s-ink);color:var(--s-screen);border-radius:14px;display:grid;place-items:center;font-size:17px;font-weight:600}
+.btn.off{background:var(--s-fill2);color:var(--s-screen)}
+.tbtn{display:grid;place-items:center;font-size:17px;color:var(--s-ink)}
+.dim{background:var(--s-dim)}
+.sheet{background:var(--s-screen);border-radius:22px 22px 0 0;box-shadow:0 -1px 0 var(--s-line)}
+.grab{background:var(--s-fill2);border-radius:3px}
+.ph{background:var(--s-fill);border:1px dashed var(--s-fill2);display:grid;place-items:center;font-size:13px;color:var(--s-mute);border-radius:24px}
+.alert{background:var(--s-group);border-radius:16px;overflow:hidden;box-shadow:0 0 0 .5px var(--s-line)}
+.note{font-size:12px;color:var(--s-mute);font-style:italic}
+.hit{outline:1.5px dashed var(--s-hit);outline-offset:-1.5px;pointer-events:none;border-radius:4px}
+body.nohit .hit{display:none}
+.tap{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:var(--s-ink);color:var(--s-screen);font-size:13px;display:grid;place-items:center;font-weight:700;pointer-events:none}
+.fs{position:fixed;inset:0;background:var(--s-screen);z-index:50;overflow:auto}
+.fs .holder{position:relative;width:100%}
+.fsctl{position:fixed;z-index:51;right:max(10px,env(safe-area-inset-right,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px}
+.fsctl button{font:inherit;font-size:13px;border:0;border-radius:8px;padding:8px 10px;background:var(--s-ink);color:var(--s-screen);opacity:.85;cursor:pointer}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>茄記 1.1：設定頁與付費頁</h1>
+      <p class="lede">灰階、iPhone 17 實際尺寸（402 × 874 pt）。虛線框是實際點擊範圍。設定頁是系統清單，走快速路徑只畫一個方向；付費頁畫三個方向，差在怎麼出現、「解鎖」按鈕在哪、怎麼拒絕。要在 iPhone 上看：點「全螢幕」，寬度撐滿就是實際大小。</p>
+    </div>
+    <div class="cal"><i aria-hidden="true"></i><div>44pt 校正方塊<br>手機上量約 6.5 公釐</div></div>
+  </header>
+
+  <div class="bar">
+    <label class="tog"><input type="checkbox" id="showhit" checked> 顯示點擊範圍</label>
+  </div>
+
+  <h2>設定頁（快速路徑：系統清單，一個方向）</h2>
+  <p class="sub">入口在目錄最底下、最近刪除下面。推入一頁，跟最近刪除同一種樣子。切換看不同狀態。</p>
+  <div class="bar"><div class="seg" id="setState" role="group" aria-label="設定頁狀態">
+    <button type="button" data-s="free" aria-pressed="true">沒買</button>
+    <button type="button" data-s="paid" aria-pressed="false">已解鎖</button>
+    <button type="button" data-s="nodrive" aria-pressed="false">已解鎖・雲碟沒開</button>
+    <button type="button" data-s="big" aria-pressed="false">最大字級（預估）</button>
+  </div></div>
+  <div class="grid" id="gSet"></div>
+
+  <h2>付費頁：三個方向</h2>
+  <p class="sub">三個都從設定頁「茄記完整版」那列進來；也會從鎖住的小工具、控制中心、iCloud 開關進來。付完或關掉都回到原本的地方。</p>
+  <div class="bar"><div class="seg" id="payState" role="group" aria-label="付費頁狀態">
+    <button type="button" data-s="ok" aria-pressed="true">平常</button>
+    <button type="button" data-s="busy" aria-pressed="false">購買中</button>
+    <button type="button" data-s="noprice" aria-pressed="false">讀不到價格</button>
+  </div></div>
+  <div class="grid" id="gPay"></div>
+
+  <h2>1.0 使用者更新後第一次打開</h2>
+  <p class="sub">只對 1.0 時開著 iCloud 同步的人跳一次。系統提示框，畫面不能自己設計，這裡只定字。</p>
+  <div class="grid" id="gAlert"></div>
+</div>
+
+<script>
+(function(){
+var W=402,H=874,TOP=62,BOT=34,M=16,CW=W-2*M;
+function el(cls,x,y,w,h,html){var d=document.createElement('div');d.className='b '+(cls||'');d.style.left=x+'px';d.style.top=y+'px';if(w!=null)d.style.width=w+'px';if(h!=null)d.style.height=h+'px';if(html!=null)d.innerHTML=html;return d;}
+function hit(f,x,y,w,h){f.appendChild(el('hit',x,y,w,h));}
+function chrome(f,dark){
+  f.appendChild(el('clock',38,17,56,22,'9:41'));
+  f.appendChild(el('island',W/2-63,11,126,37));
+  f.appendChild(el('batt',W-62,20,26,13));
+  f.appendChild(el('homebar',W/2-72,H-13,144,5));
+}
+function frame(grouped){var f=document.createElement('div');f.className='frame'+(grouped?' grouped':'');return f;}
+function back(f,label){
+  var c=el('circ',M,TOP,44,44,'‹'); f.appendChild(c); hit(f,M,TOP,44,44);
+  if(label){f.appendChild(el('',M+52,TOP,120,44,'<div style="line-height:44px;font-size:15px;color:var(--s-mute)">'+label+'</div>'));}
+}
+/* 一組清單：標題、列、註解；回傳下一個 y */
+function group(f,y,title,rows,foot,opt){
+  opt=opt||{}; var fs=opt.scale||1;
+  if(title){f.appendChild(el('gh',M+16,y,CW-32,18*fs,'<span style="font-size:'+(13*fs)+'px;line-height:'+(18*fs)+'px">'+title+'</span>'));y+=18*fs+8;}
+  var card=el('card',M,y,CW,null); var h=0;
+  rows.forEach(function(r){
+    var rh=(r.h||52)*fs;
+    var d=document.createElement('div'); d.className='row'+(r.action?' action':''); d.style.height=rh+'px'; d.style.fontSize=(17*fs)+'px'; d.style.lineHeight=(22*fs)+'px';
+    d.innerHTML=(r.ico?'<i class="ico"></i>':'')+'<div class="t">'+r.t+(r.s?'<small style="font-size:'+(13*fs)+'px;line-height:'+(18*fs)+'px">'+r.s+'</small>':'')+'</div>'+(r.r?'<div class="r" style="font-size:'+(15*fs)+'px">'+r.r+'</div>':'')+(r.sw?'<div class="sw '+r.sw+'"></div>':'')+(r.chev?'<div class="chev">›</div>':'');
+    card.appendChild(d);
+    if(r.tap!==false) hit(f,M,y+h,CW,rh);
+    h+=rh;
+  });
+  card.style.height=h+'px'; f.appendChild(card); y+=h;
+  if(foot){y+=6;var fh=(opt.footH||18)*fs;f.appendChild(el('foot',M+16,y,CW-32,fh,'<span style="font-size:'+(13*fs)+'px;line-height:'+(18*fs)+'px">'+foot+'</span>'));y+=fh;}
+  return y+22*fs;
+}
+
+/* ---------------- 設定頁 ---------------- */
+function settings(state){
+  var f=frame(true); chrome(f); back(f);
+  var big=state==='big', fs=big?1.6:1;
+  f.appendChild(el('lt',M+4,112,CW,41*fs,'<span style="font-size:'+(34*fs)+'px;line-height:'+(41*fs)+'px">設定</span>'));
+  var y=112+41*fs+18;
+  var paid=state==='paid'||state==='nodrive';
+  var g1=paid
+    ?[{t:'茄記完整版',s:'iCloud 同步、小工具、控制中心',r:'已解鎖 ✓',h:64,tap:false},{t:'恢復購買'}]
+    :[{t:'茄記完整版',s:'iCloud 同步、小工具、控制中心',r:'NT$150',chev:true,h:64},{t:'恢復購買'}];
+  y=group(f,y,'',g1,null,{scale:fs});
+  var syncFoot=state==='nodrive'?'iCloud 雲碟沒開，紙只存在這支手機。到「設定 › 你的名字 › iCloud › iCloud 雲碟」打開。'
+    :paid?'已同步・剛剛':'完整版功能。換手機、刪掉重裝，紙都會回來。';
+  y=group(f,y,'iCloud 同步',[{t:'iCloud 同步',sw:paid?(state==='nodrive'?'':'on'):'lock'}],syncFoot,{scale:fs,footH:state==='nodrive'?36:18});
+  y=group(f,y,'關於',[{t:'寫信給我'},{t:'給茄記評分'},{t:'隱私權政策'}],'茄記 1.1.0',{scale:fs});
+  if(y>H-BOT) f.appendChild(el('note',M,H-BOT-22,CW,18,'↓ 下面還有，要往下捲'));
+  if(big) f.appendChild(el('note',M,TOP+6,CW,18,'1.6 倍是預估，真的最大字級要真機看'));
+  return f;
+}
+
+/* ---------------- 付費頁共用內容 ---------------- */
+var FEAT=[
+  ['iCloud 同步','換手機、刪掉重裝，紙都會回來'],
+  ['主畫面和鎖定畫面小工具','不用打開 app，也看得到上次那張紙'],
+  ['控制中心「記一行」','在任何畫面按一下，就能開始記'],
+  ['之後新增的完整版功能','也都包含，不用再付']
+];
+function feats(f,y){
+  FEAT.forEach(function(it){
+    f.appendChild(el('',M+8,y+12,28,28,'<i class="ico" style="display:block"></i>'));
+    f.appendChild(el('',M+48,y+6,CW-56,48,'<div style="font-size:17px;line-height:22px;font-weight:600">'+it[0]+'</div><div style="font-size:14px;line-height:20px;color:var(--s-mute)">'+it[1]+'</div>'));
+    y+=58;
+  });
+  return y;
+}
+function priceLine(st){return st==='noprice'?'連不上 App Store，價格讀不到':'NT$150，一次付清，不是訂閱';}
+function buyLabel(st){return st==='busy'?'正在連到 App Store…':st==='noprice'?'再試一次':'用 NT$150 解鎖';}
+
+/* A：半高表單 */
+function payA(st){
+  var f=frame(false); chrome(f);
+  f.appendChild(el('',0,0,W,H,'')).style.background='var(--s-group)';
+  f.appendChild(el('lt',M+4,112,CW,41,'設定'));
+  f.appendChild(el('dim',0,0,W,H));
+  chrome(f);
+  var t=290; f.appendChild(el('sheet',0,t,W,H-t));
+  f.appendChild(el('grab',W/2-18,t+6,36,5));
+  f.appendChild(el('circ',M,t+14,44,44,'×')); hit(f,M,t+14,44,44);
+  f.appendChild(el('',70,t+18,W-140,28,'<div style="text-align:center;font-size:20px;font-weight:700;line-height:28px">茄記完整版</div>'));
+  f.appendChild(el('',M,t+50,CW,20,'<div style="text-align:center;font-size:15px;color:var(--s-mute)">'+priceLine(st)+'</div>'));
+  var y=feats(f,t+84);
+  f.appendChild(el('',M,y+2,CW,18,'<div style="text-align:center;font-size:13px;color:var(--s-mute)">家人共享：同一個家庭群組的人不用再買</div>'));
+  var by=y+32; f.appendChild(el('btn'+(st==='busy'?' off':''),M,by,CW,56,buyLabel(st))); hit(f,M,by,CW,56);
+  var hw=CW/2; f.appendChild(el('tbtn',M,by+64,hw,44,'恢復購買')); hit(f,M,by+64,hw,44);
+  f.appendChild(el('tbtn',M+hw,by+64,hw,44,'先不用')); hit(f,M+hw,by+64,hw,44);
+  return f;
+}
+/* B：全螢幕 */
+function payB(st){
+  var f=frame(false); chrome(f);
+  f.appendChild(el('circ',M,TOP,44,44,'×')); hit(f,M,TOP,44,44);
+  f.appendChild(el('ph',W/2-56,TOP+40,112,112,'圖示'));
+  f.appendChild(el('',M,TOP+168,CW,36,'<div style="text-align:center;font-size:28px;font-weight:700;line-height:36px">茄記完整版</div>'));
+  f.appendChild(el('',M,TOP+208,CW,22,'<div style="text-align:center;font-size:16px;color:var(--s-mute)">'+priceLine(st)+'</div>'));
+  var y=feats(f,TOP+248);
+  f.appendChild(el('',M,y+4,CW,18,'<div style="text-align:center;font-size:13px;color:var(--s-mute)">家人共享：同一個家庭群組的人不用再買</div>'));
+  var by=H-BOT-12-44-8-56; f.appendChild(el('btn'+(st==='busy'?' off':''),M,by,CW,56,buyLabel(st))); hit(f,M,by,CW,56);
+  f.appendChild(el('tbtn',W/2-70,by+64,140,44,'恢復購買')); hit(f,W/2-70,by+64,140,44);
+  return f;
+}
+/* C：推入一頁（清單） */
+function payC(st){
+  var f=frame(true); chrome(f); back(f,'設定');
+  f.appendChild(el('lt',M+4,112,CW,41,'茄記完整版'));
+  f.appendChild(el('',M+4,160,CW-8,22,'<div style="font-size:15px;color:var(--s-mute)">'+priceLine(st)+(st==='noprice'?'':'。')+'</div>'));
+  var y=group(f,198,'你會得到',FEAT.map(function(it){return {t:it[0],s:it[1],ico:true,h:64,tap:false};}),'家人共享：同一個家庭群組的人不用再買。');
+  group(f,y-8,'',[{t:buyLabel(st),action:true},{t:'恢復購買'}],null);
+  return f;
+}
+
+/* ---------------- 提示框 ---------------- */
+function alertFrame(){
+  var f=frame(true); chrome(f);
+  f.appendChild(el('lt',M+4,112,CW,41,'想到的事'));
+  f.appendChild(el('dim',0,0,W,H)); chrome(f);
+  var aw=270,ax=(W-aw)/2,ay=300;
+  var a=el('alert',ax,ay,aw,null); var hh=0;
+  a.innerHTML='<div style="padding:20px 16px 16px;text-align:center"><div style="font-size:17px;font-weight:600;line-height:22px">iCloud 同步改成完整版功能</div><div style="font-size:13px;line-height:18px;margin-top:6px">手機上的紙都還在，iCloud 雲碟裡的也都還在。買了完整版之後會接著同步。</div></div><div style="display:flex;border-top:.5px solid var(--s-line)"><div style="flex:1;height:44px;display:grid;place-items:center;font-size:17px;border-right:.5px solid var(--s-line)">知道了</div><div style="flex:1;height:44px;display:grid;place-items:center;font-size:17px;font-weight:600">看看完整版</div></div>';
+  a.style.height='150px'; f.appendChild(a);
+  hit(f,ax,ay+106,aw/2,44); hit(f,ax+aw/2,ay+106,aw/2,44);
+  return f;
+}
+
+/* ---------------- 放進頁面 ---------------- */
+function fit(slot,sc){var s=slot.clientWidth/W;sc.style.transform='scale('+s+')';slot.style.height=(H*s)+'px';}
+var slots=[];
+function figure(grid,build,title,desc,label){
+  var fg=document.createElement('figure');
+  var slot=document.createElement('div'); slot.className='slot'; slot.setAttribute('role','img'); slot.setAttribute('aria-label',label);
+  var sc=document.createElement('div'); sc.className='scaler'; sc.appendChild(build()); slot.appendChild(sc);
+  var cap=document.createElement('figcaption'); cap.innerHTML='<b>'+title+'</b><span>'+desc+'</span>';
+  var btn=document.createElement('button'); btn.type='button'; btn.className='fsbtn'; btn.textContent='全螢幕（實際尺寸）';
+  btn.addEventListener('click',function(){openFS(build);});
+  fg.appendChild(slot); fg.appendChild(cap); fg.appendChild(btn); grid.appendChild(fg);
+  slots.push([slot,sc]); requestAnimationFrame(function(){fit(slot,sc);});
+}
+window.addEventListener('resize',function(){slots.forEach(function(p){fit(p[0],p[1]);});});
+
+var setState='free', payState='ok';
+var SET_DESC={
+  free:'主角是「茄記完整版」那列（NT$150 ›）。iCloud 開關顯示鎖住，點了開付費頁。關於照常能用。',
+  paid:'那列變成「已解鎖 ✓」，不能點。恢復購買還在（換手機、家人共享都要用）。',
+  nodrive:'買了，但 iPhone 的 iCloud 雲碟沒開：開關是關的，下面講去哪裡打開。',
+  big:'字放大約 1.6 倍的預估：整頁會變長要捲，列高跟著長。真的最大字級要真機看。'
+};
+function renderSet(){
+  var g=document.getElementById('gSet'); g.innerHTML='';
+  slots=slots.filter(function(p){return document.body.contains(p[0]);});
+  figure(g,function(){return settings(setState);},'設定','<br>'+SET_DESC[setState],'設定頁線框');
+}
+var PAY=[
+  ['A　半高表單',payA,'從下面升起一半高，後面那頁變暗還看得到。「解鎖」在下方中間，正下面一排「恢復購買｜先不用」。關閉也可以往下拉。'],
+  ['B　全螢幕',payB,'整個蓋住，上面一塊放圖示。「解鎖」固定在最下面、拇指最好按的地方。拒絕只有左上角 ×（或往下拉），沒有「先不用」。'],
+  ['C　推入一頁',payC,'跟最近刪除一樣推進來，是一張清單。「解鎖」是一列，落在畫面中段。拒絕就是左上返回。從小工具進來時，會先推設定再推這頁。']
+];
+function renderPay(){
+  var g=document.getElementById('gPay'); g.innerHTML='';
+  slots=slots.filter(function(p){return document.body.contains(p[0]);});
+  PAY.forEach(function(p){ figure(g,function(){return p[1](payState);},p[0],p[2],'付費頁方向 '+p[0]); });
+}
+figure(document.getElementById('gAlert'),alertFrame,'iCloud 同步改成完整版功能','只跳這一次。「看看完整版」開付費頁，「知道了」回到紙。','更新後提示框線框');
+
+function segs(id,cb){document.getElementById(id).addEventListener('click',function(e){var bt=e.target.closest('button');if(!bt)return;this.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',String(x===bt));});cb(bt.getAttribute('data-s'));});}
+segs('setState',function(s){setState=s;renderSet();});
+segs('payState',function(s){payState=s;renderPay();});
+document.getElementById('showhit').addEventListener('change',function(){document.body.classList.toggle('nohit',!this.checked);});
+
+/* 全螢幕：寬度撐滿，iPhone 17 上就是 1:1；點哪裡會留下編號圓點 */
+function openFS(build){
+  var fs=document.createElement('div'); fs.className='fs';
+  var holder=document.createElement('div'); holder.className='holder';
+  var sc=document.createElement('div'); sc.className='scaler';
+  var f=build(); sc.appendChild(f); holder.appendChild(sc); fs.appendChild(holder);
+  var s=window.innerWidth/W; sc.style.transform='scale('+s+')'; holder.style.height=(H*s)+'px';
+  var n=0;
+  holder.addEventListener('pointerdown',function(e){var r=holder.getBoundingClientRect();var t=document.createElement('div');t.className='tap';t.style.left=((e.clientX-r.left)/s)+'px';t.style.top=((e.clientY-r.top)/s)+'px';t.textContent=++n;f.appendChild(t);});
+  var ctl=document.createElement('div'); ctl.className='fsctl';
+  var clr=document.createElement('button'); clr.type='button'; clr.textContent='清除點擊';
+  clr.addEventListener('click',function(){f.querySelectorAll('.tap').forEach(function(t){t.remove();});n=0;});
+  var x=document.createElement('button'); x.type='button'; x.textContent='結束';
+  x.addEventListener('click',function(){fs.remove();ctl.remove();document.body.style.overflow='';});
+  ctl.appendChild(clr); ctl.appendChild(x); document.body.appendChild(fs); document.body.appendChild(ctl);
+  document.body.style.overflow='hidden';
+}
+renderSet(); renderPay();
+})();
+</script>
