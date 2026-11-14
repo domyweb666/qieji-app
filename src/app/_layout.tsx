@@ -8,6 +8,8 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { OverlayHost, ui } from '../components/Overlay';
 import { startAccess } from '../lib/access';
 import { startIap } from '../lib/iap';
+import { loadLook } from '../lib/look';
+import { takeNews } from '../lib/newsAsk';
 import { reviewOpened } from '../lib/reviewAsk';
 import { store } from '../lib/store';
 import { T, useColors } from '../lib/tokens';
@@ -44,14 +46,21 @@ export default function RootLayout() {
     // 評分提示要數「在幾個不同的日子打開過」（1.1 片 C2）
     reviewOpened();
     const sub = AppState.addEventListener('change', s => { if (s === 'active') reviewOpened(); });
-    store.load().then(() => {
+    // 外觀（跟隨系統／淺色／深色）要在紙畫出來之前套好，所以跟讀紙一起等
+    Promise.all([store.load(), loadLook()]).then(() => {
       setReady(true);
       // 紙讀完才把「買了沒」接到 iCloud 同步和小工具（1.1 組塊 B）；在這之前同步是停著的。
       // 1.0 開過同步的人，更新後第一次打開跳一次（B5；字照線框）
       startAccess(() => ui.ask(
         'iCloud 同步改成完整版功能',
         '手機上的紙都還在，iCloud 雲碟裡的也都還在。買了完整版之後會接著同步。',
-        { label: '看看完整版', fn: () => router.push('/full') }, '知道了'));
+        { label: '看看完整版', fn: () => router.push('/full') }, '知道了'),
+      // 新功能卡片（共用規格）：更新後第一次打開跳一次，最多三點、一顆「好」。上面那個提示框這次有跳就不跳，一次只跳一個
+      noticed => {
+        takeNews(store.firstRun).then(n => {
+          if (n && !noticed) ui.alert(`茄記 ${n.version} 的新功能`, n.points.map(p => `・${p}`).join('\n'), '好');
+        });
+      });
     }, e => {
       // 讀手機裡的資料失敗（很少見）：以前啟動畫面永遠收不掉、什麼都不講（2026-11-04 程式審查）。收起來說一聲；
       // 紙先不畫：沒讀完就不准存檔（store），讓人在這時候記東西會存不進去
@@ -93,6 +102,8 @@ export default function RootLayout() {
               <Stack.Screen name="trash" />
               {/* 設定（1.1 片 A1）：跟最近刪除同一種推入頁 */}
               <Stack.Screen name="settings" />
+              <Stack.Screen name="news" />
+              <Stack.Screen name="licenses" />
               {/* 付費頁（1.1 片 A2）：系統的半高表單，從下面升起、後面變暗、往下拉可以關；字放大放不下時可以拉到全高 */}
               <Stack.Screen name="full" options={{
                 presentation: 'formSheet', headerShown: false, sheetGrabberVisible: true,

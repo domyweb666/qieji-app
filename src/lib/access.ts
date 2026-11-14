@@ -35,24 +35,27 @@ export async function noticeAt(): Promise<number | null> {
 }
 
 // B5：這台手機的紙有傳過 iCloud 的記號（sh）或傳過排列＝1.0 時開著同步。更新後第一次打開、確定沒買，跳一次
-async function noticeOnce(show: () => void) {
+// 回傳有沒有跳：跳了的話，這次打開就不再跳「新功能」卡片（一次只跳一個框）
+async function noticeOnce(show: () => void): Promise<boolean> {
   try {
     const full = await whenAsked();
-    if ((await AsyncStorage.getItem(NOTICE_KEY)) !== null) return;
-    if (full) { await AsyncStorage.setItem(NOTICE_KEY, '0'); return; }
-    if (!store.loaded) return; // 紙還沒讀完（很少見）：下次打開再看
+    if ((await AsyncStorage.getItem(NOTICE_KEY)) !== null) return false;
+    if (full) { await AsyncStorage.setItem(NOTICE_KEY, '0'); return false; }
+    if (!store.loaded) return false; // 紙還沒讀完（很少見）：下次打開再看
     const synced = store.s.notes.some(n => !!n.sh) || store.s.orderSent !== undefined;
-    if (!synced) return; // 沒同步過的人（1.1 才裝的）不用講
+    if (!synced) return false; // 沒同步過的人（1.1 才裝的）不用講
     await AsyncStorage.setItem(NOTICE_KEY, String(Date.now()));
     show();
+    return true;
   } catch (e) {
     console.warn('完整版提示框沒跳成：', e);
+    return false;
   }
 }
 
 let started = false;
-// 打開 app 時叫一次（_layout，在 startIap 之後）。show＝跳 B5 的提示框
-export function startAccess(show: () => void) {
+// 打開 app 時叫一次（_layout，在 startIap 之後）。show＝跳 B5 的提示框；after＝提示框那關過了之後（noticed＝這次有沒有跳）
+export function startAccess(show: () => void, after?: (noticed: boolean) => void) {
   if (started) return;
   started = true;
   (async () => {
@@ -61,7 +64,7 @@ export function startAccess(show: () => void) {
     apply();
     emit();
     onFullChange(() => { apply(); emit(); });
-    noticeOnce(show);
+    after?.(await noticeOnce(show));
   })();
 }
 

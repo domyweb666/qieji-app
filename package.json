@@ -54,7 +54,9 @@
     "check:tokens": "node tools/check-tokens.mjs",
     "prepare": "git config core.hooksPath tools/githooks || exit 0",
     "lint": "expo lint",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "licenses": "node tools/gen-licenses.mjs",
+    "eas-build-post-install": "node tools/gen-licenses.mjs"
   },
   "private": true
 }

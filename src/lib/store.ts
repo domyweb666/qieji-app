@@ -19,6 +19,7 @@ type Box = {
   newCloud?: 'asking' | 'declined'; onNewCloud?: (adopt: () => void, decline: () => void) => void; onCloudOff?: () => void; // S5 // iCloud S3：正在拉；被同步改了字的行，各重掛過幾次輸入框
   written?: string; // 手機裡現在存的那份（JSON 字串）：一字不差就不再寫（2026-11-04）
   onUnreadable?: () => void; // 打開 app 時存檔讀不出來、原本那份已另存（2026-11-04）
+  firstRun?: boolean; // 這次是剛裝好第一次打開
 };
 const g = globalThis as { __qiejiStore?: Box };
 const box: Box = (g.__qiejiStore ??= { state: emptyState(), loaded: false, version: 0, hintSeen: false, last: null, subs: new Set() });
@@ -75,6 +76,8 @@ async function writeNow() {
 export const store = {
   get s() { return box.state; },
   get loaded() { return box.loaded; },
+  // 這次是剛裝好第一次打開（手機上原本沒有存檔）：新功能卡片不對剛裝的人跳
+  get firstRun() { return !!box.firstRun; },
   get hintSeen() { return box.hintSeen; },
   // 上次開著的筆記（關掉 app 時還開著的那則），下次打開直接回到它；停在列表就是 null
   get last() { return box.last; },
@@ -160,6 +163,7 @@ export const store = {
     // 第一次安裝（手機上根本沒有這個存檔，raw 是 null）：放一張教學紙當第一張（多米 2026-11-01）。
     // 讀到壞掉的存檔不算第一次（raw 不是 null），不放，免得蓋在使用者的資料上
     const first = raw === null;
+    box.firstRun = first;
     if (first) {
       const t = tutorialNote(Date.now());
       box.state.notes.push(t);
