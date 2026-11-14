@@ -1,8 +1,8 @@
 // 輸入框（多米 2026-11-01）：按右下 ＋ 或膠囊 ＋ 時從底下升起、貼在鍵盤上面，在裡面打字；紙照常看得到、點得到。
 // （同日第二版曾升到畫面正中，多米看了說體感很糟，第三版貼回鍵盤但留了暗幕；真機又說編輯感覺很不好，第四版＝乙：暗幕拿掉，
 // 點紙上的行＝草稿先送出、焦點直接進那一行。進出跟鍵盤同一個時鐘、同一條曲線，一個東西只有一段動）
-// Return＝送出一行（放到紙的最上面，框清空、鍵盤不收，可以連續記）；空的按 Return＝收起（跟空行按 Return 收鍵盤同一個意思）；
-// ✓＝有字就送出、然後收起；失去焦點（點了別行、開選單、滑動、切 app）＝一樣有字就送出、然後收起。字不會丟（2-8）。
+// Return＝在框裡換行，這一則還沒記完（多米 2026-11-14 改：「我的筆記還沒打完，只是想換行繼續打」。之前是 Return 送出一行、框留著連續記）；
+// ✓＝有字就送出、然後收起（多米 2026-11-14 選）；失去焦點（點了別行、開選單、滑動、切 app）＝一樣有字就送出、然後收起。字不會丟（2-8）。
 // 跟提案第三輪拿掉的「常駐輸入列」不同：按 ＋ 才出現，而且跟著字長高（長到清單頂，再多在框裡捲），不會「超過一行看不到前面」。
 // 位置（貼鍵盤、跟著升降）由 Paper 包在外層；這裡只管卡片、輸入框、✓ 和進出動畫（時長與曲線＝鍵盤的 keyboardFollow）。減少動態：滑入滑出改淡入淡出。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
@@ -81,8 +81,9 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
       <View style={s.grow}>
         <View style={{ maxHeight: maxInput }}>
           <Text style={[s.input, s.mirror]} accessible={false} importantForAccessibility="no-hide-descendants">{txt + '​'}</Text>
-          <TextInput ref={input} autoFocus multiline submitBehavior="submit" enterKeyHint={fixing ? 'done' : 'next'}
-            {...(WEB ? { blurOnSubmit: true } : null)} defaultValue={initial}
+          {/* 記新的一則：Return 換行（鍵上是系統的換行鍵，不寫「下一個」）。改一行（initial 有字）照舊 Return＝改好收起 */}
+          <TextInput ref={input} autoFocus multiline submitBehavior={fixing ? 'submit' : 'newline'} {...(fixing ? { enterKeyHint: 'done' as const } : null)}
+            {...(WEB && fixing ? { blurOnSubmit: true } : null)} defaultValue={initial}
             placeholder="記一行" placeholderTextColor={c.textMuted}
             style={[s.input, s.fill, { color: c.textPrimary }]}
             accessibilityLabel="輸入框"
