@@ -86,7 +86,7 @@ export default function Settings() {
   }, [full, syncOn]);
 
   const openFull = () => router.push('/full');
-  // 字級（完整版）：沒買的人看得到這一列、右邊是鎖，點了開付費頁
+  // 字級（完整版）：沒買的人看不到這一列（2026-11-14 多米：沒買還列出來，看了煩。要買從「茄記完整版」那列進去，付費頁有列出來）
   const tk = useTextSize();
   const pickSize = () => (full
     ? ui.sheet(TEXT_SIZES.map(s => ({ label: s.label, on: s.k === tk, fn: () => setTextSize(s.k) })), '紙上的字級')
@@ -152,6 +152,7 @@ export default function Settings() {
   const about: ReactNode[] = [];
   if (FAMILY.length) about.push(<Row key="family" icon="leaf" text="蔬菜家族的其他 app" right={next} onPress={() => router.push('/family')} />);
   if (PRIVACY_URL) about.push(<Row key="privacy" icon="hand.raised" text="隱私權政策" right={out} onPress={() => open(PRIVACY_URL)} />);
+  about.push(<Row key="licenses" icon="doc.text" text="開源授權" right={next} onPress={() => router.push('/licenses')} />);
 
   return (
     <View style={{ flex: 1, backgroundColor: c.page }} collapsable={false}>
@@ -162,8 +163,8 @@ export default function Settings() {
         <ListGroup title="一般">
           {[
             <Row key="look" icon="circle.lefthalf.filled" text="外觀" a11y={`外觀，${LOOK_LABEL[look]}`} right={<>{state(LOOK_LABEL[look])}{next}</>} onPress={pickLook} />,
-            <Row key="size" icon="textformat.size" text="紙上的字級" a11y={full ? `紙上的字級，${textSizeLabel(tk)}` : '紙上的字級，完整版功能'} onPress={pickSize}
-              right={full ? <>{state(textSizeLabel(tk))}{next}</> : <Sym name="lock.fill" size={17} color={c.textSecondary} />} />,
+            ...(full ? [<Row key="size" icon="textformat.size" text="紙上的字級" a11y={`紙上的字級，${textSizeLabel(tk)}`} onPress={pickSize}
+              right={<>{state(textSizeLabel(tk))}{next}</>} />] : []),
           ]}
         </ListGroup>
 

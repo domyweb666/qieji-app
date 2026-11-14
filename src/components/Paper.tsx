@@ -29,7 +29,7 @@ import { buildGeo, countBelow, EMPTY_GEO, estimateLines, hitRow, landOffset, map
 import { ago, binDone, binItem, caretAt, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, roomOf, uid, unbinDone, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
-import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
+import { coverFog, haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { Composer } from './Composer';
@@ -37,7 +37,7 @@ import { dirPanel } from './DirPanel';
 import { reviewStruck } from '../lib/reviewAsk';
 import { dropCloudNote } from '../lib/cloud';
 import { clearCover, coverUri, pickCover, useCoverVersion } from '../lib/covers';
-import { isFull } from '../lib/iap';
+import { isFull, useFull } from '../lib/iap';
 import { canLock, isOpen, unlock, useLockVersion } from '../lib/lock';
 import { textK, useTextSize } from '../lib/textSize';
 import { HAS_NATIVE_MENU, NativeMenu } from './NativeMenu';
@@ -116,6 +116,7 @@ export function Paper({ n }: { n: Note }) {
   const fs = sysFs * tk;
   const c = useColors();
   const nc = useNoteColors(n.color);
+  const full = useFull().full; // 買了沒：沒買時 ⋯ 選單不列完整版功能（2026-11-14 多米）；買好的那一刻選單自己多出來
   // 1.1 完整版：上鎖（還沒過 Face ID 就不畫內容）、記事本（一整頁文字，沒有一行一行）、封面圖
   useLockVersion();
   useCoverVersion();
@@ -128,7 +129,14 @@ export function Paper({ n }: { n: Note }) {
   const closed = useRef(false);
   const mounted = useRef(true);
   const scrollRef = useAnimatedRef<ScrollViewInstance>();
-  const scrollY = useScrollOffset(scrollRef); // 清單捲到哪（UI 執行緒逐格更新；只做看得到的行、拖到邊緣自動捲用）
+  // 封面圖跟著紙捲走（1.1，2026-11-14 多米選「乙、白底」，線框 .uiux/03-線框/1.1-封面圖排版比較.html）：
+  // 捲動區最前面墊一塊跟「圖在標題列以下那截＋時間列」一樣高的空白（headE），圖和時間列畫在外面、跟著捲動位置往上移。
+  // 清單自己的座標不變：scrollY 還是「清單頂端＝0」，負的＝圖還露著；真的捲動位置（rawY）＝ scrollY ＋ headE。
+  // 沒有封面圖時 headE＝0，兩個一樣
+  const rawY = useScrollOffset(scrollRef);
+  const headE = useSharedValue(0), imgLeft = useSharedValue(0);
+  const headRef = useRef(0);
+  const scrollY = useDerivedValue(() => rawY.value - headE.value, WEB_DEPS ? [] : undefined); // 清單捲到哪（UI 執行緒逐格更新；只做看得到的行、拖到邊緣自動捲用）
   // 記下新的一則 → 捲回最上面（片 E2，2026-11-14 多米真機錄影：按 ✓ 之後畫面停在原地）。
   // 原因：之前用系統的捲動動畫，新行一量到真正的高度，位置表就重交一次、順手「補位置讓畫面不動」（publish 的 anchor），
   // 那一下不帶動畫的捲動把系統的動畫打斷。改成自己在 UI 執行緒逐格捲（跟 backOn 同一種做法），捲的時候不補位置。
@@ -136,7 +144,7 @@ export function Paper({ n }: { n: Note }) {
   const topOn = useSharedValue(0), topFrom = useSharedValue(0), topT = useSharedValue(1);
   const glideTop = useCallback(() => {
     'worklet';
-    const from = scrollY.value;
+    const from = rawY.value; // 回到真正的最上面：有封面圖就連圖一起露出來
     if (from <= 0) return;
     topFrom.value = from; topOn.value = 1; topT.value = 0;
     topT.value = withTiming(1, { duration: T.motion.toTop.duration, easing: Easing.out(Easing.cubic) });
@@ -304,8 +312,8 @@ export function Paper({ n }: { n: Note }) {
     touch();
     if (stay) return;
     // 已經在頂端時不會動；不看 view.y（它只在手指放開時更新，可能是舊的）
-    if (calm) scrollTo(0, false);
-    else { view.current.y = 0; scheduleOnUI(glideTop); }
+    if (calm) scrollTo(-headRef.current, false);
+    else { view.current.y = -headRef.current; scheduleOnUI(glideTop); }
     setFreshId(id);
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
@@ -392,10 +400,31 @@ export function Paper({ n }: { n: Note }) {
   }
   // 捲到哪只在「停下來」和「自己捲」的時候記，捲動途中不回報（每一格畫面都回報一次會拖慢捲動）
   function scrollTo(y: number, animated = true) {
-    view.current.y = Math.max(0, y);
-    scrollRef.current?.scrollTo({ y: view.current.y, animated });
+    view.current.y = Math.max(-headRef.current, y);
+    scrollRef.current?.scrollTo({ y: view.current.y + headRef.current, animated });
   }
-  const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y; };
+  const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y - headRef.current; };
+  // 封面圖那塊空白多高：圖在標題列以下那截＋時間列。量到的高度變了（第一次量好、放上／拿掉封面圖、字級變了），清單座標跟著挪，真的捲動位置不動
+  const float = !!cover && !pad; // 記事本不是捲動清單，封面圖照舊固定在上面
+  const [barH, setBarH] = useState(0), [timeH, setTimeH] = useState(0);
+  const imgH = insets.top + T.shape.coverH;
+  const imgBelow = float ? Math.max(0, imgH - (barH || insets.top + T.space.s * 2 + T.shape.hitMin)) : 0;
+  const headH = float ? imgBelow + timeH : 0;
+  useLayoutEffect(() => {
+    if (headRef.current === headH && imgLeft.value === imgBelow) return;
+    view.current.y += headRef.current - headH;
+    headRef.current = headH; headE.value = headH; imgLeft.value = imgBelow;
+  }, [headH, imgBelow]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 圖和時間列跟著往上移，移到整塊收進標題列後面為止；在最上面再往下拉（橡皮筋）時圖撐大補滿，頂端不露底
+  const coverStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(rawY.value, headE.value) }] }), WEB_DEPS ? [] : undefined);
+  const coverImgStyle = useAnimatedStyle(() => {
+    const pull = Math.max(0, -rawY.value);
+    return { transform: [{ translateY: -pull / 2 }, { scale: (imgH + pull) / imgH }] };
+  }, WEB_DEPS ? [imgH] : undefined);
+  // 標題列的底：圖收到剩一小截時淡進來（紙色＋格線），之後行從它後面捲過去
+  const barBgStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(rawY.value, [imgLeft.value - T.space.xl, imgLeft.value], [0, 1], Extrapolation.CLAMP),
+  }), WEB_DEPS ? [] : undefined);
   // 紙頂端再往下拉放手＝開目錄，2026-11-01 多米定拿掉：會跟拖曳排順序搞混。開目錄只剩點清單名
   // 鍵盤頂在哪、要不要捲（ensureVisible）仍在 JS 這邊算，只是事件改聽套件的（跟系統一樣 will／did 兩對）：
   // 它給的是鍵盤高度（從視窗底算），鍵盤頂＝視窗高 − 高度；位置動畫本身已交給上面的 kbH，這裡不再推
@@ -648,9 +677,11 @@ export function Paper({ n }: { n: Note }) {
   }
   const moreActs: Act[] = [
     { label: '改名字', icon: 'pencil', fn: () => setRenaming(true) },
-    { label: n.cover ? '換封面圖' : '放封面圖', icon: 'photo', hidden: lockedNow, fn: setCover },
+    // 完整版功能沒買就不列（2026-11-14 多米：列出來點了才說要買，看了煩）。已經放好的東西照樣拿得掉、打得開：
+    // 退款之後「拿掉封面圖」「解除上鎖」都還在（安全標準：鎖住只停功能，不扣住使用者的東西）
+    { label: n.cover ? '換封面圖' : '放封面圖', icon: 'photo', hidden: lockedNow || !full, fn: setCover },
     { label: '拿掉封面圖', icon: 'rectangle.slash', hidden: lockedNow || !n.cover, fn: dropCover },
-    { label: n.locked ? '解除上鎖' : '上鎖', icon: n.locked ? 'lock.open' : 'lock', fn: toggleLock },
+    { label: n.locked ? '解除上鎖' : '上鎖', icon: n.locked ? 'lock.open' : 'lock', hidden: !n.locked && !full, fn: toggleLock },
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: () => togglePin(n) }, // 跟目錄長按選單同一套（pin.ts）
     { label: '分享', icon: 'square.and.arrow.up', hidden: lockedNow, fn: share },
     { label: '複製全文', icon: 'doc.on.doc', hidden: lockedNow, fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
@@ -682,6 +713,16 @@ export function Paper({ n }: { n: Note }) {
 
   // 紙底下那行手勢提示（點一下改字 · 右滑劃掉 · 左滑刪除 · 按住更多）2026-11-01 拿掉：第一次安裝放的教學紙（model.ts TUTORIAL）取代它
 
+  // 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留）。有封面圖的清單，這一列跟著圖一起捲走
+  const timeBox = (
+    <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
+      <View style={st.timeRow}>
+        <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
+        <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
+      </View>
+    </View>
+  );
+
   return (
     // 換紙時新的那張淡入（S2）
     <Animated.View style={{ flex: 1, backgroundColor: nc.bg }} collapsable={false} entering={ROW_IN}>
@@ -689,10 +730,22 @@ export function Paper({ n }: { n: Note }) {
       {/* 最上面一行：清單名（⋯ 裡的「改名字」才會變成可以打字，點清單名不會；開目錄在時間那行下面的把手）和 ⋯。
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
-      <View collapsable={false}>
-      {/* 封面圖（1.1 完整版）：鋪在最上面，清單名和 ⋯ 那一列疊在圖上（清單名的膠囊補上底色才看得清楚） */}
-      {cover && <Image source={{ uri: cover }} style={{ height: insets.top + T.shape.coverH }} contentFit="cover" accessible accessibilityLabel="封面圖" />}
-      <View style={[st.bar, { paddingTop: insets.top + T.space.s }, cover && st.barOver]}>
+      <View collapsable={false} onLayout={float ? e => setBarH(e.nativeEvent.layout.height) : undefined}>
+      {/* 封面圖（1.1 完整版）。清單：圖從螢幕最頂鋪下來、跟著紙捲走（見上面 headE），這裡的圖和時間列畫在標題列後面、往下超出這一塊，
+          下面的捲動區在那個位置是空白，所以看得到、手指也照樣捲得動（pointerEvents none）。圖最上面一截化進紙色，時間和訊號才看得清楚。
+          記事本：照舊固定在上面，清單名和 ⋯ 疊在圖上。清單名的膠囊在圖上補白底（多米選白底，不用玻璃） */}
+      {float && (
+        <Animated.View style={[st.coverFloat, coverStyle]} pointerEvents="none">
+          <Animated.View style={[{ height: imgH }, coverImgStyle]}>
+            <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible accessibilityLabel="封面圖" />
+            <View style={[st.coverFog, { height: insets.top + T.space.xl, backgroundImage: coverFog(nc.bg) }]} />
+          </Animated.View>
+          <View onLayout={e => setTimeH(e.nativeEvent.layout.height)}>{timeBox}</View>
+        </Animated.View>
+      )}
+      {float && <Animated.View style={[StyleSheet.absoluteFill, st.barBg, { backgroundColor: nc.bg, borderBottomColor: nc.rule }, barBgStyle]} />}
+      {cover && !float && <Image source={{ uri: cover }} style={{ height: imgH }} contentFit="cover" accessible accessibilityLabel="封面圖" />}
+      <View style={[st.bar, { paddingTop: insets.top + T.space.s }, cover && !float && st.barOver, float && st.barFloat]}>
         <View style={st.titleSlide}>
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
@@ -732,13 +785,7 @@ export function Paper({ n }: { n: Note }) {
         {kbUp && (editing !== null || renaming || padFocus) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
       </View>
 
-      {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
-      <View style={[st.timeBox, { borderBottomColor: nc.rule }]}>
-        <View style={st.timeRow}>
-          <Text style={[st.timeText, { color: c.textSecondary }]}>{ago(n.updated)}</Text>
-          <Text style={[st.timeText, { color: c.textSecondary }]}>{fullDate(n.updated)}</Text>
-        </View>
-      </View>
+      {!float && timeBox}
       </View>
 
       <View ref={boxRef} style={{ flex: 1 }} collapsable={false}
@@ -774,12 +821,13 @@ export function Paper({ n }: { n: Note }) {
           scrollEventThrottle={16}
           onScrollBeginDrag={() => scheduleOnUI(stopTop)} onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled} onContentSizeChange={(w, h) => { contentH.value = h; }}
           scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
+          {float && <View style={{ height: headH }} />}
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             <LineList items={n.items} stamp={renders.current} api={api} ctl={listCtl} geoRef={geoRef} kickRef={kickRef} anchorNext={anchorNext}
               spaceBelow={SPACE_BELOW + kbPad + insets.bottom} bg={nc.bg} rule={nc.rule} colors={c} calm={calm} fs={fs} winH={winH} winW={winW}
               editing={editing} freshId={freshId} focused={focused} pending={pending} revs={revs} view={view}
-              scrollRef={scrollRef} scrollY={scrollY} topOn={topOn} listTop={listTop} listBot={listBot} listH={listH} contentH={contentH} />
+              scrollRef={scrollRef} scrollY={scrollY} headE={headE} topOn={topOn} listTop={listTop} listBot={listBot} listH={listH} contentH={contentH} />
           </LayoutAnimationConfig>
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。行不多時撐滿到底（contentContainerStyle flexGrow），
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
@@ -888,12 +936,12 @@ type ListProps = {
   bg: string; rule: string; colors: Colors; calm: boolean; fs: number; winH: number; winW: number;
   editing: string | null; freshId: string | null; focused: RefObject<string | null>; pending: RefObject<{ id: string; caret?: number } | null>; revs: RefObject<Record<string, number>>;
   view: RefObject<{ top: number; h: number; y: number; kb: number }>;
-  scrollRef: AnimatedRef<ScrollViewInstance>; scrollY: SharedValue<number>; topOn: SharedValue<number>; listTop: SharedValue<number>; listBot: SharedValue<number>; listH: SharedValue<number>; contentH: SharedValue<number>;
+  scrollRef: AnimatedRef<ScrollViewInstance>; scrollY: SharedValue<number>; headE: SharedValue<number>; topOn: SharedValue<number>; listTop: SharedValue<number>; listBot: SharedValue<number>; listH: SharedValue<number>; contentH: SharedValue<number>;
 };
 
 // 整張清單共用的手勢、位置表交給 UI 執行緒。手勢的設定只做一次（換設定要跟原生講一次），用到的東西全是不會變的
 function LineList(p: ListProps) {
-  const { api, ctl, calm, geoRef, view, focused, scrollRef, scrollY, topOn, listTop, listBot, listH, contentH, colors } = p;
+  const { api, ctl, calm, geoRef, view, focused, scrollRef, scrollY, headE, topOn, listTop, listBot, listH, contentH, colors } = p;
   const made = useListShared(p.winW);
   const sv = useRef(made).current;
   const { pos, idxOf, idsA, ysA, hsA, doneA, shiftFrom, shiftT, gone, backFrom, backTo, backOn, dragId, dragIdx, dragTo, dragDy, dragH, dragLift, dragMids, dragFy, dragAy, dragOn, dragY0, dragY,
@@ -939,13 +987,13 @@ function LineList(p: ListProps) {
       shiftT.value = 1;
     }
     idxOf.value = m.idx; idsA.value = ids; ysA.value = ys; hsA.value = hs; doneA.value = done;
-    if (dy !== 0) scrollToUI(scrollRef, 0, top + dy, false);
+    if (dy !== 0) scrollToUI(scrollRef, 0, top + dy + headE.value, false); // headE：封面圖那塊空白（清單座標 → 真的捲動位置）
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 捲動位置跟其他行同一個時鐘退回去（見 backOn）
   useAnimatedReaction(() => shiftT.value, t => {
     if (!backOn.value) return;
-    scrollToUI(scrollRef, 0, backFrom.value + (backTo.value - backFrom.value) * t, false);
+    scrollToUI(scrollRef, 0, backFrom.value + (backTo.value - backFrom.value) * t + headE.value, false);
     if (t >= 1) backOn.value = 0;
   });
 
@@ -959,9 +1007,9 @@ function LineList(p: ListProps) {
     const v = ay < top + AUTO_EDGE ? -AUTO_SPEED * Math.min(1, (top + AUTO_EDGE - ay) / AUTO_EDGE)
       : ay > bot - AUTO_EDGE ? AUTO_SPEED * Math.min(1, (ay - bot + AUTO_EDGE) / AUTO_EDGE) : 0;
     if (v) {
-      const max = Math.max(0, contentH.value - listH.value);
+      const max = Math.max(0, contentH.value - headE.value - listH.value);
       const y = Math.min(max, Math.max(0, dragY.value + v * (f.timeSincePreviousFrame ?? FRAME_MS) / 1000));
-      if (y !== dragY.value) { dragY.value = y; scrollToUI(scrollRef, 0, y, false); }
+      if (y !== dragY.value) { dragY.value = y; scrollToUI(scrollRef, 0, y + headE.value, false); }
     }
     const dy = dragFy.value + dragY.value - dragY0.value;
     dragDy.value = dy;
@@ -1559,6 +1607,11 @@ const st = StyleSheet.create({
   emptyText: { ...T.font.callout, textAlign: 'center' },
   // 封面圖上的那一列：疊在圖上面
   barOver: { position: 'absolute', top: 0, left: 0, right: 0 },
+  // 跟著紙捲走的封面圖（清單）：圖和時間列疊在最上面、往下超出標題列那一塊
+  coverFloat: { position: 'absolute', top: 0, left: 0, right: 0 },
+  coverFog: { position: 'absolute', top: 0, left: 0, right: 0 },
+  barBg: { borderBottomWidth: T.shape.borderCard },
+  barFloat: { paddingBottom: T.space.s },
   locked: { flex: 1, alignItems: 'center', paddingTop: T.space.xxl * 2, gap: T.space.m },
   lockBtn: { minHeight: T.shape.hitMin, minWidth: T.shape.hitMin * 2, paddingHorizontal: T.space.xl, borderRadius: T.shape.pill(T.shape.hitMin), alignItems: 'center', justifyContent: 'center', marginTop: T.space.s },
   lockBtnText: { ...T.font.headline },

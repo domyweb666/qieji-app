@@ -53,6 +53,7 @@ const ALPHA = {
   dotOutline: alpha(0.55, 0.6, 0.7, 0.75),   // 色點描邊（textPrimary）
   rowEditing: alpha(0.45, 0.08, 0.45, 0.1),  // 正在編輯的那一行：白色壓在紙色上提亮（網頁版是 55% 紙色＋45% 白；深色只提一點）
   pressedFill: 0.08, // 按住卡片／選單項目（accent）
+  coverFog: 0.85,    // 封面圖頂端化進紙色的那層，最上面多濃（2026-11-14，待多米真機調）
   scrim: 0.2,        // 所有浮層後面的暗幕（黑）：選單、面板、確認框、輸入框（UI 範本 v2：0.3 → 0.2，全部同一個）
   folderVeil: alpha(0.4, 0.5, 0.5, 0.6),     // 打開資料夾時後面的暗幕（黑）
   folderGlass: alpha(0.92, 0.9, 0.97, 0.95),  // 資料夾框（folderGlass 色）
@@ -70,6 +71,8 @@ function rgba(hex: string, a: number) {
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
+// 封面圖最上面那一截化進紙色（時間、訊號那一排壓在照片上才看得清楚）：從紙色淡到透明
+export const coverFog = (bg: string) => `linear-gradient(${rgba(bg, ALPHA.coverFog)}, ${rgba(bg, 0)})`;
 
 export type Colors = {
   page: string; surface: string; separator: string;

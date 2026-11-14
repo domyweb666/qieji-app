@@ -5,7 +5,7 @@
 // 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
 // 2026-11-04 多米真機：「切換清單有 lag，要延遲一下才切換」。以前等面板收完（約半秒）才開始換紙，現在點下去面板馬上讓開、紙同時換（規矩檔手感第 1 條）
 import { router } from 'expo-router';
-import { isFull } from '../lib/iap';
+import { isFull, useFull } from '../lib/iap';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -35,6 +35,7 @@ export function SwitchPanelHost() {
 }
 
 function SwitchPanel({ onGone }: { onGone: () => void }) {
+  const full = useFull().full;
   const s = useStore();
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -66,7 +67,7 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
     if (seatFirstHole(store.s, n.id, Date.now())) store.change();
     store.open(n.id, true);
   });
-  // 新的記事本（1.1 完整版）：一整頁文字的紙。沒買的人看得到這一列，點了開付費頁
+  // 新的記事本（1.1 完整版）：一整頁文字的紙。沒買的人看不到這一列（2026-11-14 多米：沒買還列出來，看了煩）；isFull 那行留著當保險
   const addPad = () => close(() => {
     if (!isFull()) { router.push('/full'); return; }
     const n = newNote('yellow', 'text');
@@ -129,11 +130,13 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
             <View style={st.allIcon}><Sym name="plus" size={20} color={c.textPrimary} /></View>
             <Text style={[st.name, { color: c.textPrimary }]}>新的一張</Text>
           </Pressable>
-          <Pressable onPress={addPad} accessibilityRole="button" accessibilityLabel="新的記事本"
+{full && (
+                    <Pressable onPress={addPad} accessibilityRole="button" accessibilityLabel="新的記事本"
             style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
             <View style={st.allIcon}><Sym name="doc.text" size={20} color={c.textPrimary} /></View>
             <Text style={[st.name, { color: c.textPrimary }]}>新的記事本</Text>
           </Pressable>
+          )}
           {group('釘選', pinned)}
           {group('最近', recent)}
           <View style={[st.sep, { backgroundColor: c.menuSep }]} />
