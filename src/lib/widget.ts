@@ -29,6 +29,20 @@ export function pickPaper(s: State, last: string | null): Note | undefined {
     ?? s.notes.filter(x => !x.deleted).sort((a, b) => b.updated - a.updated)[0];
 }
 
+// 1.1 片 B3：小工具是完整版功能。沒買的時候推「鎖住」的樣子，紙的名字和內容都不推過去
+export const WIDGET_LOCKED_TEXT = '小工具是完整版功能';
+export function lockedProps(): PaperWidgetProps {
+  const scheme = (mode: 'light' | 'dark') => {
+    const c = colors(mode);
+    return { bg: c.page, text: c.textPrimary, strike: c.textSecondary };
+  };
+  return {
+    title: '茄記', lines: [], light: scheme('light'), dark: scheme('dark'),
+    titleSize: T.font.callout.fontSize, lineSize: T.font.callout.fontSize, gap: T.space.xs, max: T.widget.lines,
+    locked: WIDGET_LOCKED_TEXT,
+  };
+}
+
 export function widgetProps(s: State, last: string | null): PaperWidgetProps {
   const n = pickPaper(s, last);
   const key = n?.color ?? 'yellow';
@@ -52,11 +66,15 @@ export function widgetProps(s: State, last: string | null): PaperWidgetProps {
 // 上次推過去的內容：一樣就不推（2026-11-03 多米：用一下手機就發熱）。每推一次 iOS 就叫醒小工具重畫一次（expo-widgets 的
 // updateSnapshot → WidgetCenter.reloadTimelines），以前每次存檔都推：打字停一下、拖一下目錄、換一張紙都推，小工具上的字根本沒變
 let sent = '';
+// 買了沒（lib/access.ts 告訴這裡）。還不知道（undefined）就先不推：打開 app 那一下不要把買了的人的小工具閃成鎖住
+let locked: boolean | undefined;
+export function setWidgetLocked(on: boolean) { locked = on; }
 export function pushWidget(s: State, last: string | null) {
+  if (locked === undefined) return;
   const w = load();
   if (!w) return;
   try {
-    const props = widgetProps(s, last), key = JSON.stringify(props);
+    const props = locked ? lockedProps() : widgetProps(s, last), key = JSON.stringify(props);
     if (key === sent) return;
     w.updateSnapshot(props);
     sent = key;

@@ -17,14 +17,14 @@ struct NewLineControl: ControlWidget {
       }
     }
     .displayName("記一行")
-    .description("打開茄記，直接記下一行")
+    .description("完整版功能。打開茄記，直接記下一行")
   }
 }
 
 @available(iOS 18.0, *)
 struct NewLineIntent: ControlConfigurationIntent {
   static let title: LocalizedStringResource = "記一行"
-  static let description = IntentDescription(stringLiteral: "打開茄記，直接記下一行")
+  static let description = IntentDescription(stringLiteral: "完整版功能。打開茄記，直接記下一行")
   static let isDiscoverable = true
   static let openAppWhenRun: Bool = true
 

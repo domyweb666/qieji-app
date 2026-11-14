@@ -35,6 +35,20 @@ let dirReady = false;
 let goneSent = '';   // 上次寫進 gone.json 的本機墓碑（只記在記憶體：重開 app 會再合一次，沒關係）
 const stuck = new Map<string, number>(); // 讀到逾時的檔名 → 什麼時候逾時的
 let paused = false; // S5：iCloud 看起來換了一個、使用者還沒說要不要放進去：不上傳
+// 1.1 片 B1（🔍 送審前外部審查）：iCloud 同步是完整版功能。allowed＝買了、而且使用者沒在設定頁把同步關掉（lib/access.ts 決定）。
+// 不准的時候：不上傳、不拉回、不清檔，手機上的紙和 iCloud 雲碟裡的檔案一個都不動。預設不准（還不知道買了沒就先不動，寧可晚一點同步）
+let allowed = false;
+let lastSync: number | null = null; // 這次打開 app 之後，最近一次跟 iCloud 對上的時間（設定頁狀態那行用）
+export const cloudSyncedAt = () => lastSync;
+export function setCloudAllowed(on: boolean) {
+  if (allowed === on) return;
+  allowed = on;
+  if (!on) { clearTimeout(timer); return; }
+  // 剛變成准：一定先拉再傳（鎖住期間別台可能改過）。ready 收回去，等這次拉完 store 會再打開；
+  // 排到下一輪再拉：正好有一次被擋掉的拉取還沒收尾的話，讓它先結束
+  ready = false;
+  setTimeout(() => hooks?.pull(), 0);
+}
 
 function load(): Cloud | null {
   if (cloud !== undefined) return cloud;
@@ -88,7 +102,8 @@ function schedule(ms: number) {
 // 存檔成功後呼叫。soon＝app 正要進背景，不等 2 秒（進背景之後 JS 很快就停了）
 export function pushCloud(s: State, soon = false) {
   if (!load()) return;
-  job = s;
+  job = s; // 不准同步時也記著：之後准了，拉完就會把這份傳上去
+  if (!allowed) return;
   schedule(soon ? 0 : WAIT);
 }
 
@@ -125,7 +140,7 @@ async function run() {
 
 async function once() {
   const c = cloud, s = job;
-  if (!c || !s || !ready || paused) return;
+  if (!c || !s || !ready || paused || !allowed) return;
   const notes = pendingUploads(s);
   const gone = s.gone ?? {};
   const goneNow = JSON.stringify(gone);
@@ -138,6 +153,7 @@ async function once() {
 
   let synced = 0, conflict = false;
   for (const n of notes) {
+    if (!allowed) return; // 傳到一半被鎖住（退款）：剩下的不傳，也不往下清檔
     const path = `${n.id}.json`;
     // 蓋之前先看 iCloud 上那份：不是上次傳的（sh）也不是現在這份（h）＝別台改過、還沒拉下來。
     // 這時候蓋下去，別台的改動就只剩別台手上有；改成先拉下來合併（合完會再存檔、再傳）
@@ -182,7 +198,8 @@ async function once() {
     }
   }
 
-  if (synced) hooks?.synced(); // 先記下傳上去的紙：後面墓碑那段失敗也不影響
+  if (synced) { lastSync = Date.now(); hooks?.synced(); } // 先記下傳上去的紙：後面墓碑那段失敗也不影響
+  if (!allowed) return;
 
   if (goneDirty && !isStuck(GONE)) {
     // 先讀 iCloud 上原本那份合起來再寫，別台立的墓碑不能被蓋掉。
@@ -232,9 +249,12 @@ async function sweep(c: Cloud, gone: Record<string, number>) {
 // 而且那張在上傳前也會因為「讀不到 iCloud 那份」先不傳，不會拿本機的去蓋
 export async function fetchCloud(): Promise<{ notes: unknown[]; gone: unknown; layout: unknown; names: string[] } | 'off' | null> {
   const c = load();
-  if (!c) return null;
+  if (!c || !allowed) return null; // 不准同步：當成這次拉不了，什麼都不合
   try {
-    return await within(fetchAll(c), PULL_LIMIT);
+    const got = await within(fetchAll(c), PULL_LIMIT);
+    if (!allowed) return null; // 拉到一半被鎖住：這份不用
+    if (got && got !== 'off') lastSync = Date.now();
+    return got;
   } catch (e) {
     warn('下載', e);
     return null;

@@ -76,6 +76,22 @@ async function refresh(): Promise<Check> {
   return check;
 }
 
+// 手機上次記的讀完了沒（還沒問到 Apple 也算）：控制中心「記一行」冷啟動時要先等這個，才知道該開輸入框還是付費頁
+let known!: () => void;
+const knownP = new Promise<void>(r => { known = r; });
+// 自己先叫 startIap：用網址冷啟動時（控制中心按鈕），這裡可能比畫面的啟動流程早跑到，不叫的話會一直等
+export async function whenKnown(): Promise<boolean> { startIap(); await knownP; return snap.full; }
+export const isFull = () => snap.full;
+// 第一次問完 Apple（問不到也算問完）：B5 的提示框要等這個，免得對買了的人跳
+let asked!: () => void;
+const askedP = new Promise<void>(r => { asked = r; });
+export async function whenAsked(): Promise<boolean> { await askedP; return snap.full; }
+// 「買了沒」變了就通知（lib/access.ts 用它開關 iCloud 同步與小工具）
+export function onFullChange(f: (full: boolean) => void) {
+  let last = snap.full;
+  return subscribe(() => { if (snap.full !== last) { last = snap.full; f(last); } });
+}
+
 let started = false;
 // 打開 app 時叫一次：先拿手機上次記的（沒網路也馬上知道），再問 Apple；之後每次回到前景重問
 export function startIap() {
@@ -87,6 +103,7 @@ export function startIap() {
     } catch (e) {
       console.warn('讀解鎖記號失敗：', code(e) ?? 'unknown');
     }
+    known();
     const m = load();
     // 付款框以外進來的交易（等家長核准後才通過的、別台買的）也從這裡來；買好的交易要跟 Apple 說收到了，不然每次打開都會重送
     m?.purchaseUpdatedListener(p => {
@@ -98,6 +115,7 @@ export function startIap() {
       })();
     });
     await refresh();
+    asked();
     AppState.addEventListener('change', s => { if (s === 'active') refresh(); });
   })();
 }
@@ -162,7 +180,7 @@ export async function restoreFull(): Promise<'ok' | 'none' | 'busy' | Fail> {
   return snap.full ? 'ok' : 'none';
 }
 
-const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
+function subscribe(f: () => void) { subs.add(f); return () => { subs.delete(f); }; }
 const get = () => snap;
 export function useFull(): FullState {
   return useSyncExternalStore(subscribe, get, get);

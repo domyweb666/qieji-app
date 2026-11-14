@@ -3,7 +3,7 @@
 // 這個函式跑在小工具自己的隔離環境：不能 import、不能用 hooks、不能碰函式外的變數。
 // 所以顏色、字級、間距、每種尺寸放幾行全部由 src/lib/widget.ts 從 tokens 算好，用 props 傳進來；這裡一個裸數字都不寫。
 import { Spacer, Text, VStack } from '@expo/ui/swift-ui';
-import { containerBackground, font, foregroundStyle, lineLimit, strikethrough } from '@expo/ui/swift-ui/modifiers';
+import { containerBackground, font, foregroundStyle, lineLimit, strikethrough, widgetURL } from '@expo/ui/swift-ui/modifiers';
 import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
 export type PaperWidgetLine = { t: string; done: boolean };
@@ -17,6 +17,8 @@ export type PaperWidgetProps = {
   lineSize: number;
   gap: number;
   max: { small: number; medium: number; large: number; lock: number };
+  // 1.1 片 B3：沒買完整版時 app 推這句過來（「小工具是完整版功能」），小工具只顯示它，點了打開 app 的付費頁。買了就沒有這個欄位
+  locked?: string;
 };
 
 const PaperWidget = (p: PaperWidgetProps, env: WidgetEnvironment) => {
@@ -30,6 +32,19 @@ const PaperWidget = (p: PaperWidgetProps, env: WidgetEnvironment) => {
   const titleMods = lock
     ? [font({ size: p.titleSize, weight: 'bold' }), lineLimit(1)]
     : [font({ size: p.titleSize, weight: 'bold' }), foregroundStyle(c.text), lineLimit(1)];
+  // 鎖住的樣子（1.1 片 B3）：名字「茄記」＋一句說明，不放任何紙的內容；整塊點了開 qieji://full（付費頁）
+  if (p.locked) {
+    const bodyMods = lock
+      ? [font({ size: p.lineSize }), lineLimit(2)]
+      : [font({ size: p.lineSize }), foregroundStyle(c.strike), lineLimit(3)];
+    return (
+      <VStack alignment="leading" spacing={p.gap} modifiers={lock ? [widgetURL('qieji://full')] : [containerBackground(c.bg, 'widget'), widgetURL('qieji://full')]}>
+        <Text modifiers={titleMods}>{p.title}</Text>
+        <Text modifiers={bodyMods}>{p.locked}</Text>
+        <Spacer />
+      </VStack>
+    );
+  }
   // 不自己加 padding：iOS 17 起系統已經替小工具留一圈內邊距，再疊一圈字會縮在中間、看起來比實際小（多米 2026-11-01）
   return (
     <VStack alignment="leading" spacing={p.gap} modifiers={lock ? [] : [containerBackground(c.bg, 'widget')]}>

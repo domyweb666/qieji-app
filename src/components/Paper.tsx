@@ -32,6 +32,7 @@ import type { Act } from './Acts';
 import { ui } from './Overlay';
 import { Composer } from './Composer';
 import { dirPanel } from './DirPanel';
+import { reviewStruck } from '../lib/reviewAsk';
 import { HAS_NATIVE_MENU, NativeMenu } from './NativeMenu';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
@@ -160,6 +161,7 @@ export function Paper({ n }: { n: Note }) {
     it.done = !it.done;
     touch();
     if (!fromSwipe) haptic('strike');
+    if (it.done) reviewStruck(); // 評分提示只數「劃掉」，恢復不算（1.1 片 C2）
   }
   // 刪一行：進這張紙的最近刪除（目錄 → 最近刪除裡找得回來），toast 的「復原」只是快速路徑。空行直接拿掉
   function remove(id: string) {

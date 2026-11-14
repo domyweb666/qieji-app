@@ -295,6 +295,7 @@ export const gesture = {
 export const timing = { toastStay: 3500, saveDebounce: 250, blurCleanup: 120, freshFocusFallback: 700,
   cloudOffGrace: 10000,
   widgetPushDelay: 800, // 換紙之後停這麼久才通知桌面小工具（2026-11-04）
+  reviewDelay: 1000, // 劃掉一行之後停這麼久才看要不要跳系統評分框（1.1 片 C2：動畫跑完、手指離開約 1 秒）
   pageScroll: 16, // 目錄翻頁時多久回報一次捲到哪（毫秒，約一格畫面）：頁點跟著手指亮（C3）
   edgeFlip: 600,
   swapDwell: 100,  // 放進空格、資料夾裡換位：進去待這麼久就做

@@ -1,12 +1,14 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { OverlayHost, ui } from '../components/Overlay';
+import { startAccess } from '../lib/access';
 import { startIap } from '../lib/iap';
+import { reviewOpened } from '../lib/reviewAsk';
 import { store } from '../lib/store';
 import { T, useColors } from '../lib/tokens';
 
@@ -39,13 +41,25 @@ export default function RootLayout() {
   useEffect(() => {
     // 茄記完整版買了沒（1.1 片 A1）：跟讀紙各走各的，問不到也不擋紙出來
     startIap();
-    store.load().then(() => setReady(true), e => {
+    // 評分提示要數「在幾個不同的日子打開過」（1.1 片 C2）
+    reviewOpened();
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') reviewOpened(); });
+    store.load().then(() => {
+      setReady(true);
+      // 紙讀完才把「買了沒」接到 iCloud 同步和小工具（1.1 組塊 B）；在這之前同步是停著的。
+      // 1.0 開過同步的人，更新後第一次打開跳一次（B5；字照線框）
+      startAccess(() => ui.ask(
+        'iCloud 同步改成完整版功能',
+        '手機上的紙都還在，iCloud 雲碟裡的也都還在。買了完整版之後會接著同步。',
+        { label: '看看完整版', fn: () => router.push('/full') }, '知道了'));
+    }, e => {
       // 讀手機裡的資料失敗（很少見）：以前啟動畫面永遠收不掉、什麼都不講（2026-11-04 程式審查）。收起來說一聲；
       // 紙先不畫：沒讀完就不准存檔（store），讓人在這時候記東西會存不進去
       console.warn('讀存檔失敗：', e);
       SplashScreen.hide();
       ui.alert('讀不到手機裡的紙', '紙沒有被動到。把茄記從多工畫面滑掉，再打開一次');
     });
+    return () => sub.remove();
   }, []);
 
   return (
@@ -79,6 +93,12 @@ export default function RootLayout() {
               <Stack.Screen name="trash" />
               {/* 設定（1.1 片 A1）：跟最近刪除同一種推入頁 */}
               <Stack.Screen name="settings" />
+              {/* 付費頁（1.1 片 A2）：系統的半高表單，從下面升起、後面變暗、往下拉可以關；字放大放不下時可以拉到全高 */}
+              <Stack.Screen name="full" options={{
+                presentation: 'formSheet', headerShown: false, sheetGrabberVisible: true,
+                sheetAllowedDetents: [0.72, 1], // 只用一次：線框是從螢幕約三分之一的地方開始
+                sheetCornerRadius: T.shape.radiusLg, contentStyle: { backgroundColor: c.surface },
+              }} />
             </Stack>
           </View>
         ) : <View style={{ flex: 1, backgroundColor: c.page }} />}
