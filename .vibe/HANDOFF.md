@@ -20,7 +20,7 @@
 ## ⏭️ 下一步從哪繼續
 1. 多米裝最新的開發版，照 `.vibe/操作清單-待驗.md` 第二十七節（233～243）、第二十八節（244～268）總驗，回報條號
 2. 照回報修。動到 `full.ts`、`iap.ts`、`access.ts`、`cloud.ts` 的閘門要先對 `.vibe/安全標準.md` 授權段
-3. **多米要給隱私權政策的公開網址**，填進 `src/lib/links.ts` 的 `PRIVACY_URL`（只改 JS）
+3. 隱私權政策網址多米 11-14 已給、已填（`src/lib/links.ts`）。網頁上的內容要換成 `.vibe/送審文案-1.1.0.md` 的新版（多米自己貼）
 4. 總驗過了：打外部審查的交接包（🔍：`full.ts`、`iap.ts`、`access.ts`、`cloud.ts` 的閘門、`+native-intent.tsx`、`PaperWidget.tsx` 鎖住那段）→ `vibe-security-gate` 階段 C → `vibe-ship-check` → 合回 master → production 打包送審
 5. 送審時：內購項目要跟 1.1.0 一起送、附付費頁截圖；審核備註用 `.vibe/送審文案-1.1.0.md` 那段英文
 
