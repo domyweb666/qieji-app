@@ -6,6 +6,7 @@ import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { OverlayHost, ui } from '../components/Overlay';
+import { startIap } from '../lib/iap';
 import { store } from '../lib/store';
 import { T, useColors } from '../lib/tokens';
 
@@ -36,6 +37,8 @@ export default function RootLayout() {
   const c = useColors();
   const [ready, setReady] = useState(store.loaded);
   useEffect(() => {
+    // 茄記完整版買了沒（1.1 片 A1）：跟讀紙各走各的，問不到也不擋紙出來
+    startIap();
     store.load().then(() => setReady(true), e => {
       // 讀手機裡的資料失敗（很少見）：以前啟動畫面永遠收不掉、什麼都不講（2026-11-04 程式審查）。收起來說一聲；
       // 紙先不畫：沒讀完就不准存檔（store），讓人在這時候記東西會存不進去
@@ -74,6 +77,8 @@ export default function RootLayout() {
               {/* 目錄不是路由了：B3 起是紙畫面裡自己做的面板（components/DirPanel），從上面垂下來 */}
               {/* 不開系統大標題：紙那頁沒有標題列，推進大標題的頁面時標題列邊進場邊長高，標題往下掉約 25 點（2026-11-04 多米真機「抖」，模擬器錄影看到）。標題畫在頁面裡（trash.tsx） */}
               <Stack.Screen name="trash" />
+              {/* 設定（1.1 片 A1）：跟最近刪除同一種推入頁 */}
+              <Stack.Screen name="settings" />
             </Stack>
           </View>
         ) : <View style={{ flex: 1, backgroundColor: c.page }} />}

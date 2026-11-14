@@ -1125,6 +1125,14 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
           <Sym name="chevron.right" size={12} color={c.textSecondary} />
         </Pressable>
       )}
+      {/* 設定（1.1 片 A1）：最近刪除下面一列，一直都在；跟最近刪除一樣等面板收完再推進去 */}
+      <Pressable onPress={editing ? undefined : () => dirPanel.close(() => router.push('/settings'))} accessibilityRole="button" accessibilityLabel="設定"
+        style={({ pressed }) => [st.trashRow, { borderTopColor: c.separator }, pressed && !editing && { opacity: T.motion.pressDim }]}>
+        <Sym name="gearshape" size={17} color={c.textSecondary} />
+        <Text style={[st.trashText, { color: c.textSecondary }]}>設定</Text>
+        <View style={{ flex: 1 }} />
+        <Sym name="chevron.right" size={12} color={c.textSecondary} />
+      </Pressable>
 
       {/* 打開的資料夾（D1；2026-11-02 照 iOS，多米原型對過）：後面一層暗幕、名字大字靠左在框上面、框是半透明的玻璃。
           一頁 FCOLS 欄 × FROWS 列，滿了往右一頁：不抖時左右撥換頁、框下面有頁點；拖著到框的左右邊停一下也會翻（folderFlip）。

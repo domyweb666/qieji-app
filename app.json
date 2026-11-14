@@ -70,7 +70,9 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "expo-iap",
+      "expo-status-bar"
     ],
     "extra": {
       "router": {
