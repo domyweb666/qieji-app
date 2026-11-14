@@ -5,6 +5,7 @@
 // 價格用 App Store 傳回來的字，不寫死；判斷規則在 lib/full.ts、接原生在 lib/iap.ts、開關功能在 lib/access.ts。
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
@@ -19,13 +20,16 @@ import { setTextSize, TEXT_SIZES, textSizeLabel, useTextSize } from '../lib/text
 import { cloudOn, cloudSyncedAt } from '../lib/cloud';
 import { FAMILY } from '../lib/family';
 import { loadPrice, restoreFull, useFull } from '../lib/iap';
-import { APP_URL, MAIL, PRIVACY_URL, REVIEW_URL } from '../lib/links';
+import { APP_URL, FB_URL, IG_URL, MAIL, PRIVACY_URL, REVIEW_URL, SITE_URL } from '../lib/links';
 import { LOOK_LABEL, setLook, useLook, type Look } from '../lib/look';
 import { ago } from '../lib/model';
 import { T, useColors } from '../lib/tokens';
 
 const APP = '茄記';
 const NAME = '茄記完整版';
+const LOGO = require('../../assets/icon.png');
+const FB_ICON = require('../../assets/img/social-fb.png');
+const IG_ICON = require('../../assets/img/social-ig.png');
 const TAGLINE = '想到就記，沒有到期日，也不會催你';
 const NO_PRICE = '連不上 App Store，價格讀不到';
 const VERSION = Constants.expoConfig?.version ?? '';
@@ -201,11 +205,27 @@ export default function Settings() {
 
         <ListGroup title="關於">{about}</ListGroup>
 
-        {/* 頁尾：版本＋Made by DOMYWEB。長按複製版本資訊（回報問題用） */}
+        {/* 頁尾（2026-11-15 多米照 minical 的設定頁）：茄記圖示、版本、Made by DOMYWEB，下面一排網站／Facebook／Instagram。
+            長按上面那一塊複製版本資訊（回報問題用） */}
         <Pressable onLongPress={copyDiag} accessibilityRole="button" accessibilityLabel={`${APP} ${VERSION}，長按複製版本資訊`} style={st.footer}>
+          <Image source={LOGO} style={st.logo} contentFit="cover" accessible={false} />
           <Text style={[st.footText, { color: c.textSecondary }]}>{VER_LINE}</Text>
           <Text style={[st.footText, { color: c.textSecondary }]}>Made by DOMYWEB</Text>
         </Pressable>
+        <View style={st.social}>
+          <Pressable onPress={() => open(SITE_URL)} accessibilityRole="link" accessibilityLabel="DOMYWEB 網站"
+            style={({ pressed }) => [st.socialBtn, pressed && { opacity: T.motion.pressDim }]}>
+            <Sym name="globe" size={T.shape.socialIcon} color={c.textSecondary} />
+          </Pressable>
+          <Pressable onPress={() => open(FB_URL)} accessibilityRole="link" accessibilityLabel="Facebook"
+            style={({ pressed }) => [st.socialBtn, pressed && { opacity: T.motion.pressDim }]}>
+            <Image source={FB_ICON} style={st.socialImg} tintColor={c.textSecondary} accessible={false} />
+          </Pressable>
+          <Pressable onPress={() => open(IG_URL)} accessibilityRole="link" accessibilityLabel="Instagram"
+            style={({ pressed }) => [st.socialBtn, pressed && { opacity: T.motion.pressDim }]}>
+            <Image source={IG_ICON} style={st.socialImg} tintColor={c.textSecondary} accessible={false} />
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -221,5 +241,9 @@ const st = StyleSheet.create({
   right: { ...T.font.body },
   foot: { ...T.font.footnote, marginTop: T.space.s, marginHorizontal: T.space.l },
   footer: { alignItems: 'center', gap: T.space.xs, marginTop: T.space.xxl, minHeight: T.shape.hitMin, justifyContent: 'center' },
+  logo: { width: T.shape.aboutLogo, height: T.shape.aboutLogo, borderRadius: T.shape.aboutLogo * T.shape.tileRadiusRatio, marginBottom: T.space.s },
+  social: { flexDirection: 'row', justifyContent: 'center', gap: T.space.s, marginTop: T.space.m },
+  socialBtn: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
+  socialImg: { width: T.shape.socialIcon, height: T.shape.socialIcon },
   footText: { ...T.font.footnote },
 });

@@ -7,3 +7,7 @@ export const REVIEW_URL = `https://apps.apple.com/app/id${APP_STORE_ID}?action=w
 export const PRIVACY_URL = 'https://domyweb.org/tools/qieji/privacy/';
 // App Store 上茄記的頁面：分享給朋友用
 export const APP_URL = `https://apps.apple.com/app/id${APP_STORE_ID}`;
+// 設定頁最下面的三個連結（多米 2026-11-15 給的）：網站、Facebook、Instagram
+export const SITE_URL = 'https://domyweb.org/';
+export const FB_URL = 'https://www.facebook.com/profile.php?id=61556891560581';
+export const IG_URL = 'https://www.instagram.com/domyweb_fc/';
