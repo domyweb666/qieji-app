@@ -10,6 +10,7 @@ import { startAccess } from '../lib/access';
 import { startIap } from '../lib/iap';
 import { loadLook } from '../lib/look';
 import { takeNews } from '../lib/newsAsk';
+import { primeTips } from '../lib/tipAsk';
 import { loadTextSize } from '../lib/textSize';
 import { reviewOpened } from '../lib/reviewAsk';
 import { store } from '../lib/store';
@@ -50,6 +51,7 @@ export default function RootLayout() {
     // 外觀（跟隨系統／淺色／深色）要在紙畫出來之前套好，所以跟讀紙一起等
     Promise.all([store.load(), loadLook(), loadTextSize()]).then(() => {
       setReady(true);
+      primeTips(store.firstRun); // 單點提示：剛裝好的人不提示，其他人先把「看過沒」讀進來
       // 紙讀完才把「買了沒」接到 iCloud 同步和小工具（1.1 組塊 B）；在這之前同步是停著的。
       // 1.0 開過同步的人，更新後第一次打開跳一次（B5；字照線框）
       startAccess(() => ui.ask(

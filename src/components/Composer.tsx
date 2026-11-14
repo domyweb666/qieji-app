@@ -7,8 +7,10 @@
 // 位置（貼鍵盤、跟著升降）由 Paper 包在外層；這裡只管卡片、輸入框、✓ 和進出動畫（時長與曲線＝鍵盤的 keyboardFollow）。減少動態：滑入滑出改淡入淡出。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { RETURN_TIP } from '../lib/tip';
+import { takeReturnTip } from '../lib/tipAsk';
 import { T, useColors } from '../lib/tokens';
 import { Sym } from './Sym';
 
@@ -21,6 +23,7 @@ const INPUT_FONT = WEB ? T.font.line : T.font.input;
 const CHROME = T.space.s * 2;
 // 進出跟鍵盤同一個時鐘：鍵盤升起的時長與曲線（Paper 用同一組推 kbLift），框從畫面底邊滑上來跟鍵盤一起到位、收起時一起下去
 const KB = T.motion.keyboardFollow;
+const TAIL = T.space.m; // 提示卡小尾巴的邊長
 const KB_EASE = Easing.bezier(KB.easing[0], KB.easing[1], KB.easing[2], KB.easing[3]);
 
 export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone, onBlur }: {
@@ -45,6 +48,15 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
   // 游標所在那行也會被它自己捲出來，不會跑到看不見的地方
   const [txt, setTxt] = useState(initial);
   const fixing = initial !== '';
+  // ✓ 的單點提示（2026-11-15）：從 1.0 更新上來的人第一次在這裡按 Return（現在是換行）時，在 ✓ 上面冒一張小卡，一輩子一次。
+  // 不變暗、不擋觸控：紙和輸入框照常能用；點它、按 ✓、框收起就不見。規則在 lib/tip.ts
+  const [tip, setTip] = useState(false);
+  const last = useRef(initial);
+  const typed = (v: string) => {
+    if (!fixing && takeReturnTip(last.current, v)) { setTip(true); AccessibilityInfo.announceForAccessibility(RETURN_TIP); }
+    last.current = v;
+    setTxt(v); onChange(v);
+  };
   const maxInput = Math.max(LINE_H, maxH - CHROME);
   // 網頁預覽的送出會先失焦（blurOnSubmit），那段期間的失焦不算「收起」；iOS 的 submitBehavior='submit' 不會失焦，這個旗標只是空轉
   const sending = useRef(false);
@@ -65,6 +77,7 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
     sending.current = true;
     if (onSubmit()) {
       input.current?.clear();
+      last.current = '';
       setTxt('');
       requestAnimationFrame(() => { input.current?.focus(); sending.current = false; });
     } else sending.current = false;
@@ -87,16 +100,26 @@ export function Composer({ calm, maxH, initial = '', onChange, onSubmit, onDone,
             placeholder="記一行" placeholderTextColor={c.textMuted}
             style={[s.input, s.fill, { color: c.textPrimary }]}
             accessibilityLabel="輸入框"
-            onChangeText={v => { setTxt(v); onChange(v); }}
+            onChangeText={typed}
             onSubmitEditing={submit}
             onBlur={() => { if (!sending.current) onBlur(); }} />
         </View>
       </View>
-      <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel="記下來，收起輸入框"
+      <Pressable onPress={() => { setTip(false); onDone(); }} accessibilityRole="button" accessibilityLabel="記下來，收起輸入框"
         style={({ pressed }) => [s.btn, pressed && { opacity: T.motion.pressDim }]}>
         <Sym name="checkmark" size={20} color={c.textPrimary} weight="semibold" />
       </Pressable>
       </View>
+      {tip && (
+        <Animated.View entering={FadeIn.duration(T.motion.fade)} exiting={FadeOut.duration(T.motion.fade)} style={s.tipAt} pointerEvents="box-none">
+          <Pressable onPress={() => setTip(false)} accessibilityRole="button" accessibilityLabel={RETURN_TIP} accessibilityHint="點一下關掉這個提示">
+            <View style={[s.tip, { backgroundColor: c.textPrimary }]}>
+              <Text style={[s.tipText, { color: c.surface }]}>{RETURN_TIP}</Text>
+            </View>
+            <View style={[s.tipTail, { backgroundColor: c.textPrimary }]} />
+          </Pressable>
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -111,5 +134,11 @@ const s = StyleSheet.create({
   // 寧可剛好滿行時多一行空白，不可少一行。5 只用一次（網頁驗過的值）
   mirror: { color: 'transparent', paddingRight: 5 },
   fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  // 提示卡：浮在卡片上面、靠右，不佔位置（框的高度與 Paper 算的 maxH 都不受它影響）。底色用字的顏色、字用卡片的顏色（深淺色自己反過來）
+  tipAt: { position: 'absolute', right: 0, bottom: '100%', marginBottom: T.space.m, alignItems: 'flex-end' },
+  tip: { borderRadius: T.shape.radiusSm, paddingHorizontal: T.space.m, paddingVertical: T.space.s },
+  tipText: { ...T.font.footnote },
+  // 小尾巴：轉 45 度的方塊，中心對著 ✓ 的中心（✓ 寬 hitMin、右邊留 xs）
+  tipTail: { position: 'absolute', width: TAIL, height: TAIL, bottom: -TAIL / 2, right: T.space.xs + T.shape.hitMin / 2 - TAIL / 2, transform: [{ rotate: '45deg' }] },
   btn: { width: T.shape.hitMin, height: T.shape.hitMin, alignItems: 'center', justifyContent: 'center' },
 });
