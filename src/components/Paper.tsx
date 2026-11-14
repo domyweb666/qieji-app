@@ -713,6 +713,8 @@ export function Paper({ n }: { n: Note }) {
         } });
       } },
     ] },
+    // 設定（2026-11-15 多米：原本只有目錄最下面那一列，藏太裡面）。目錄那一列照留
+    { label: '設定', icon: 'gearshape', fn: () => { Keyboard.dismiss(); router.push('/settings'); } },
     { label: '刪除這張', icon: 'trash', destructive: true, fn: del },
   ];
 
@@ -774,7 +776,8 @@ export function Paper({ n }: { n: Note }) {
         ) : (
           // 點清單名＝切換清單（2026-11-04 改版；改名照舊從 ⋯ 的「改名字」或目錄長按選單）。
           // 清單名＝小膠囊（茄紫細框、小方磚＋名字＋▾）。2026-11-04 多米定案，大字那種拿掉
-          <Animated.View style={[st.titleSlide, float && pillStyle]} pointerEvents={float && !pillOn ? 'none' : 'auto'}
+          // key：有沒有封面圖各掛一個。同一個的話，封面圖拿掉時動畫樣式雖然不套了，透明度還停在 0，名字膠囊就不見（多米 2026-11-15 真機）
+          <Animated.View key={float ? 'float' : 'plain'} style={[st.titleSlide, float && pillStyle]} pointerEvents={float && !pillOn ? 'none' : 'auto'}
             accessibilityElementsHidden={float && !pillOn} importantForAccessibility={float && !pillOn ? 'no-hide-descendants' : 'auto'}>
           <Pressable onPress={openSwitch} accessibilityRole="button" accessibilityLabel={`${name}，切換清單`}
             style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]}>

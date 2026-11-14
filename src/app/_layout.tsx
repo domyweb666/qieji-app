@@ -104,6 +104,7 @@ export default function RootLayout() {
               {/* 設定（1.1 片 A1）：跟最近刪除同一種推入頁 */}
               <Stack.Screen name="settings" />
               <Stack.Screen name="news" />
+              <Stack.Screen name="family" />
               <Stack.Screen name="licenses" />
               <Stack.Screen name="license" />
               {/* 付費頁（1.1 片 A2）：系統的表單，從下面升起、後面變暗、往下拉可以關 */}

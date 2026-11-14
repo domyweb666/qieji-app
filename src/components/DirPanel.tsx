@@ -39,7 +39,7 @@ import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors } from '../lib/tokens';
 import type { Act } from './Acts';
 import { Empty } from './Empty';
-import { Glass, surfacePref, useCanBlur, useSurface, useSurfacePref } from './Glass';
+import { Glass, useCanBlur, useSurface } from './Glass';
 import { ui } from './Overlay';
 import { togglePin } from './pin';
 import { PopMenu } from './PopMenu';
@@ -549,7 +549,6 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
   const folderList = openEntry ? folderNotes(openEntry, drag) : [];
   const solid = !useCanBlur(); // 減少透明度、或舊開發版沒有霧化的原生碼（Glass.tsx）
   const liquid = useSurface() === 'glass'; // iOS 26 以上：資料夾框用系統的液態玻璃（跟 iPhone 檔案夾同一種材質，2026-11-03 多米）
-  const surfaceName = useSurfacePref() === 'solid' ? '白底實心' : '液態玻璃'; // 浮層樣式測試開關（redesign/domy）
   // 從這個資料夾拿起、已經拖出去：資料夾收起（看不到、點不到），但留著，拿起的那塊磚才不會不見
   const folderHidden = !!(drag && openF && drag.src === openF.id && !drag.inF);
 
@@ -1135,14 +1134,6 @@ function Directory({ move, padTop, padBottom, editing, setEditing, onMenuOpen }:
         <Text style={[st.trashText, { color: c.textSecondary }]}>設定</Text>
         <View style={{ flex: 1 }} />
         <Sym name="chevron.right" size={12} color={c.textSecondary} />
-      </Pressable>
-      {/* 浮層樣式測試開關（2026-11-14 多米，redesign/domy）：真機比過液態玻璃和白底實心之後，跟 Glass.tsx 的 surfacePref 一起拿掉 */}
-      <Pressable onPress={editing ? undefined : surfacePref.toggle} accessibilityRole="button"
-        accessibilityLabel={`浮層樣式，現在是${surfaceName}，點一下切換`}
-        style={({ pressed }) => [st.trashRow, { borderTopColor: c.separator }, pressed && !editing && { opacity: T.motion.pressDim }]}>
-        <Text style={[st.trashText, { color: c.textSecondary }]}>浮層（測試）</Text>
-        <View style={{ flex: 1 }} />
-        <Text style={[st.trashText, { color: c.textSecondary }]}>{surfaceName}</Text>
       </Pressable>
 
       {/* 打開的資料夾（D1；2026-11-02 照 iOS，多米原型對過）：後面一層暗幕、名字大字靠左在框上面、框是半透明的玻璃。
