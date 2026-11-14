@@ -3,6 +3,7 @@
 // - iOS 26 以上：液態玻璃（expo-glass-effect 的 GlassView，就是系統按鈕、工具列用的那個 UIGlassEffect）
 // - iOS 26 以下：系統霧面材質（expo-blur 的 BlurView＝UIVisualEffectView）
 // - 系統「減少透明度」開著、網頁預覽、或還沒重建的舊開發版裡沒有原生碼：不透明的底（solid），樣子跟以前一樣，不會閃退
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requireOptionalNativeModule } from 'expo';
 import { BlurView } from 'expo-blur';
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
@@ -32,11 +33,37 @@ export function useReduceTransparency() {
   return useSyncExternalStore(subscribeReduce, getReduce, getReduce);
 }
 
+// 浮層樣式測試開關（2026-11-14 多米，redesign/domy 分支）：液態玻璃（system：照下面 useSurface 的判斷）跟白底實心（solid）要真機比過才定，
+// 開關在目錄最下面。定了之後這段和目錄那一列一起拿掉。只管浮層本身，後面的霧化（useCanBlur）不受影響；系統畫的選單（紙的 ⋯、最近刪除的 ⋯）切不到
+export type SurfacePref = 'system' | 'solid';
+const PREF_KEY = 'cn.surfacePref';
+let pref: SurfacePref = 'system';
+const prefSubs = new Set<() => void>();
+const setPref = (v: SurfacePref) => { if (v === pref) return; pref = v; prefSubs.forEach(f => f()); };
+AsyncStorage.getItem(PREF_KEY).then(v => {
+  if (v === null) return;
+  if (v !== 'system' && v !== 'solid') { console.warn('浮層樣式設定的值不認得，當成液態玻璃：', v); return; }
+  setPref(v);
+}, e => console.warn('讀不到浮層樣式設定：', e));
+const subscribePref = (f: () => void) => { prefSubs.add(f); return () => { prefSubs.delete(f); }; };
+const getPref = () => pref;
+export function useSurfacePref() {
+  return useSyncExternalStore(subscribePref, getPref, getPref);
+}
+export const surfacePref = {
+  toggle() {
+    const v: SurfacePref = pref === 'solid' ? 'system' : 'solid';
+    setPref(v);
+    AsyncStorage.setItem(PREF_KEY, v).catch(e => console.warn('浮層樣式設定存不起來（這次有切，下次打開會回到上一個）：', e));
+  },
+};
+
 export type Surface = 'glass' | 'blur' | 'solid';
 // 這台手機、這個設定下，浮層用哪一種材質
 export function useSurface(): Surface {
   const reduce = useReduceTransparency();
-  if (reduce) return 'solid';
+  const p = useSurfacePref();
+  if (reduce || p === 'solid') return 'solid';
   if (HAS_GLASS) return 'glass';
   return HAS_BLUR ? 'blur' : 'solid';
 }

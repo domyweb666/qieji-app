@@ -129,8 +129,8 @@ export function Paper({ n }: { n: Note }) {
   const closed = useRef(false);
   const mounted = useRef(true);
   const scrollRef = useAnimatedRef<ScrollViewInstance>();
-  // 封面圖跟著紙捲走（1.1，2026-11-14 多米選「乙、白底」，線框 .uiux/03-線框/1.1-封面圖排版比較.html）：
-  // 捲動區最前面墊一塊跟「圖在標題列以下那截＋時間列」一樣高的空白（headE），圖和時間列畫在外面、跟著捲動位置往上移。
+  // 封面圖（1.1，2026-11-14 多米定「丁、白底」：矮橫幅、方磚壓在圖的下緣、名字大字；先選乙同晚改丁。線框 .uiux/03-線框/1.1-封面圖排版比較.html）：
+  // 捲動區最前面多一塊「方磚＋大字名字＋時間列」（高 headE，真的在捲動區裡，點得到、跟著捲），橫幅圖畫在外面、跟著捲動位置往上移。
   // 清單自己的座標不變：scrollY 還是「清單頂端＝0」，負的＝圖還露著；真的捲動位置（rawY）＝ scrollY ＋ headE。
   // 沒有封面圖時 headE＝0，兩個一樣
   const rawY = useScrollOffset(scrollRef);
@@ -404,23 +404,36 @@ export function Paper({ n }: { n: Note }) {
     scrollRef.current?.scrollTo({ y: view.current.y + headRef.current, animated });
   }
   const scrolled = (e: { nativeEvent: { contentOffset: { y: number } } }) => { view.current.y = e.nativeEvent.contentOffset.y - headRef.current; };
-  // 封面圖那塊空白多高：圖在標題列以下那截＋時間列。量到的高度變了（第一次量好、放上／拿掉封面圖、字級變了），清單座標跟著挪，真的捲動位置不動
-  const float = !!cover && !pad; // 記事本不是捲動清單，封面圖照舊固定在上面
-  const [barH, setBarH] = useState(0), [timeH, setTimeH] = useState(0);
-  const imgH = insets.top + T.shape.coverH;
-  const imgBelow = float ? Math.max(0, imgH - (barH || insets.top + T.space.s * 2 + T.shape.hitMin)) : 0;
-  const headH = float ? imgBelow + timeH : 0;
+  // 有封面圖的清單。記事本不是捲動清單，封面圖照舊固定在上面
+  const float = !!cover && !pad;
+  // barH＝標題列、headH0＝捲動區最前面那一塊（方磚＋名字＋時間列）、timeH＝時間列，都是量到的高
+  const [barH, setBarH] = useState(0), [headH0, setHeadH] = useState(0), [timeH, setTimeH] = useState(0);
+  const imgH = insets.top + (float ? T.shape.coverLow : T.shape.coverH);
+  // 圖在標題列以下露出多少；至少要夠方磚壓上去的那一截
+  const imgBelow = float ? Math.max(T.shape.coverTileLap, imgH - (barH || insets.top + T.space.s * 2 + T.shape.hitMin)) : 0;
+  const headH = float ? headH0 : 0;
+  const nameEnd = Math.max(0, headH - timeH); // 大字名字的底邊捲到這裡，就整個進到標題列後面了
+  const nameAt = useSharedValue(0);
+  // 量到的高度變了（第一次量好、放上／拿掉封面圖、名字換行、字級變了）：清單座標跟著挪，真的捲動位置不動
   useLayoutEffect(() => {
+    nameAt.value = nameEnd;
     if (headRef.current === headH && imgLeft.value === imgBelow) return;
     view.current.y += headRef.current - headH;
     headRef.current = headH; headE.value = headH; imgLeft.value = imgBelow;
-  }, [headH, imgBelow]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 圖和時間列跟著往上移，移到整塊收進標題列後面為止；在最上面再往下拉（橡皮筋）時圖撐大補滿，頂端不露底
-  const coverStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(rawY.value, headE.value) }] }), WEB_DEPS ? [] : undefined);
+  }, [headH, imgBelow, nameEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 圖跟著往上移，移到整張收進標題列後面為止；在最上面再往下拉（橡皮筋）時圖撐大補滿，頂端不露底
+  const coverStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.min(rawY.value, imgLeft.value) }] }), WEB_DEPS ? [] : undefined);
   const coverImgStyle = useAnimatedStyle(() => {
     const pull = Math.max(0, -rawY.value);
     return { transform: [{ translateY: -pull / 2 }, { scale: (imgH + pull) / imgH }] };
   }, WEB_DEPS ? [imgH] : undefined);
+  // 標題列裡的小膠囊：在最上面時不畫（名字已經用大字寫在圖下面），大字捲進標題列後面時淡進來接手。
+  // pillOn 給觸控和 VoiceOver 用：看不到的時候點不到、也唸不到
+  const pillStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(rawY.value, [nameAt.value - T.space.xl, nameAt.value], [0, 1], Extrapolation.CLAMP),
+  }), WEB_DEPS ? [] : undefined);
+  const [pillOn, setPillOn] = useState(false);
+  useAnimatedReaction(() => rawY.value >= nameAt.value - T.space.xl, (v, old) => { if (v !== old) scheduleOnRN(setPillOn, v); });
   // 標題列的底：圖收到剩一小截時淡進來（紙色＋格線），之後行從它後面捲過去
   const barBgStyle = useAnimatedStyle(() => ({
     opacity: interpolate(rawY.value, [imgLeft.value - T.space.xl, imgLeft.value], [0, 1], Extrapolation.CLAMP),
@@ -731,16 +744,15 @@ export function Paper({ n }: { n: Note }) {
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
       <View collapsable={false} onLayout={float ? e => setBarH(e.nativeEvent.layout.height) : undefined}>
-      {/* 封面圖（1.1 完整版）。清單：圖從螢幕最頂鋪下來、跟著紙捲走（見上面 headE），這裡的圖和時間列畫在標題列後面、往下超出這一塊，
-          下面的捲動區在那個位置是空白，所以看得到、手指也照樣捲得動（pointerEvents none）。圖最上面一截化進紙色，時間和訊號才看得清楚。
-          記事本：照舊固定在上面，清單名和 ⋯ 疊在圖上。清單名的膠囊在圖上補白底（多米選白底，不用玻璃） */}
+      {/* 封面圖（1.1 完整版）。清單（丁）：矮橫幅從螢幕最頂鋪下來、畫在標題列後面、往下超出這一塊一小截，跟著紙捲走（見上面 headE）；
+          方磚、大字名字、時間列在下面的捲動區裡。圖最上面一截化進紙色，時間和訊號才看得清楚。
+          記事本：照舊固定在上面，清單名和 ⋯ 疊在圖上，清單名的膠囊補白底（多米選白底，不用玻璃） */}
       {float && (
-        <Animated.View style={[st.coverFloat, coverStyle]} pointerEvents="none">
-          <Animated.View style={[{ height: imgH }, coverImgStyle]}>
+        <Animated.View style={[st.coverFloat, { height: imgH }, coverStyle]} pointerEvents="none">
+          <Animated.View style={[StyleSheet.absoluteFill, coverImgStyle]}>
             <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible accessibilityLabel="封面圖" />
             <View style={[st.coverFog, { height: insets.top + T.space.xl, backgroundImage: coverFog(nc.bg) }]} />
           </Animated.View>
-          <View onLayout={e => setTimeH(e.nativeEvent.layout.height)}>{timeBox}</View>
         </Animated.View>
       )}
       {float && <Animated.View style={[StyleSheet.absoluteFill, st.barBg, { backgroundColor: nc.bg, borderBottomColor: nc.rule }, barBgStyle]} />}
@@ -762,6 +774,8 @@ export function Paper({ n }: { n: Note }) {
         ) : (
           // 點清單名＝切換清單（2026-11-04 改版；改名照舊從 ⋯ 的「改名字」或目錄長按選單）。
           // 清單名＝小膠囊（茄紫細框、小方磚＋名字＋▾）。2026-11-04 多米定案，大字那種拿掉
+          <Animated.View style={[st.titleSlide, float && pillStyle]} pointerEvents={float && !pillOn ? 'none' : 'auto'}
+            accessibilityElementsHidden={float && !pillOn} importantForAccessibility={float && !pillOn ? 'no-hide-descendants' : 'auto'}>
           <Pressable onPress={openSwitch} accessibilityRole="button" accessibilityLabel={`${name}，切換清單`}
             style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]}>
             <View style={[st.pill, { borderColor: c.accent }, cover && { backgroundColor: c.surface }]}>
@@ -771,6 +785,7 @@ export function Paper({ n }: { n: Note }) {
               <Sym name="chevron.down" size={12} color={c.textSecondary} weight="semibold" />
             </View>
           </Pressable>
+          </Animated.View>
         )}
         </View>
         {/* ✓ 出現／收起時 ⋯ 跟著鍵盤的時鐘滑過去，不瞬間跳一格（多米 2026-11-01）。減少動態：不滑，直接到位 */}
@@ -821,7 +836,21 @@ export function Paper({ n }: { n: Note }) {
           scrollEventThrottle={16}
           onScrollBeginDrag={() => scheduleOnUI(stopTop)} onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled} onContentSizeChange={(w, h) => { contentH.value = h; }}
           scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
-          {float && <View style={{ height: headH }} />}
+          {/* 有封面圖：方磚壓在橫幅下緣（往上讓出 coverTileLap），下面大字名字（點了切換清單，跟小膠囊一樣）、時間列 */}
+          {float && (
+            <View onLayout={e => setHeadH(e.nativeEvent.layout.height)} style={{ paddingTop: imgBelow - T.shape.coverTileLap }}>
+              <Pressable onPress={openSwitch} accessibilityRole="button" accessibilityLabel={`${name}，切換清單`}
+                style={({ pressed }) => [st.headTitle, pressed && { opacity: T.motion.pressDim }]}>
+                <View style={[st.headTile, { backgroundColor: nc.bg }]}><NoteIcon n={n} size={T.shape.coverTile} /></View>
+                <View style={st.headNameRow}>
+                  <Text style={[st.headName, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={2}
+                    maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
+                  <Sym name="chevron.down" size={12} color={c.textSecondary} weight="semibold" />
+                </View>
+              </Pressable>
+              <View onLayout={e => setTimeH(e.nativeEvent.layout.height)}>{timeBox}</View>
+            </View>
+          )}
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             <LineList items={n.items} stamp={renders.current} api={api} ctl={listCtl} geoRef={geoRef} kickRef={kickRef} anchorNext={anchorNext}
@@ -1607,8 +1636,12 @@ const st = StyleSheet.create({
   emptyText: { ...T.font.callout, textAlign: 'center' },
   // 封面圖上的那一列：疊在圖上面
   barOver: { position: 'absolute', top: 0, left: 0, right: 0 },
-  // 跟著紙捲走的封面圖（清單）：圖和時間列疊在最上面、往下超出標題列那一塊
+  // 跟著紙捲走的封面圖（清單，丁）：橫幅疊在最上面、往下超出標題列一小截；方磚外面一圈紙色、壓在橫幅下緣
   coverFloat: { position: 'absolute', top: 0, left: 0, right: 0 },
+  headTitle: { paddingHorizontal: T.space.gutter, gap: T.space.s, alignItems: 'flex-start' },
+  headTile: { padding: T.shape.borderSelected, borderRadius: T.shape.coverTile * T.shape.tileRadiusRatio + T.shape.borderSelected },
+  headNameRow: { flexDirection: 'row', alignItems: 'center', gap: T.space.s, minHeight: T.shape.hitMin },
+  headName: { ...T.font.title, flexShrink: 1 },
   coverFog: { position: 'absolute', top: 0, left: 0, right: 0 },
   barBg: { borderBottomWidth: T.shape.borderCard },
   barFloat: { paddingBottom: T.space.s },
