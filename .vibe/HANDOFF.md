@@ -13,6 +13,7 @@
 - 多米：「直接做，往下都做完，我最後會做個總檢驗」→ A1～D1 十片全部寫完，逐片人驗改成最後一次總驗（帳本跳過紀錄）
 - A1（ffedd9c）：`lib/full.ts`、`lib/iap.ts`、設定頁、目錄入口
 - 其餘九片（這次提交）：付費頁 `app/full.tsx`（半高表單）、`cloud.ts` 同步閘門＋`lib/access.ts`、設定頁同步開關與關於、小工具鎖住樣子、控制中心沒買開付費頁、1.0 使用者提示框、評分提示 `lib/review.ts`／`reviewAsk.ts`、README 與 `.vibe/送審文案-1.1.0.md`；版本改 1.1.0
+- 最新的開發版（含全部十片）：https://expo.dev/accounts/fcharlie/projects/qieji/builds/0080234f-9793-4e6f-a7db-f4f32c5c2485
 - 每片的做法、證據、沒驗到的：`.vibe/切片帳本.md`「1.1 其餘九片的做法與證據」
 - AI 代決的事：`.vibe/代決清單.md` 2026-11-14 那十幾行
 
