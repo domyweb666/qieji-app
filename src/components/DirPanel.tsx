@@ -15,6 +15,8 @@
 // D2：抖動中拖一張停在別張磚正中間半秒＝疊成資料夾（疊在資料夾上＝放進去）；為了到得了正中間，讓位改成停在邊邊或空隙 0.2 秒才讓（多米選照 iOS）。
 // D1（2026-11-02）：資料夾。長按紙磚「放進資料夾…」；資料夾磚（名字＋裡面紙的小色塊）跟紙磚一起排、一起拖；點開在目錄上面打開一個框，
 // 點名字改名；資料夾裡的紙長按「移出資料夾」。資料夾裡不能拖（D3）
+import { Image } from 'expo-image';
+import { coverUri, useCoverVersion } from '../lib/covers';
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -1214,7 +1216,7 @@ type TileApi = {
 };
 // 磚畫出來的樣子用到的全部，串成一串字：一樣就不必重畫（紙是在原物件上改的，比物件看不出換了顏色、改了名字）。
 // 紙磚：顏色、磚上的字、名字（沒取名是「未命名」、字是次要色）、釘選、正在看；資料夾：名字、裡面前九張的顏色和字、正在看的在不在裡面
-const noteFaceKey = (n: Note, cur: boolean) => `${n.color}|${glyphOf(n)}|${label(n)}|${n.title.trim() ? 1 : 0}|${n.pinned ? 1 : 0}|${cur ? 1 : 0}`;
+const noteFaceKey = (n: Note, cur: boolean) => `${n.color}|${glyphOf(n)}|${label(n)}|${n.title.trim() ? 1 : 0}|${n.pinned ? 1 : 0}|${cur ? 1 : 0}|${n.cover ?? ''}|${n.locked ? 1 : 0}|${coverUri(n) ? 1 : 0}`;
 const folderFaceKey = (f: Folder, notes: Note[], cur: boolean) =>
   `${f.name}|${notes.slice(0, T.shape.folderMinis * T.shape.folderMinis).map(n => n.color + glyphOf(n)).join(',')}|${cur ? 1 : 0}`;
 
@@ -1484,14 +1486,20 @@ function TileFace({ n, w, cur, hideName }: { n: Note; w: number; cur: boolean; h
   const c = useColors();
   const nc = useNoteColors(n.color);
   const s = sizeOf(w);
+  // 封面圖（1.1 完整版）：有圖的磚用圖的正中間那一塊，不放字；上鎖的紙不露圖，照舊色塊＋字，左上角一個鎖
+  useCoverVersion();
+  const cover = n.locked ? null : coverUri(n);
   return (
     <View style={[st.cell, { width: w }]}>
       <View style={[st.tile, { width: s, height: s, borderRadius: s * RADIUS, backgroundColor: nc.hd, borderColor: cur ? c.accent : nc.rule,
         borderWidth: cur ? T.shape.borderSelected : T.shape.borderCard }]}>
         {/* 正中間一個字（2026-11-03 多米：只有顏色很難認）：自己設的，沒設就是名字的第一個字；沒取名（也沒設）是「未」；字色照磚的顏色配（深色磚白字） */}
-        <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: nc.ink }]}
-          allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
-        {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={nc.ink} /></View> : null}
+        {cover
+          ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+          : <Text style={[st.glyph, { fontSize: Math.round(s * T.shape.tileGlyphRatio), color: nc.ink }]}
+              allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>}
+        {n.pinned ? <View style={st.pin}><Sym name="pin.fill" size={12} color={cover ? c.textPrimary : nc.ink} /></View> : null}
+        {n.locked ? <View style={st.lockAt}><Sym name="lock.fill" size={12} color={nc.ink} /></View> : null}
       </View>
       {/* 沒取名的跟紙的標題列一樣用次要色，看得出是「還沒取名」不是名字 */}
       <TileName t={label(n)} color={n.title.trim() ? c.textPrimary : c.textSecondary} hide={hideName} />
@@ -1522,10 +1530,13 @@ function FolderFace({ f, notes, w, cur, hideName }: { f: Folder; notes: Note[]; 
 // 只有收著的資料夾磚這樣畫；打開的資料夾裡照舊是一般的磚
 function Mini({ n, w }: { n: Note; w: number }) {
   const nc = useNoteColors(n.color);
+  const cover = n.locked ? null : coverUri(n);
   return (
     <View style={[st.mini, { width: w, height: w, borderRadius: w * RADIUS, backgroundColor: nc.hd, borderColor: nc.rule }]}>
-      <Text style={[st.glyph, { fontSize: Math.round(w * T.shape.tileGlyphRatio * T.shape.folderMiniGlyph), color: nc.ink }]}
-        allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>
+      {cover
+        ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+        : <Text style={[st.glyph, { fontSize: Math.round(w * T.shape.tileGlyphRatio * T.shape.folderMiniGlyph), color: nc.ink }]}
+            allowFontScaling={false} accessible={false}>{glyphOf(n)}</Text>}
     </View>
   );
 }
@@ -1636,6 +1647,7 @@ const st = StyleSheet.create({
   tileText: { ...T.font.headline }, // 打開時放大那塊上面的名字（Launch）
   tileName: { ...T.font.label, lineHeight: T.shape.tileLabelH, textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: T.space.xs },
   pin: { position: 'absolute', top: T.space.xs, right: T.space.xs },
+  lockAt: { position: 'absolute', top: T.space.xs, left: T.space.xs },
   // 頂端「新的一張」：跟「完成」同一個位置的玻璃圓鈕
   newBtn: { width: T.shape.hitMin, height: T.shape.hitMin, borderRadius: T.shape.pill(T.shape.hitMin) },
   newHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },

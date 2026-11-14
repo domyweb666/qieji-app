@@ -50,9 +50,13 @@ export function widgetProps(s: State, last: string | null): PaperWidgetProps {
     const c = colors(mode);
     return { bg: noteColors(key, mode).bg, text: c.textPrimary, strike: c.textStrike };
   };
-  const lines = n ? n.items.filter(i => i.t.trim()).slice(0, T.widget.lines.large).map(i => ({ t: i.t, done: i.done })) : [];
+  // 上鎖的紙（1.1）：小工具只說上鎖了，名字和內容都不放。記事本：內文一行一行拿
+  const lines = !n ? []
+    : n.locked ? [{ t: '這張上鎖了', done: false }]
+      : n.type === 'text' ? n.body.split('\n').map(t => t.trim()).filter(Boolean).slice(0, T.widget.lines.large).map(t => ({ t, done: false }))
+        : n.items.filter(i => i.t.trim()).slice(0, T.widget.lines.large).map(i => ({ t: i.t, done: i.done }));
   return {
-    title: n ? label(n) : '茄記',
+    title: n && !n.locked ? label(n) : '茄記',
     lines,
     light: scheme('light'),
     dark: scheme('dark'),

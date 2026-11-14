@@ -10,6 +10,7 @@ import { startAccess } from '../lib/access';
 import { startIap } from '../lib/iap';
 import { loadLook } from '../lib/look';
 import { takeNews } from '../lib/newsAsk';
+import { loadTextSize } from '../lib/textSize';
 import { reviewOpened } from '../lib/reviewAsk';
 import { store } from '../lib/store';
 import { T, useColors } from '../lib/tokens';
@@ -47,7 +48,7 @@ export default function RootLayout() {
     reviewOpened();
     const sub = AppState.addEventListener('change', s => { if (s === 'active') reviewOpened(); });
     // 外觀（跟隨系統／淺色／深色）要在紙畫出來之前套好，所以跟讀紙一起等
-    Promise.all([store.load(), loadLook()]).then(() => {
+    Promise.all([store.load(), loadLook(), loadTextSize()]).then(() => {
       setReady(true);
       // 紙讀完才把「買了沒」接到 iCloud 同步和小工具（1.1 組塊 B）；在這之前同步是停著的。
       // 1.0 開過同步的人，更新後第一次打開跳一次（B5；字照線框）

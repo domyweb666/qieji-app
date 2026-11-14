@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
-import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud } from './cloud';
+import { cloudOn, cloudPulled, fetchCloud, initCloud, pauseCloud, pushCloud, syncCovers } from './cloud';
 import { dropNotes, emptyState, fixOrder, forgetSync, mergeCloud, mergeLayout, ownLayout, packGrid, SEAT_BACKUP_KEY, seemsNewCloud, HINT_KEY, isExpiredTrash, KEY, purgeExpiredBin, readState, stampMods, stampOldBin, stampOldTrash, tutorialNote, uid, type ColorKey, type Note, type State } from './model';
 import { pushWidget } from './widget';
 import { T } from './tokens';
@@ -219,8 +219,12 @@ export const store = {
     } finally {
       box.pulling = false;
       cloudPulled();
+      // 紙合完再對封面圖（1.1）：有新的圖檔下來，covers 會自己通知畫面重畫
+      syncCovers(box.state).catch(() => {});
     }
   },
+  // 剛放了封面圖：傳上 iCloud（不准同步時裡面自己會擋）
+  syncCovers() { syncCovers(box.state).catch(() => {}); },
   // S5 多米選「放進去」：這台的紙全部當成沒傳過，跟現在這個 iCloud 合起來（它原本有的紙也會進來）、全部傳上去
   adoptCloud() {
     forgetSync(box.state);

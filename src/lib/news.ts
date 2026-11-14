@@ -5,8 +5,8 @@ export type News = { version: string; points: string[] };
 // 新的在前面。送審前照這一版真的有的功能改（片 D2）
 export const NEWS: News[] = [
   { version: '1.1.0', points: [
-    '多了「設定」，在目錄最下面',
-    '新增茄記完整版：iCloud 同步、小工具、控制中心「記一行」',
+    '多了「設定」，在目錄最下面，可以選淺色或深色',
+    '新增茄記完整版：iCloud 同步、小工具、控制中心、封面圖、上鎖、記事本、字級',
     '記一行時按 Return 是換行，按右邊的勾才記下來',
   ] },
 ];

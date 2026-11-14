@@ -10,6 +10,8 @@
 // 越線的字會亮起來、放手那一刻就劃，拿起來的行浮起、放下滑進落點並震一下（細節在 .vibe/待審-手感極致微調清單.md 第一、二節）。
 // 顏色、字級、間距、動畫數字全部來自 src/lib/tokens.ts，這裡不寫裸數字。
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type RefObject } from 'react';
 import {
   AppState, Keyboard, Platform, Pressable, ScrollView as RNScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
@@ -24,7 +26,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 import { buildGeo, countBelow, EMPTY_GEO, estimateLines, hitRow, landOffset, maps, midsOf, movedGeo, sameGeo, sameIds, windowOf, type Geo } from '../lib/rows';
-import { ago, binDone, binItem, caretAt, convertNote, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, roomOf, uid, unbinDone, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
+import { ago, binDone, binItem, caretAt, dropNotes, FULL_MSG, fillHole, fullDate, isEmpty, leaveHole, markDeleted, markRestored, PIN_MAX, pinnedNotes, plain, roomOf, uid, unbinDone, unbinItem, type ColorKey, type Item, type Note, type TextLine } from '../lib/model';
 import { togglePin } from './pin';
 import { newNote, store, useStore } from '../lib/store';
 import { haptic, T, useColors, useNoteColors, type Colors } from '../lib/tokens';
@@ -33,6 +35,11 @@ import { ui } from './Overlay';
 import { Composer } from './Composer';
 import { dirPanel } from './DirPanel';
 import { reviewStruck } from '../lib/reviewAsk';
+import { dropCloudNote } from '../lib/cloud';
+import { clearCover, coverUri, pickCover, useCoverVersion } from '../lib/covers';
+import { isFull } from '../lib/iap';
+import { canLock, isOpen, unlock, useLockVersion } from '../lib/lock';
+import { textK, useTextSize } from '../lib/textSize';
 import { HAS_NATIVE_MENU, NativeMenu } from './NativeMenu';
 import { PopMenu } from './PopMenu';
 import { Swatches } from './Swatches';
@@ -103,9 +110,20 @@ export function Paper({ n }: { n: Note }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const insets = useSafeAreaInsets();
   const calm = useReducedMotion();
-  const { fontScale: fs, height: winH, width: winW } = useWindowDimensions();
+  const { fontScale: sysFs, height: winH, width: winW } = useWindowDimensions();
+  // 完整版的字級（lib/textSize）：在系統字級上再乘一段。清單引擎拿到的 fs 是兩個乘起來的，行高、估行數都照它算
+  const tk = useTextSize();
+  const fs = sysFs * tk;
   const c = useColors();
   const nc = useNoteColors(n.color);
+  // 1.1 完整版：上鎖（還沒過 Face ID 就不畫內容）、記事本（一整頁文字，沒有一行一行）、封面圖
+  useLockVersion();
+  useCoverVersion();
+  const lockedNow = !!n.locked && !isOpen(n.id);
+  const pad = n.type === 'text';
+  const cover = lockedNow ? null : coverUri(n);
+  const [padFocus, setPadFocus] = useState(false);
+  const [padFresh] = useState(() => store.fresh === n.id); // 剛開的新記事本：一打開游標就在裡面
   // 整頁撥過來的這張（B4）：不淡入、裡面的東西也不跑進場動畫，接手的那一刻才跟旁邊那張的預覽一模一樣
   const closed = useRef(false);
   const mounted = useRef(true);
@@ -137,12 +155,9 @@ export function Paper({ n }: { n: Note }) {
   const pending = useRef<{ id: string; caret?: number } | null>(null);
   const focused = useRef<string | null>(null);
 
-  // 舊的文字筆記打開時轉成清單（一段一行）
-  const converted = useRef(false);
-  if (!converted.current) {
-    converted.current = true;
-    if (n.type === 'text') { convertNote(n); store.save(); }
-  }
+  // 文字筆記（type 'text'）就是記事本，照原樣打開（1.1；之前打開會自動轉成清單）
+  // 上鎖的紙一打開就問一次 Face ID；取消的話停在鎖住的畫面，上面有按鈕可以再試
+  useEffect(() => { if (n.locked && !isOpen(n.id)) unlock(n.id, '打開上鎖的清單'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // quiet＝打字：只存檔不重畫。新增、劃掉、刪除這類改了結構的才重畫。app 正要進背景時立刻寫入
   function touch(quiet?: boolean) {
@@ -238,7 +253,7 @@ export function Paper({ n }: { n: Note }) {
   });
   // ＋（右下角那顆、鍵盤膠囊那顆）：底下升起輸入框、在裡面打（多米 2026-11-01；之前是在最上面開一空行、整頁捲回頂端）
   function addLine() { if (composing) return; if (!roomOf(n)) { ui.toast(FULL_MSG); return; } haptic('add'); openComposer(); }
-  function openComposer() { if (composing) return; draft.current = ''; setComposing(true); }
+  function openComposer() { if (composing || lockedNow || pad) return; draft.current = ''; setComposing(true); }
   const takeDraft = () => { const t = draft.current.trim(); draft.current = ''; return t; };
   // 輸入框送出的字變成紙最上面的一行，畫面捲回頂端讓你看到它（多米 2026-11-01 第八批改定：捲在下面記完畫面沒動，別人會以為壞了；
   // 推翻同日早上的「留在原地」）。動畫照 2-4：
@@ -551,7 +566,7 @@ export function Paper({ n }: { n: Note }) {
   // 紙自己的彈出選單（茄記版行的長按、網頁的 ⋯）開著時也不畫：列畫在紙外面、疊在紙的選單上面，不收的話選單後面霧掉了列還清清楚楚、還點得到
   useLayoutEffect(() => {
     barSlot.set({ onAdd: addLine },
-      !kbUp && !composing && !menu && !rowMenu);
+      !kbUp && !composing && !menu && !rowMenu && !lockedNow && !pad);
   });
   function share() { Keyboard.dismiss(); Share.share({ message: shareText() }).catch(() => {}); }
   function pickColor(k: ColorKey) {
@@ -581,12 +596,45 @@ export function Paper({ n }: { n: Note }) {
     } });
   }
   const setItems = (items: Item[]) => { n.items = items; touch(); };
+  // 封面圖（完整版）：沒買開付費頁。選照片用系統的選取畫面，不用相簿權限
+  async function setCover() {
+    Keyboard.dismiss();
+    if (!isFull()) { router.push('/full'); return; }
+    const r = await pickCover(n);
+    if (r === 'ok') { touch(); store.syncCovers(); } else if (r === 'fail') ui.alert('封面圖沒放成', '再試一次');
+  }
+  function dropCover() { clearCover(n); touch(); }
+  // 上鎖／解除上鎖（完整版；解除不看買了沒）。上鎖的紙不上傳 iCloud，上鎖那一刻把 iCloud 上那份拿掉
+  async function toggleLock() {
+    Keyboard.dismiss();
+    if (n.locked) {
+      if (!(await unlock(n.id, '解除上鎖'))) return;
+      delete n.locked;
+      touch();
+      ui.toast('已解除上鎖');
+      return;
+    }
+    if (!isFull()) { router.push('/full'); return; }
+    if (!(await canLock())) { ui.alert('這支手機還不能上鎖', '先到 iPhone 的「設定」打開 Face ID，或設一組手機密碼'); return; }
+    ui.ask('把這張上鎖？', '之後打開它要過 Face ID 或手機密碼。上鎖的清單只存在這支手機，不會同步到 iCloud；換手機之前要先解除上鎖。',
+      { label: '上鎖', fn: async () => {
+        if (!(await unlock(n.id, '確認是你本人'))) return; // 先驗一次，確定之後打得開
+        n.locked = true;
+        delete n.sh; // 當成沒傳過：解除上鎖之後會重新傳上去
+        touch();
+        const r = await dropCloudNote(n.id);
+        ui.toast(r === 'gone' ? '已上鎖' : '已上鎖。iCloud 雲碟裡還留著上鎖前的那一份');
+      } }, '取消');
+  }
   const moreActs: Act[] = [
     { label: '改名字', icon: 'pencil', fn: () => setRenaming(true) },
+    { label: n.cover ? '換封面圖' : '放封面圖', icon: 'photo', hidden: lockedNow, fn: setCover },
+    { label: '拿掉封面圖', icon: 'rectangle.slash', hidden: lockedNow || !n.cover, fn: dropCover },
+    { label: n.locked ? '解除上鎖' : '上鎖', icon: n.locked ? 'lock.open' : 'lock', fn: toggleLock },
     { label: n.pinned ? '取消釘選' : '釘選', icon: n.pinned ? 'pin.slash' : 'pin', fn: () => togglePin(n) }, // 跟目錄長按選單同一套（pin.ts）
-    { label: '分享', icon: 'square.and.arrow.up', fn: share },
-    { label: '複製全文', icon: 'doc.on.doc', fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
-    { label: '清單', inline: true, hidden: n.items.length < 2 && !anyDone, sub: [
+    { label: '分享', icon: 'square.and.arrow.up', hidden: lockedNow, fn: share },
+    { label: '複製全文', icon: 'doc.on.doc', hidden: lockedNow, fn: () => { Clipboard.setStringAsync(shareText()).then(() => ui.toast('已複製'), () => ui.toast('沒複製到，再按一次')); } },
+    { label: '清單', inline: true, hidden: lockedNow || pad || (n.items.length < 2 && !anyDone), sub: [
       { label: '上下順序反轉', icon: 'arrow.up.arrow.down', hidden: n.items.length < 2, fn: () => setItems([...n.items].reverse()) },
       { label: '全部恢復', icon: 'arrow.uturn.backward', hidden: !anyDone, fn: () => setItems(n.items.map(i => ({ ...i, done: false }))) },
       { label: '清掉劃掉的行', icon: 'eraser', hidden: !anyDone, fn: () => {
@@ -622,7 +670,9 @@ export function Paper({ n }: { n: Note }) {
           名字跟著系統字級放大，但最多 1.5 倍，不然會把 ⋯ 擠出去 */}
       {/* 標題區＝清單名那行＋時間那行，到分隔線為止：往下拉開目錄（B3）、左右撥換張（B4）。第一行以下不在裡面（紙上已有把手往下拖排順序） */}
       <View collapsable={false}>
-      <View style={[st.bar, { paddingTop: insets.top + T.space.s }]}>
+      {/* 封面圖（1.1 完整版）：鋪在最上面，清單名和 ⋯ 那一列疊在圖上（清單名的膠囊補上底色才看得清楚） */}
+      {cover && <Image source={{ uri: cover }} style={{ height: insets.top + T.shape.coverH }} contentFit="cover" accessible accessibilityLabel="封面圖" />}
+      <View style={[st.bar, { paddingTop: insets.top + T.space.s }, cover && st.barOver]}>
         <View style={st.titleSlide}>
         {renaming ? (
           // 多行輸入框（multiline＋Return 送出）：iOS 單行輸入框畫 28 點粗體中文時字頂會被切，加高也沒用（多米 2026-11-01 兩次回報）；
@@ -641,7 +691,7 @@ export function Paper({ n }: { n: Note }) {
           // 清單名＝小膠囊（茄紫細框、小方磚＋名字＋▾）。2026-11-04 多米定案，大字那種拿掉
           <Pressable onPress={openSwitch} accessibilityRole="button" accessibilityLabel={`${name}，切換清單`}
             style={({ pressed }) => [st.titleBtn, pressed && { opacity: T.motion.pressDim }]}>
-            <View style={[st.pill, { borderColor: c.accent }]}>
+            <View style={[st.pill, { borderColor: c.accent }, cover && { backgroundColor: c.surface }]}>
               <NoteIcon n={n} size={T.shape.titleIcon} />
               <Text style={[st.pillText, { color: n.title.trim() ? c.textPrimary : c.textSecondary }]} numberOfLines={1}
                 maxFontSizeMultiplier={T.font.titleMaxScale}>{name}</Text>
@@ -659,7 +709,7 @@ export function Paper({ n }: { n: Note }) {
         </Animated.View>
         {/* 在行裡或清單名裡打字時才有的茄紫 ✓（多米 2026-11-01：膠囊拿掉後行裡打字收不掉鍵盤，照 iOS 提醒事項放在右上）。
             看「哪一格在編輯」不看 composing：按輸入框的 ✓ 收起時框先收、鍵盤晚一兩格才開始收，看 composing 會在那幾格閃出一顆 ✓ */}
-        {kbUp && (editing !== null || renaming) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
+        {kbUp && (editing !== null || renaming || padFocus) && <DoneBtn onPress={dismissKb} label="完成，收起鍵盤" />}
       </View>
 
       {/* 標題列下面：左邊多久前改的、右邊完整時間（多米 2026-10-31 要留） */}
@@ -680,6 +730,24 @@ export function Paper({ n }: { n: Note }) {
           if (seekRow.current) force();
         })}>
         {/* keyboardDismissMode='interactive'（K7）：往下捲過鍵盤時手指可以把鍵盤一路拖下去，膠囊由 kbH 逐格跟著 */}
+        {lockedNow ? (
+          // 上鎖、還沒驗過：不畫任何內容
+          <View style={st.locked}>
+            <Sym name="lock.fill" size={28} color={c.textSecondary} />
+            <Text style={[st.emptyText, { color: c.textSecondary }]}>這張上鎖了</Text>
+            <Pressable onPress={() => unlock(n.id, '打開上鎖的清單')} accessibilityRole="button" accessibilityLabel="打開"
+              style={({ pressed }) => [st.lockBtn, { backgroundColor: c.surface }, pressed && { opacity: T.motion.pressDim }]}>
+              <Text style={[st.lockBtnText, { color: c.textPrimary }]}>打開</Text>
+            </Pressable>
+          </View>
+        ) : pad ? (
+          // 記事本：一整頁文字。鍵盤升起時底下讓出鍵盤的高度，游標不會被蓋住；收鍵盤按右上 ✓
+          <TextInput key={store.syncRev(n.id)} multiline autoFocus={padFresh} defaultValue={n.body} placeholder="想到什麼就寫" placeholderTextColor={c.textMuted}
+            textAlignVertical="top" accessibilityLabel="記事本內文"
+            style={[st.pad, { color: c.textPrimary, fontSize: T.font.line.fontSize * tk, lineHeight: LINE_H * tk, marginBottom: kbPad || insets.bottom }]}
+            onChangeText={v => { n.body = v; touch(true); }}
+            onFocus={() => setPadFocus(true)} onBlur={() => { setPadFocus(false); touch(); }} />
+        ) : (
         <ListScroll ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           // scrollEventThrottle：iOS 不給的話捲動只回報一次，useScrollOffset 拿不到逐格的位置
@@ -697,6 +765,7 @@ export function Paper({ n }: { n: Note }) {
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
           <View style={{ flexGrow: 1, minHeight: SPACE_BELOW + kbPad + insets.bottom }} collapsable={false} />
         </ListScroll>
+        )}
       </View>
 
       {/* 右下角 ＋：底下升起輸入框。鍵盤開著時被鍵盤蓋住、輸入框開著時也不畫。進出跟鍵盤同一個事件、同一個時鐘（keyboardWillShow／WillHide 那一刻，
@@ -1336,7 +1405,8 @@ const Row = memo(function Row(p: RowProps) {
     };
   }, WEB_DEPS ? [id, calm, y0] : undefined);
 
-  const lh = { lineHeight: LINE_H, minHeight: rowMinH(p.fs) };
+  // 字級（完整版）：字和行高一起乘；p.fs 已經是「系統字級 × 自訂字級」
+  const lh = { fontSize: T.font.line.fontSize * textK(), lineHeight: LINE_H * textK(), minHeight: rowMinH(p.fs) };
   // VoiceOver：滑動和拖曳用不了，從動作選單（上下滑）劃掉、刪除、移動；點兩下進編輯
   const actions = [
     ...(p.t.trim() ? [{ name: 'strike', label: p.done ? '恢復' : '劃掉' }] : []),
@@ -1409,7 +1479,7 @@ function Field({ text, done, fs, colors: c, refInput, actions, onAction, onLines
     if (typeof dom?.selectionStart === 'number' && typeof dom.selectionEnd === 'number') return { start: dom.selectionStart, end: dom.selectionEnd };
     return sel.current;
   };
-  const lh = { lineHeight: LINE_H, minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
+  const lh = { fontSize: T.font.line.fontSize * textK(), lineHeight: LINE_H * textK(), minHeight: Math.max(ROW_MIN, Math.round(LINE_H * fs) + PAD_V * 2) };
   return (
     <>
       {/* 高度誰撐：iOS 交給輸入框自己長（多行 TextInput 不給高度就跟著內容長），鏡像文字只負責 onTextLayout（K1 游標落點），鋪在底下不佔位；
@@ -1467,6 +1537,12 @@ const st = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: T.space.xxl, paddingHorizontal: T.space.gutter },
   previewBody: { flex: 1, overflow: 'hidden' }, // 預覽頁的行（對應紙上那個捲動區，停在最上面）
   emptyText: { ...T.font.callout, textAlign: 'center' },
+  // 封面圖上的那一列：疊在圖上面
+  barOver: { position: 'absolute', top: 0, left: 0, right: 0 },
+  locked: { flex: 1, alignItems: 'center', paddingTop: T.space.xxl * 2, gap: T.space.m },
+  lockBtn: { minHeight: T.shape.hitMin, minWidth: T.shape.hitMin * 2, paddingHorizontal: T.space.xl, borderRadius: T.shape.pill(T.shape.hitMin), alignItems: 'center', justifyContent: 'center', marginTop: T.space.s },
+  lockBtnText: { ...T.font.headline },
+  pad: { flex: 1, paddingHorizontal: T.space.gutter, paddingTop: T.space.m, paddingBottom: T.space.xl },
   // 鍵盤上面那顆：奶油白膠囊，底下留 8 跟鍵盤分開
   // 輸入框的外框：貼在畫面底邊、離鍵盤 8，由 composerStyle 跟著鍵盤推上去
   kbarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: T.space.s, paddingHorizontal: T.space.s },

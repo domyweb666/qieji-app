@@ -20,6 +20,11 @@ export type Note = {
   bin: Item[]; // 這張紙刪掉的行（最近刪除）；欄位 2026-10-31 加，舊存檔沒有就是空的
   color: ColorKey;
   glyph?: string; // 磚正中間的字（2026-11-03 多米：長按選單「改磚上的字」）；沒設＝名字的第一個字（glyphOf）
+  // 1.1 完整版功能（2026-11-14 加，只加欄位，舊存檔沒有）：
+  // cover＝封面圖的檔名代號（圖檔在手機的 covers 資料夾，lib/covers.ts；只准小寫英數）；
+  // locked＝這張上鎖了，打開要 Face ID（lib/lock.ts）。上鎖的紙不上傳 iCloud，所以這個欄位不會出現在 iCloud 的檔案裡
+  cover?: string;
+  locked?: boolean;
   pinned: boolean;
   deleted: boolean;
   deletedAt?: number; // 丟進最近刪除的時間，30 天自動清掉用；還原時拿掉
@@ -85,6 +90,9 @@ export function fixNote(n: any): Note {
   // 磚上的字只留一個字（emoji 也算一個）；空的、不是字串的拿掉，回到用名字的第一個字
   const g = typeof n.glyph === 'string' ? graphemes(n.glyph.trim())[0] : undefined;
   if (g) n.glyph = g; else delete n.glyph;
+  // 封面代號會拿去組檔名：只准小寫英數，其他一律拿掉（外面進來的檔不能指到別的路徑）
+  if (typeof n.cover !== 'string' || !/^[a-z0-9]{4,40}$/.test(n.cover)) delete n.cover;
+  if (n.locked !== true) delete n.locked;
   n.b = n.b === undefined ? true : !!n.b;
   // 30 天自動清（2026-11-01 接上）：不在最近刪除裡就不該留著刪除時間——網頁版還原只改 deleted、不清 deletedAt，殘留的舊時間會讓它下次被刪時立刻過期。
   // 在最近刪除裡但時間不可信的也拿掉，交給 stampOldTrash 從現在起算
@@ -255,7 +263,8 @@ export function switchList(s: State, recent: string[]) {
 export const isEmpty = (n: Note) => !n.title.trim() && (n.type === 'text' ? !n.body.trim() : n.items.every(i => !i.t.trim()));
 
 // q 要先 trim、轉小寫
-const hit = (n: Note, q: string) => !q || (n.title + '\n' + n.body + '\n' + n.items.map(i => i.t).join('\n')).toLowerCase().includes(q);
+// 上鎖的紙只比名字：裡面的字搜不到（1.1 個別上鎖）
+const hit = (n: Note, q: string) => !q || (n.locked ? n.title : n.title + '\n' + n.body + '\n' + n.items.map(i => i.t).join('\n')).toLowerCase().includes(q);
 
 export function visibleNotes(s: State, o: { trash: boolean; filter: ColorKey | 'all'; q: string; sort: SortKey }) {
   const q = o.q.trim().toLowerCase();
@@ -404,7 +413,7 @@ export function searchLines(s: State, q: string): LineHit[] {
   return seatedNotes(s, k).map(n => ({
     note: n,
     title: has(n.title),
-    lines: [
+    lines: n.locked ? [] : [
       ...n.items.filter(i => has(i.t)).map(i => ({ id: i.id, t: i.t, done: !!i.done })),
       ...(n.body && has(n.body) ? [{ id: '', t: n.body, done: false }] : []),
     ],
@@ -1003,7 +1012,8 @@ export function isUntouchedTutorial(n: Note) {
 }
 
 // 要上傳的紙：內容跟上次傳上 iCloud 的不一樣（從沒傳過的 sh 是空的，也算）；沒動過的教學紙不傳
-export function pendingUploads(s: State) { return s.notes.filter(n => n.h !== n.sh && !isUntouchedTutorial(n)); }
+// 上鎖的紙不傳（多米 2026-11-14 定：鎖的紙只存在這支手機，「檔案」app 裡看不到）
+export function pendingUploads(s: State) { return s.notes.filter(n => n.h !== n.sh && !n.locked && !isUntouchedTutorial(n)); }
 
 // iCloud 上那個檔案的指紋（跟本機 h 同一套算法），上傳前比對用：不是 sh 也不是 h ＝別台改過、這台還沒拉下來，不能蓋
 export function remotePrint(raw: unknown) { return fingerprint(fixNote(raw)); }
@@ -1047,6 +1057,7 @@ export function mergeRemote(s: State, remote: { notes: any[]; gone?: any }, now:
   for (const r0 of remote.notes || []) {
     if (!r0 || typeof r0.id !== 'string') continue;
     const r = fixNote(r0);
+    delete r.locked; // 上鎖只算這支手機的事，iCloud 來的檔不能把這台的紙鎖上（正常也不會有：上鎖的紙不上傳）
     const json = JSON.stringify(r), last = seenRemote.get(r.id);
     r.h = last && last.json === json ? last.h : fingerprint(r); // iCloud 上那份跟上次拉到的一字不差：指紋照用
     seen.set(r.id, { json, h: r.h });
@@ -1070,10 +1081,12 @@ export function mergeRemote(s: State, remote: { notes: any[]; gone?: any }, now:
     const newest = Math.max(l.mod ?? 0, r.mod ?? 0);
     if (gone[l.id] !== undefined && gone[l.id] >= newest) { removed++; continue; }
     if (l.h === r.h) { l.sh = r.h; out.push(l); continue; }
-    if (l.sh !== undefined && l.h === l.sh) { r.sh = r.h; out.push(r); taken++; continue; } // 只有 iCloud 那邊改了
+    // 這台上鎖的紙，別台又把它傳回 iCloud（別台不知道這台鎖了）：內容照合，但鎖要留著，不能被別台的版本解開
+    if (l.sh !== undefined && l.h === l.sh) { r.sh = r.h; if (l.locked) r.locked = true; out.push(r); taken++; continue; } // 只有 iCloud 那邊改了
     if (l.sh !== undefined && r.h === l.sh) { out.push(l); push.push(l.id); continue; }       // 只有本機改了
     // 兩邊都改了（或這台從沒跟 iCloud 對過、內容又不一樣）：合起來，比兩邊都新，要上傳
     const m = (r.mod ?? 0) > (l.mod ?? 0) ? unite(r, l) : unite(l, r);
+    if (l.locked) m.locked = true; else delete m.locked;
     m.h = fingerprint(m);
     m.mod = Math.max(now, newest + 1);
     m.sh = r.h;

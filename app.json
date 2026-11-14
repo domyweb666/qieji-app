@@ -13,7 +13,8 @@
       "bundleIdentifier": "org.domyweb.qieji",
       "appleTeamId": "3ZT74P4WM2",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "用 Face ID 打開你上鎖的清單"
       }
     },
     "android": {
@@ -72,7 +73,21 @@
       ],
       "@bacons/apple-targets",
       "expo-iap",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "用 Face ID 打開你上鎖的清單"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "extra": {
       "router": {

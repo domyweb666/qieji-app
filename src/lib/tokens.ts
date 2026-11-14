@@ -174,6 +174,7 @@ export const shape = {
   tileGlyphRatio: 0.44,
   // 切換清單（2026-11-04 改版）：每一項前面的小方磚、右邊打勾那格的寬；左上清單名小膠囊裡的小方磚
   noteIcon: 32, checkSlot: 17, titleIcon: 22,
+  coverH: 150, // 紙頂部封面圖的高（不含瀏海那段；1.1 完整版）
   switchMaxRatio: 0.7, // 切換清單最高佔螢幕幾成（清單多就在裡面捲）
   dirPeek: 92,   // 目錄面板垂下來時，螢幕底下留一截看得到後面的紙（點那截收起；多米原型）
   dirGrab: 5,    // 目錄面板底部把手那條的粗細（寬度用 handleSolo）

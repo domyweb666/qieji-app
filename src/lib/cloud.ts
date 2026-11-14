@@ -8,6 +8,7 @@
 // 離線時會一直等，「拉完才准上傳」的閘門就永遠不開。逾時就當這次拿不到：請 iCloud 下載、5 分鐘內不再讀那個檔，下次再試
 import { Platform } from 'react-native';
 import type { CloudStorage as CloudStorageClass } from 'react-native-cloud-storage';
+import { hasCover, readCover, writeCover } from './covers';
 import { cloudFileBuried, layoutToSend, markLayoutSent, markSynced, pendingUploads, readLayout, remotePrint, type State } from './model';
 
 type Cloud = InstanceType<typeof CloudStorageClass>;
@@ -242,6 +243,67 @@ async function sweep(c: Cloud, gone: Record<string, number>) {
     }
   }
 }
+
+// 1.1 個別上鎖（多米 2026-11-14：鎖的紙不上傳、「檔案」app 裡看不到）：上鎖那一刻把 iCloud 上那張紙的檔拿掉。
+// 不立墓碑：別台手機上的那張不會被刪，只是這個檔不在 iCloud 了。同步不准時（沒買、使用者關掉）不碰 iCloud，回 'kept' 讓畫面照實講。
+// 回 'gone'＝拿掉了或本來就沒有；'kept'＝沒動到（還在 iCloud）
+export async function dropCloudNote(id: string): Promise<'gone' | 'kept'> {
+  const c = load();
+  if (!c) return 'gone';
+  if (!allowed) return 'kept';
+  const path = `${id}.json`;
+  try {
+    if (!(await within(c.isCloudAvailable()))) return 'kept';
+    if (!(await within(c.exists(path)))) return 'gone';
+    await within(c.unlink(path));
+    return 'gone';
+  } catch (e) {
+    warn('拿掉上鎖的紙', e);
+    return 'kept';
+  }
+}
+
+// 1.1 封面圖同步（多米 2026-11-14：同步、先縮圖）。圖是 base64 文字檔「cover-<代號>.b64」，跟紙同一層；舊版茄記只認 .json，看不到它。
+// 這台有圖、iCloud 沒有 → 傳上去；紙上記著封面、這台沒有圖檔、iCloud 有 → 抓下來。上鎖的紙的封面不傳。一張失敗不影響別張，下次再試。
+// 換掉、拿掉的舊封面檔留在 iCloud 不清（寧可多留，不會動到紙）
+const coverUp = new Set<string>(); // 這次打開 app 確認過 iCloud 上有的封面
+let covering = false;
+export async function syncCovers(s: State) {
+  const c = load();
+  if (!c || !allowed || covering) return;
+  covering = true;
+  try {
+    if (!(await within(c.isCloudAvailable()))) return;
+    for (const n of s.notes) {
+      const id = n.cover;
+      if (!allowed) return;
+      if (!id || n.locked || coverUp.has(id)) continue;
+      const path = `cover-${id}.b64`;
+      try {
+        const there = await within(c.exists(path));
+        if (hasCover(id)) {
+          if (!there) {
+            const data = await readCover(id);
+            if (data) await within(c.writeFile(path, data), PULL_LIMIT);
+          }
+          coverUp.add(id);
+        } else if (there) {
+          const data = await within(c.readFile(path), PULL_LIMIT);
+          // 外面進來的檔先驗：只收看起來是 base64 的內容，大小有上限（縮過的圖遠小於這個）
+          if (typeof data === 'string' && data.length > 0 && data.length < COVER_MAX && /^[A-Za-z0-9+/=\s]+$/.test(data)) {
+            await writeCover(id, data.replace(/\s/g, ''));
+            coverUp.add(id);
+          }
+        }
+      } catch (e) {
+        warn(`封面 ${id} `, e);
+      }
+    }
+  } finally {
+    covering = false;
+  }
+}
+const COVER_MAX = 4_000_000; // base64 字元數上限（約 3 MB 的圖）
 
 // 把 iCloud 上所有紙和墓碑讀回來（原樣，規則交給 model.mergeCloud），layout.json（C2，規則交給 model.mergeLayout；null＝有但讀不到、undefined＝沒有），加上資料夾清單 names（含還沒下載的檔，S5 判斷換帳號用）。
 // iCloud 沒登入或雲碟關掉回 'off'；其他拿不到（資料夾還沒有、讀失敗、整次逾時）回 null。

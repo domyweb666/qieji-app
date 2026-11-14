@@ -15,6 +15,7 @@ import { Sym } from '../components/Sym';
 import { GlassBtn, WebTop } from '../components/WebBars';
 import { setSyncOn, useSyncOn } from '../lib/access';
 import { store } from '../lib/store';
+import { setTextSize, TEXT_SIZES, textSizeLabel, useTextSize } from '../lib/textSize';
 import { cloudOn, cloudSyncedAt } from '../lib/cloud';
 import { FAMILY } from '../lib/family';
 import { loadPrice, restoreFull, useFull } from '../lib/iap';
@@ -30,7 +31,18 @@ const NO_PRICE = '連不上 App Store，價格讀不到';
 const VERSION = Constants.expoConfig?.version ?? '';
 const LANG = Intl.DateTimeFormat().resolvedOptions().locale;
 // 回報問題用的版本資訊：意見回饋信最下面帶著、長按頁尾可以複製
-const DIAG = `App：${APP} ${VERSION}\niOS：${Platform.Version}\n語言：${LANG}`;
+// 建置號、機型要原生模組（expo-application、expo-device）；舊開發版沒有就不帶
+let BUILD = '', MODEL = '';
+if (Platform.OS === 'ios') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- 舊開發版沒有這兩個原生模組，載不到要接得住
+    BUILD = (require('expo-application') as typeof import('expo-application')).nativeBuildVersion ?? '';
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    MODEL = (require('expo-device') as typeof import('expo-device')).modelName ?? '';
+  } catch { /* 沒有就不帶 */ }
+}
+const VER_LINE = `${APP} ${VERSION}${BUILD ? ` (${BUILD})` : ''}`;
+const DIAG = `App：${VER_LINE}\niOS：${Platform.Version}${MODEL ? `\n機型：${MODEL}` : ''}\n語言：${LANG}`;
 
 // 一列：圖示＋名稱（可以有第二行小字）＋右邊放東西。沒給 onPress 就是不能點的列
 function Row({ icon, text, sub, right, onPress, disabled, a11y, danger }: {
@@ -74,6 +86,11 @@ export default function Settings() {
   }, [full, syncOn]);
 
   const openFull = () => router.push('/full');
+  // 字級（完整版）：沒買的人看得到這一列、右邊是鎖，點了開付費頁
+  const tk = useTextSize();
+  const pickSize = () => (full
+    ? ui.sheet(TEXT_SIZES.map(s => ({ label: s.label, on: s.k === tk, fn: () => setTextSize(s.k) })), '紙上的字級')
+    : openFull());
   const pickLook = () => ui.sheet((['system', 'light', 'dark'] as Look[]).map(v => ({ label: LOOK_LABEL[v], on: v === look, fn: () => setLook(v) })), '外觀');
 
   async function restore() {
@@ -144,7 +161,11 @@ export default function Settings() {
         <WebTop title={title} left={<GlassBtn icon="chevron.left" label="返回" onPress={() => router.back()} />} />
 
         <ListGroup title="一般">
-          {[<Row key="look" icon="circle.lefthalf.filled" text="外觀" a11y={`外觀，${LOOK_LABEL[look]}`} right={<>{state(LOOK_LABEL[look])}{next}</>} onPress={pickLook} />]}
+          {[
+            <Row key="look" icon="circle.lefthalf.filled" text="外觀" a11y={`外觀，${LOOK_LABEL[look]}`} right={<>{state(LOOK_LABEL[look])}{next}</>} onPress={pickLook} />,
+            <Row key="size" icon="textformat.size" text="紙上的字級" a11y={full ? `紙上的字級，${textSizeLabel(tk)}` : '紙上的字級，完整版功能'} onPress={pickSize}
+              right={full ? <>{state(textSizeLabel(tk))}{next}</> : <Sym name="lock.fill" size={17} color={c.textSecondary} />} />,
+          ]}
         </ListGroup>
 
         <ListGroup title="資料">
@@ -182,7 +203,7 @@ export default function Settings() {
 
         {/* 頁尾：版本＋Made by DOMYWEB。長按複製版本資訊（回報問題用） */}
         <Pressable onLongPress={copyDiag} accessibilityRole="button" accessibilityLabel={`${APP} ${VERSION}，長按複製版本資訊`} style={st.footer}>
-          <Text style={[st.footText, { color: c.textSecondary }]}>{`${APP} ${VERSION}`}</Text>
+          <Text style={[st.footText, { color: c.textSecondary }]}>{VER_LINE}</Text>
           <Text style={[st.footText, { color: c.textSecondary }]}>Made by DOMYWEB</Text>
         </Pressable>
       </ScrollView>

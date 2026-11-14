@@ -4,6 +4,8 @@
 // 內容：最上面「新的一張」（F3，2026-11-04）；釘選的、這台手機最近開過的（model switchList），正在看的打勾；最下面「管理所有清單」＝收完之後打開目錄（DirPanel）。
 // 收起：點上面露出的紙、往下撥上緣那條、點一張。減少動態：淡入淡出不滑
 // 2026-11-04 多米真機：「切換清單有 lag，要延遲一下才切換」。以前等面板收完（約半秒）才開始換紙，現在點下去面板馬上讓開、紙同時換（規矩檔手感第 1 條）
+import { router } from 'expo-router';
+import { isFull } from '../lib/iap';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -64,6 +66,13 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
     if (seatFirstHole(store.s, n.id, Date.now())) store.change();
     store.open(n.id, true);
   });
+  // 新的記事本（1.1 完整版）：一整頁文字的紙。沒買的人看得到這一列，點了開付費頁
+  const addPad = () => close(() => {
+    if (!isFull()) { router.push('/full'); return; }
+    const n = newNote('yellow', 'text');
+    if (seatFirstHole(store.s, n.id, Date.now())) store.change();
+    store.open(n.id, true);
+  });
   // 往下撥上緣那條（小橫條＋組名那段）：跟著手指往下，撥過一段或往下甩就收起，不然彈回。
   // 收起時手指拉下來的那段（drag）留著不歸零：歸零的話面板會先跳回上面再往下走
   const pan = usePanGesture({
@@ -119,6 +128,11 @@ function SwitchPanel({ onGone }: { onGone: () => void }) {
             style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
             <View style={st.allIcon}><Sym name="plus" size={20} color={c.textPrimary} /></View>
             <Text style={[st.name, { color: c.textPrimary }]}>新的一張</Text>
+          </Pressable>
+          <Pressable onPress={addPad} accessibilityRole="button" accessibilityLabel="新的記事本"
+            style={({ pressed }) => [st.row, pressed && { backgroundColor: c.menuSep }]}>
+            <View style={st.allIcon}><Sym name="doc.text" size={20} color={c.textPrimary} /></View>
+            <Text style={[st.name, { color: c.textPrimary }]}>新的記事本</Text>
           </Pressable>
           {group('釘選', pinned)}
           {group('最近', recent)}
