@@ -12,7 +12,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type RefObject } from 'react';
 import {
   AppState, Keyboard, Platform, Pressable, ScrollView as RNScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View,
   type AccessibilityActionEvent, type TextInputInstance, type TextInputKeyPressEvent, type ViewInstance,
@@ -20,7 +20,7 @@ import {
 import { GestureDetector, ScrollView, useExclusiveGestures, useLongPressGesture, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import { KeyboardEvents, useKeyboardHandler } from 'react-native-keyboard-controller';
 import Animated, {
-  Easing, Extrapolation, FadeIn, interpolate, LayoutAnimationConfig, LinearTransition,
+  cancelAnimation, Easing, Extrapolation, FadeIn, interpolate, LayoutAnimationConfig, LinearTransition,
   scrollTo as scrollToUI, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useDerivedValue, useFrameCallback, useReducedMotion, useScrollOffset, useSharedValue, withDelay, withSpring, withTiming, type AnimatedRef, type FrameInfo, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -129,6 +129,24 @@ export function Paper({ n }: { n: Note }) {
   const mounted = useRef(true);
   const scrollRef = useAnimatedRef<ScrollViewInstance>();
   const scrollY = useScrollOffset(scrollRef); // 清單捲到哪（UI 執行緒逐格更新；只做看得到的行、拖到邊緣自動捲用）
+  // 記下新的一則 → 捲回最上面（片 E2，2026-11-14 多米真機錄影：按 ✓ 之後畫面停在原地）。
+  // 原因：之前用系統的捲動動畫，新行一量到真正的高度，位置表就重交一次、順手「補位置讓畫面不動」（publish 的 anchor），
+  // 那一下不帶動畫的捲動把系統的動畫打斷。改成自己在 UI 執行緒逐格捲（跟 backOn 同一種做法），捲的時候不補位置。
+  // 手指一碰到紙就停（onScrollBeginDrag），不跟手搶
+  const topOn = useSharedValue(0), topFrom = useSharedValue(0), topT = useSharedValue(1);
+  const glideTop = useCallback(() => {
+    'worklet';
+    const from = scrollY.value;
+    if (from <= 0) return;
+    topFrom.value = from; topOn.value = 1; topT.value = 0;
+    topT.value = withTiming(1, { duration: T.motion.toTop.duration, easing: Easing.out(Easing.cubic) });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const stopTop = useCallback(() => { 'worklet'; if (topOn.value) { topOn.value = 0; cancelAnimation(topT); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useAnimatedReaction(() => topT.value, t => {
+    if (!topOn.value) return;
+    scrollToUI(scrollRef, 0, topFrom.value * (1 - t), false);
+    if (t >= 1) topOn.value = 0;
+  });
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ id: string; top: number } | null>(null); // 長按哪一行、選單放多高
@@ -285,7 +303,9 @@ export function Paper({ n }: { n: Note }) {
     n.items.unshift({ id, t, done: false, b: false });
     touch();
     if (stay) return;
-    scrollTo(0, !calm); // 已經在頂端時不會動；不看 view.y（它只在手指放開時更新，可能是舊的）
+    // 已經在頂端時不會動；不看 view.y（它只在手指放開時更新，可能是舊的）
+    if (calm) scrollTo(0, false);
+    else { view.current.y = 0; scheduleOnUI(glideTop); }
     setFreshId(id);
   }
   // Return：送出一行，框留著繼續記；空的就收起（跟空行按 Return 收鍵盤一樣）。回傳有沒有送出，Composer 據此清空、重新對焦
@@ -752,14 +772,14 @@ export function Paper({ n }: { n: Note }) {
           keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
           // scrollEventThrottle：iOS 不給的話捲動只回報一次，useScrollOffset 拿不到逐格的位置
           scrollEventThrottle={16}
-          onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled} onContentSizeChange={(w, h) => { contentH.value = h; }}
+          onScrollBeginDrag={() => scheduleOnUI(stopTop)} onScrollEndDrag={scrolled} onMomentumScrollEnd={scrolled} onContentSizeChange={(w, h) => { contentH.value = h; }}
           scrollEnabled={!dragging} contentContainerStyle={st.scrollFill}>
           {n.items.length === 0 && emptyView}
           <LayoutAnimationConfig skipEntering>
             <LineList items={n.items} stamp={renders.current} api={api} ctl={listCtl} geoRef={geoRef} kickRef={kickRef} anchorNext={anchorNext}
               spaceBelow={SPACE_BELOW + kbPad + insets.bottom} bg={nc.bg} rule={nc.rule} colors={c} calm={calm} fs={fs} winH={winH} winW={winW}
               editing={editing} freshId={freshId} focused={focused} pending={pending} revs={revs} view={view}
-              scrollRef={scrollRef} scrollY={scrollY} listTop={listTop} listBot={listBot} listH={listH} contentH={contentH} />
+              scrollRef={scrollRef} scrollY={scrollY} topOn={topOn} listTop={listTop} listBot={listBot} listH={listH} contentH={contentH} />
           </LayoutAnimationConfig>
           {/* 留白讓最後一行能捲上來；點這裡不會新增一行。行不多時撐滿到底（contentContainerStyle flexGrow），
               （2026-11-02 起空白處不再左右撥換張，換張只在底部列） */}
@@ -868,12 +888,12 @@ type ListProps = {
   bg: string; rule: string; colors: Colors; calm: boolean; fs: number; winH: number; winW: number;
   editing: string | null; freshId: string | null; focused: RefObject<string | null>; pending: RefObject<{ id: string; caret?: number } | null>; revs: RefObject<Record<string, number>>;
   view: RefObject<{ top: number; h: number; y: number; kb: number }>;
-  scrollRef: AnimatedRef<ScrollViewInstance>; scrollY: SharedValue<number>; listTop: SharedValue<number>; listBot: SharedValue<number>; listH: SharedValue<number>; contentH: SharedValue<number>;
+  scrollRef: AnimatedRef<ScrollViewInstance>; scrollY: SharedValue<number>; topOn: SharedValue<number>; listTop: SharedValue<number>; listBot: SharedValue<number>; listH: SharedValue<number>; contentH: SharedValue<number>;
 };
 
 // 整張清單共用的手勢、位置表交給 UI 執行緒。手勢的設定只做一次（換設定要跟原生講一次），用到的東西全是不會變的
 function LineList(p: ListProps) {
-  const { api, ctl, calm, geoRef, view, focused, scrollRef, scrollY, listTop, listBot, listH, contentH, colors } = p;
+  const { api, ctl, calm, geoRef, view, focused, scrollRef, scrollY, topOn, listTop, listBot, listH, contentH, colors } = p;
   const made = useListShared(p.winW);
   const sv = useRef(made).current;
   const { pos, idxOf, idsA, ysA, hsA, doneA, shiftFrom, shiftT, gone, backFrom, backTo, backOn, dragId, dragIdx, dragTo, dragDy, dragH, dragLift, dragMids, dragFy, dragAy, dragOn, dragY0, dragY,
@@ -897,7 +917,7 @@ function LineList(p: ListProps) {
     if (stale) gone.value = left;
     const top = scrollY.value;
     let dy = 0;
-    if (anchor && top > 0) {
+    if (anchor && top > 0 && !topOn.value) { // 正在捲回最上面：不補位置（補了會把它打斷）
       const k = hitRow(ysA.value, hsA.value, top);
       if (k >= 0) { const ny = m.pos[idsA.value[k]]; if (ny !== undefined) dy = ny - ysA.value[k]; }
     }

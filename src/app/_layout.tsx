@@ -104,11 +104,10 @@ export default function RootLayout() {
               {/* 設定（1.1 片 A1）：跟最近刪除同一種推入頁 */}
               <Stack.Screen name="settings" />
               <Stack.Screen name="news" />
-              <Stack.Screen name="licenses" />
-              {/* 付費頁（1.1 片 A2）：系統的半高表單，從下面升起、後面變暗、往下拉可以關；字放大放不下時可以拉到全高 */}
+              {/* 付費頁（1.1 片 A2）：系統的表單，從下面升起、後面變暗、往下拉可以關 */}
               <Stack.Screen name="full" options={{
                 presentation: 'formSheet', headerShown: false, sheetGrabberVisible: true,
-                sheetAllowedDetents: [0.72, 1], // 只用一次：線框是從螢幕約三分之一的地方開始
+                sheetAllowedDetents: [1], // 一次展開到底（2026-11-14 多米真機：先半高、要再往上滑一次才看得到購買鍵，很麻煩；推翻 11-11 的半高）
                 sheetCornerRadius: T.shape.radiusLg, contentStyle: { backgroundColor: c.surface },
               }} />
             </Stack>

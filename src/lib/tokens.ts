@@ -219,6 +219,7 @@ export const motion = {
   tileHold:      { scale: 1.08 }, // 2026-11-03 多米真機：抖動中手指一按住目錄的磚就放大這麼多（看得出按到了），拖著也一樣大，放手才縮回（彈簧用 dragLift 那組，1.02 太小看不出來）。減少動態：直接變大、不彈
   swipeLabel:    { fromOpacity: 0.35, armScale: 1.15, spring: { duration: 250, dampingRatio: 0.6 } }, // 滑動露出的「劃掉／刪除」：越線前從 0.35 亮到 1，越線那一刻放大再彈回（跟震動同一刻）。減少動態：只有透明度
   freshGlow:     { delay: 300, duration: 600 }, // 輸入框送出的那行捲回頂端後亮一下再淡掉：delay≈iOS 捲動動畫的時間（亮著等它到），duration＝淡掉（2026-11-01 第八批）
+  toTop:         { duration: 300 }, // 記下新的一則，畫面捲回最上面（2026-11-14 真機：系統的捲動動畫會被「量到新行高度後補位置」打斷、停在原地；改成自己逐格捲，時長跟 freshGlow.delay 對齊）。減少動態：直接到頂
   rowShift:      { duration: 180 }, // 行長出來、拿掉時其他行滑到新位置（2026-11-01 第二輪）；行本身淡入淡出用 fade。減少動態：直接到位、淡入淡出照舊
   keyboardFollow: { duration: 250, easing: [0.17, 0.59, 0.4, 0.77] as const }, // 系統鍵盤的時長與曲線。輸入框與它的暗幕進出用這組（2026-11-01 第三版：跟鍵盤同一個時鐘）。膠囊與輸入框的「位置」從第四輪 K7 起不再用它推，改由 react-native-keyboard-controller 逐格給鍵盤高度（含手指拖曳收鍵盤）
   fade:          150, // toast、確認框、減少動態時所有滑入／放大的替代

@@ -152,7 +152,6 @@ export default function Settings() {
   const about: ReactNode[] = [];
   if (FAMILY.length) about.push(<Row key="family" icon="leaf" text="蔬菜家族的其他 app" right={next} onPress={() => router.push('/family')} />);
   if (PRIVACY_URL) about.push(<Row key="privacy" icon="hand.raised" text="隱私權政策" right={out} onPress={() => open(PRIVACY_URL)} />);
-  about.push(<Row key="licenses" icon="doc.text" text="開源授權" right={next} onPress={() => router.push('/licenses')} />);
 
   return (
     <View style={{ flex: 1, backgroundColor: c.page }} collapsable={false}>
