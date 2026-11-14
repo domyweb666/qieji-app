@@ -14,6 +14,7 @@ import { ui } from '../components/Overlay';
 import { Sym } from '../components/Sym';
 import { GlassBtn, WebTop } from '../components/WebBars';
 import { setSyncOn, useSyncOn } from '../lib/access';
+import { store } from '../lib/store';
 import { cloudOn, cloudSyncedAt } from '../lib/cloud';
 import { FAMILY } from '../lib/family';
 import { loadPrice, restoreFull, useFull } from '../lib/iap';
@@ -32,15 +33,15 @@ const LANG = Intl.DateTimeFormat().resolvedOptions().locale;
 const DIAG = `App：${APP} ${VERSION}\niOS：${Platform.Version}\n語言：${LANG}`;
 
 // 一列：圖示＋名稱（可以有第二行小字）＋右邊放東西。沒給 onPress 就是不能點的列
-function Row({ icon, text, sub, right, onPress, disabled, a11y }: {
-  icon: SFSymbol; text: string; sub?: string; right?: ReactNode; onPress?: () => void; disabled?: boolean; a11y?: string;
+function Row({ icon, text, sub, right, onPress, disabled, a11y, danger }: {
+  icon: SFSymbol; text: string; sub?: string; right?: ReactNode; onPress?: () => void; disabled?: boolean; a11y?: string; danger?: boolean;
 }) {
   const c = useColors();
   const body = (
     <>
-      <View style={st.ico}><Sym name={icon} size={20} color={c.textSecondary} /></View>
+      <View style={st.ico}><Sym name={icon} size={20} color={danger ? c.danger : c.textSecondary} /></View>
       <View style={st.texts}>
-        <Text style={[st.name, { color: c.textPrimary }]}>{text}</Text>
+        <Text style={[st.name, { color: danger ? c.danger : c.textPrimary }]}>{text}</Text>
         {sub ? <Text style={[st.sub, { color: c.textSecondary }]}>{sub}</Text> : null}
       </View>
       {right}
@@ -98,6 +99,23 @@ export default function Settings() {
   const share = () => { Share.share({ message: `我在用${APP}：${TAGLINE} ${APP_URL}` }).catch(() => {}); };
   const copyDiag = () => { Clipboard.setStringAsync(DIAG).then(() => ui.toast('已複製版本資訊'), () => {}); };
 
+  // 清除所有資料（片 F2）：只清這支手機。兩步確認：第一步講會刪什麼、iCloud 那邊會怎樣，第二步紅字按鈕才真的刪
+  function reset() {
+    const cloud = full && syncOn
+      ? 'iCloud 同步會先關掉。iCloud 雲碟和其他裝置上的清單不會被動到，之後重新打開同步就會回來。'
+      : full ? 'iCloud 同步現在關著，iCloud 雲碟裡原本的檔案不會被動到。'
+        : '你沒有 iCloud 同步，刪掉之後找不回來。';
+    ui.ask('要清除所有資料嗎？', `這支手機上所有清單和最近刪除都會刪除，無法復原。${cloud}`, { label: '繼續', fn: () => {
+      ui.confirm('真的要刪除這支手機上的所有資料？', async () => {
+        if (full && syncOn) setSyncOn(false); // 先停同步，不然下一次拉取又全部回來
+        const ok = await store.wipe();
+        if (!ok) { ui.alert('沒有清成功', '資料沒有被動到一半：再試一次，或把茄記滑掉重開'); return; }
+        if (router.canDismiss()) router.dismissAll();
+        ui.toast('已清除這支手機上的資料');
+      }, '刪除所有資料');
+    } }, '取消');
+  }
+
   const noPrice = !full && !f.price && f.priceErr;
   const next = <Sym name="chevron.right" size={12} color={c.textSecondary} />;
   const out = <Sym name="arrow.up.right" size={12} color={c.textSecondary} />;
@@ -138,6 +156,10 @@ export default function Settings() {
           ]}
         </ListGroup>
         <Text style={[st.foot, { color: c.textSecondary }]}>{syncFoot}</Text>
+        {/* 清除所有資料自己一塊、紅字，跟上面的開關隔開，免得手滑 */}
+        <ListGroup>
+          {[<Row key="reset" icon="trash" text="清除所有資料" danger onPress={reset} />]}
+        </ListGroup>
 
         <ListGroup title="購買">
           {[

@@ -248,6 +248,33 @@ export const store = {
     else if (stamped) store.save();
     return removed.length + lines;
   },
+  // 清除所有資料（1.1 片 F2，多米 2026-11-14 定：只清這支手機）。🔴 不可逆。
+  // 手機上的紙、最近刪除、目錄排列、資料夾全部拿掉，另存的舊備份（轉座位表前那份、讀不出來那份）也拿掉，回到剛裝好的樣子（一張教學紙）。
+  // 整份換成新的空白資料，不立墓碑：墓碑會在之後重新打開同步時傳上去，把 iCloud 和別台的紙也刪掉。
+  // 呼叫的人要先把 iCloud 同步關掉（設定頁做），不然下一次拉取又全部回來。iCloud 雲碟裡的檔案這裡完全不碰。
+  // 回傳有沒有清乾淨、存成功
+  async wipe() {
+    if (!box.loaded) return false;
+    clearTimeout(box.saveT);
+    try {
+      await AsyncStorage.multiRemove([SEAT_BACKUP_KEY, RESCUE_KEY, LAST_FREE_KEY, RECENT_KEY, HINT_KEY]);
+    } catch (e) {
+      console.warn('清除資料：舊備份沒清掉，這次不清：', e);
+      return false;
+    }
+    const state = emptyState();
+    const t = tutorialNote(Date.now());
+    state.notes.push(t);
+    box.state = state;
+    box.last = t.id; box.lastFree = null; box.recent = []; box.fresh = null; box.seek = null; box.rename = null;
+    box.synced = undefined; box.newCloud = undefined; box.hintSeen = false; box.noSeat = false;
+    box.written = undefined; // 一定重寫
+    AsyncStorage.setItem(LAST_KEY, t.id).catch(() => {});
+    box.version++;
+    emit();
+    await writeNow();
+    return !box.saveFailed;
+  },
   // 改完資料後呼叫：重畫畫面，稍後存檔
   change() {
     box.version++;
