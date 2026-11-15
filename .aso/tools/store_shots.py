@@ -113,6 +113,9 @@ def pill_row(d, w, y, texts, f, k, gap=22, **kw):
         x += pill(d, x, y, t, f, k, **kw) + gap * k
 
 
+LAST_RECT = []
+
+
 def shadow(im, box, radius, blur, alpha=130, dy=18):
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0))
     x0, y0, x1, y1 = box
@@ -161,6 +164,7 @@ def compose(size, raw, title, sub, badge=None, top=None, ring=None, pop=None, he
     im = shadow(im, (x - b, y - b, x + pw + b, y + ph + b), r + b, int(w * 0.025))
     ImageDraw.Draw(im).rounded_rectangle([x - b, y - b, x + pw + b, y + ph + b], r + b, fill=BEZEL)
     im.paste(shot.resize((pw, ph), Image.LANCZOS), (x, y), mask((pw, ph), r))
+    LAST_RECT[:] = [x, y, pw, ph, r, sc]  # 給預覽影片用：手機畫面的位置
     if pop:
         # 把重點那一塊放大，疊在原位置上，超出手機邊框
         x0, y0, x1, y1, zoom, rad = pop
