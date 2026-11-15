@@ -5,7 +5,6 @@
 // 價格用 App Store 傳回來的字，不寫死；判斷規則在 lib/full.ts、接原生在 lib/iap.ts、開關功能在 lib/access.ts。
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
-import { Stickman } from '../components/Stickman';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -207,10 +206,8 @@ export default function Settings() {
         <ListGroup title="關於">{about}</ListGroup>
 
         {/* 頁尾（2026-11-15 多米照 minical 的設定頁）：茄記圖示、版本、Made by DOMYWEB，下面一排網站／Facebook／Instagram。
-            長按上面那一塊複製版本資訊（回報問題用） */}
+            長按上面那一塊複製版本資訊（回報問題用）。這裡只放圖示：茄子火柴人放過一版（build 8），多米真機看了說拿掉（2026-11-15） */}
         <Pressable onLongPress={copyDiag} accessibilityRole="button" accessibilityLabel={`${APP} ${VERSION}，長按複製版本資訊`} style={st.footer}>
-          {/* 茄子火柴人（2026-11-15 多米）：站在圖示上面待機。純裝飾、不能點；減少動態時不動 */}
-          <Stickman act="idle" size={T.shape.aboutLogo * 2} ink={c.textPrimary} />
           <Image source={LOGO} style={st.logo} contentFit="cover" accessible={false} />
           <Text style={[st.footText, { color: c.textSecondary }]}>{VER_LINE}</Text>
           <Text style={[st.footText, { color: c.textSecondary }]}>Made by DOMYWEB</Text>

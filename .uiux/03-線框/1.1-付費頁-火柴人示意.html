@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>付費頁火柴人示意</title>
+<style>
+/* 示意：左邊是一支 iPhone 大小的付費頁（顏色、字級、間距照 tokens.ts），右邊是切換鈕。手機寬度時上下堆疊 */
+:root{
+  --bg:#efeaf0; --panel:#ffffff; --ink:#2b2329; --muted:#75697a; --line:#e2dde5; --pick:#7D467F; --pick-ink:#fff;
+  /* app 的代號（淺色） */
+  --page:#FBF3E7; --surface:#FFFCF6; --sep:#EADFCF; --text:#2E2233; --text2:#75677A; --accent:#7D467F; --on-accent:#FFFFFF;
+}
+.phone[data-look="dark"]{
+  --page:#211A27; --surface:#2B2231; --sep:#41364A; --text:#F2EAF1; --text2:#B5A6BB; --accent:#CDA3D0; --on-accent:#2E2233;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:24px 16px 40px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px;align-items:start}
+h1{font-size:22px;margin:0 0 4px;font-weight:800}
+.lead{margin:0 0 18px;color:var(--muted);font-size:14px}
+.phone{width:390px;max-width:100%;height:844px;border-radius:44px;background:#000;padding:10px;box-shadow:0 18px 50px rgba(40,20,50,.25)}
+.screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:var(--page)}
+/* 後面那一頁（變暗）與升起來的表單 */
+.behind{position:absolute;inset:0;background:var(--page)}
+.behind::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.2)}
+.sheet{position:absolute;left:0;right:0;top:54px;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;overflow-y:auto;scrollbar-width:none}
+.sheet::-webkit-scrollbar{display:none}
+.grab{width:36px;height:5px;border-radius:3px;background:var(--text2);opacity:.35;margin:6px auto 0}
+.inner{padding:10px 20px 34px}
+.top{display:flex;align-items:center}
+.x{width:44px;height:44px;border-radius:22px;border:1px solid var(--sep);background:var(--surface);display:grid;place-items:center;color:var(--text)}
+.title{flex:1;text-align:center;font-size:17px;font-weight:600;color:var(--text)}
+.side{width:44px}
+.price{text-align:center;font-size:15px;line-height:20px;color:var(--text2);margin-top:4px}
+.hero{display:flex;justify-content:center;margin-top:8px}
+.hero[hidden]{display:none}
+.hero svg{display:block}
+.feats{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.feat{display:flex;align-items:center;gap:12px;min-height:44px}
+.ico{width:44px;display:grid;place-items:center;color:var(--text2)}
+.ft{flex:1;display:flex;flex-direction:column;gap:2px}
+.ft b{font-size:17px;font-weight:600;color:var(--text)}
+.ft span{font-size:15px;line-height:20px;color:var(--text2)}
+.note{font-size:13px;line-height:18px;color:var(--text2);text-align:center;margin-top:16px}
+.buy{margin-top:16px;min-height:56px;border-radius:14px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-size:17px;font-weight:600}
+.row{display:flex;margin-top:8px}
+.row div{flex:1;min-height:44px;display:grid;place-items:center;font-size:17px;color:var(--text)}
+.row[hidden]{display:none}
+/* 第一眼看不看得到付款鈕：這條線是表單一打開時畫面的底邊 */
+.fold{position:absolute;left:0;right:0;bottom:0;height:0;border-top:2px dashed #d2452f;pointer-events:none}
+.fold span{position:absolute;right:8px;bottom:4px;font-size:11px;color:#d2452f;background:rgba(255,255,255,.85);border-radius:6px;padding:1px 6px}
+
+.side-panel{display:flex;flex-direction:column;gap:16px;min-width:0}
+.group{display:flex;flex-direction:column;gap:8px}
+.group h2{font-size:13px;margin:0;color:var(--muted);font-weight:700;letter-spacing:.06em}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font:inherit;font-size:14px;font-weight:600;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--pick);border-color:var(--pick);color:var(--pick-ink)}
+.seg button:focus-visible{outline:3px solid #5f8f34;outline-offset:2px}
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px}
+.verdict b{display:block;font-size:15px;margin-bottom:2px}
+.verdict.bad b{color:#b2382a}
+.verdict.ok b{color:#3f7a2a}
+.tips{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px}
+.tips li{margin-bottom:4px}
+@media (max-width:820px){ .wrap{grid-template-columns:minmax(0,1fr)} .phone{margin:0 auto} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="phone" id="phone" data-look="light">
+      <div class="screen">
+        <div class="behind"></div>
+        <div class="sheet" id="sheet">
+          <div class="grab"></div>
+          <div class="inner">
+            <div class="top">
+              <div class="x" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+              <div class="title">茄記完整版</div>
+              <div class="side"></div>
+            </div>
+            <div class="price" id="price">NT$390，一次付清，不是訂閱</div>
+            <div class="hero" id="hero">
+              <svg id="man" viewBox="60 -45 200 440" role="img" aria-label="戴茄子頭套的火柴人">
+                <defs>
+                  <radialGradient id="gEgg" cx="34%" cy="38%" r="78%"><stop offset="0" stop-color="#9a5cb0"/><stop offset=".45" stop-color="#6b2f86"/><stop offset="1" stop-color="#3f1750"/></radialGradient>
+                  <radialGradient id="gFace" cx="42%" cy="36%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6e2e8"/></radialGradient>
+                  <linearGradient id="gLeaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8dbb52"/><stop offset="1" stop-color="#4f7d2a"/></linearGradient>
+                </defs>
+                <g id="char"></g>
+              </svg>
+            </div>
+            <div class="feats" id="feats"></div>
+            <div class="note">家人共享：同一個家庭群組的人不用再買</div>
+            <div class="buy" id="buy">用 NT$390 解鎖</div>
+            <div class="row" id="row"><div>恢復購買</div><div>先不用</div></div>
+          </div>
+        </div>
+        <div class="fold"><span>打開時畫面的底邊</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div>
+      <h1>付費頁放火柴人的樣子</h1>
+      <p class="lead">文字、顏色、間距照現在的付費頁。手機裡的表單可以上下捲。</p>
+    </div>
+    <div class="group"><h2>火柴人</h2><div class="seg" id="g-act"></div></div>
+    <div class="group"><h2>大小</h2><div class="seg" id="g-size"></div></div>
+    <div class="group"><h2>狀態</h2><div class="seg" id="g-state"></div></div>
+    <div class="group"><h2>外觀</h2><div class="seg" id="g-look"></div></div>
+    <div class="verdict" id="verdict"></div>
+    <ul class="tips">
+      <li>紅色虛線是表單剛打開、還沒捲動時畫面的底邊。付款鈕在線下面，就要捲才看得到。</li>
+      <li>「買好了」那個狀態會換成鞠躬，按鈕變成「完成」。</li>
+      <li>手機框是 390 × 844（iPhone 14／15／16 的大小），小機型更擠。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+/* ===== 姿勢與繪製：照《茄子火柴人動作庫》原樣，只留這頁用到的三個動作 ===== */
+var RIG={hipX:160,hipY:260,ground:380,thigh:62,shin:62,torso:78,shoulderDrop:12,shoulderHalf:6,upper:44,fore:44};
+function basePose(){return{rx:0,ry:0,lean:0,head:0,hy:0,sh:0,lS:-38,lE:143,rS:38,rE:-143,lH:-14,lK:0,rH:14,rK:0,eyeH:12,lookX:0,lookY:0,brow:2,browY:0,squash:0,tl:1,hs:1,sx:1,mouth:'smile',happy:0,t:0};}
+function ss(a,b,x){var k=Math.max(0,Math.min(1,(x-a)/(b-a)));return k*k*(3-2*k);}
+var ANIMS={
+  idle:function(t){var b=Math.sin(t*2.2),tb=t%3.6;return{sh:-1.2*b,hy:-1.2*b,lean:1.4*Math.sin(t*1.1),head:1.5*Math.sin(t*0.9),eyeH:(tb>3.46?1.5:12)};},
+  wave:function(t){return{rS:110,rE:40+22*Math.sin(t*9),lS:-16,lE:-6,head:5+2*Math.sin(t*4.5),lean:2,brow:5,browY:-1,mouth:'smile',hy:-1*Math.sin(t*4.5)};},
+  bow:function(t){var c=t%2.6,u=ss(0,0.45,c)*(1-ss(1.5,2.0,c));return{lS:-12,lE:-4,rS:12,rE:4,tl:1-0.3*u,hs:1-0.14*u,hy:8*u,lookY:6*u,eyeH:12-10.5*ss(0.4,0.8,u),brow:2,browY:2*u};}
+};
+function poseAt(n,t){var p=basePose(),o=ANIMS[n](t),k;for(k in o)p[k]=o[k];p.t=t;return p;}
+function dirv(a){var r=a*Math.PI/180;return[Math.sin(r),Math.cos(r)];}
+function f(n){return Math.round(n*10)/10;}
+function add(p,v,l){return[p[0]+v[0]*l,p[1]+v[1]*l];}
+function headSVG(p){
+  var s='',ex=p.lookX,ey=p.lookY,i,sx;
+  s+='<path d="M-45,-40 C-48,-80 -20,-114 20,-126 C44,-133 60,-114 56,-88 C52,-56 46,-22 30,-8 C12,6 -14,6 -30,-6 C-41,-14 -45,-28 -45,-40 Z" fill="url(#gEgg)"/>';
+  s+='<path d="M-30,-92 C-18,-108 0,-118 18,-121" fill="none" stroke="#c9a2d8" stroke-opacity=".45" stroke-width="5" stroke-linecap="round"/>';
+  s+='<path d="M34,-128 C33,-142 38,-152 46,-160 L58,-153 C52,-146 49,-138 50,-128 Z" fill="#587f2e"/>';
+  s+='<path d="M6,-120 C16,-137 48,-142 66,-124 C70,-112 68,-100 70,-88 C60,-96 56,-106 50,-104 C48,-96 44,-86 36,-84 C36,-96 30,-104 24,-102 C18,-100 10,-98 2,-102 C8,-108 8,-114 6,-120 Z" fill="url(#gLeaf)"/>';
+  s+='<circle cx="0" cy="-46" r="33" fill="#34143f"/><circle cx="0" cy="-46" r="30" fill="url(#gFace)" stroke="#2b2329" stroke-width="3"/>';
+  for(i=0;i<2;i++){
+    sx=i?1:-1;var cx=sx*11+ex,cy=-48+ey,h=Math.max(1.5,p.eyeH);
+    s+='<rect x="'+f(cx-2.3)+'" y="'+f(cy-h/2)+'" width="4.6" height="'+f(h)+'" rx="2.3" fill="#2b2329"/>';
+    var bx=sx*12+ex*0.5,by=-61+p.browY+ey*0.5,br=p.brow*Math.PI/180,c=8*Math.cos(br),sn=8*Math.sin(br);
+    s+='<line x1="'+f(bx-sx*c)+'" y1="'+f(by+sn)+'" x2="'+f(bx+sx*c)+'" y2="'+f(by-sn)+'" stroke="#2b2329" stroke-width="3.4" stroke-linecap="round"/>';
+  }
+  var mx=ex*0.5,my=-30+ey*0.5;
+  s+='<path d="M'+f(mx-6)+','+f(my-1)+' Q'+f(mx)+','+f(my+5)+' '+f(mx+6)+','+f(my-1)+'" fill="none" stroke="#2b2329" stroke-width="3" stroke-linecap="round"/>';
+  return s;
+}
+function renderChar(p,ink){
+  var R=RIG,s='',i;
+  function seg(a,b,w){return'<line x1="'+f(a[0])+'" y1="'+f(a[1])+'" x2="'+f(b[0])+'" y2="'+f(b[1])+'" stroke="'+ink+'" stroke-width="'+w+'" stroke-linecap="round"/>';}
+  var hip=[R.hipX+p.rx,R.hipY+p.ry],up=dirv(180-p.lean),TL=R.torso*p.tl,neck=add(hip,up,TL),sho=add(hip,up,TL-R.shoulderDrop);sho[1]+=p.sh;
+  s+='<ellipse cx="'+f(hip[0])+'" cy="'+(R.ground+7)+'" rx="62" ry="8" fill="'+ink+'" opacity=".16"/>';
+  var legs=[[p.lH,p.lK,-1],[p.rH,p.rK,1]];
+  for(i=0;i<2;i++){var kn=add(hip,dirv(legs[i][0]),R.thigh),an=add(kn,dirv(legs[i][0]+legs[i][1]),R.shin);s+=seg(hip,kn,9)+seg(kn,an,9)+seg(an,[an[0]+legs[i][2]*12,an[1]+1],9);}
+  s+=seg(hip,[neck[0],neck[1]+p.sh*0.5],9);
+  s+='<g transform="translate('+f(neck[0])+','+f(neck[1]+p.hy+p.sh*0.5)+') rotate('+f(p.head+p.lean)+') scale(1,'+f(p.hs*100)/100+')">'+headSVG(p)+'</g>';
+  var arms=[[p.lS,p.lE],[p.rS,p.rE]];
+  for(i=0;i<2;i++){var so=[sho[0]+(i?R.shoulderHalf:-R.shoulderHalf),sho[1]],el=add(so,dirv(arms[i][0]),R.upper),ha=add(el,dirv(arms[i][0]+arms[i][1]),R.fore);s+=seg(so,el,8.5)+seg(el,ha,8.5);}
+  return s;
+}
+
+/* ===== 這一頁 ===== */
+var FEATS=[
+  ['cloud','iCloud 同步','換手機、刪掉重裝，紙都會回來'],
+  ['grid','主畫面和鎖定畫面小工具','不用打開 app，也看得到上次那張紙'],
+  ['pen','控制中心「記一行」','在任何畫面按一下，就能開始記'],
+  ['photo','封面圖','紙的頂部放一張圖，目錄的磚也換成它'],
+  ['lock','個別上鎖','挑幾張鎖起來，打開要 Face ID'],
+  ['doc','記事本','不分行，一整頁照你的意思寫'],
+  ['size','紙上的字級','小、標準、大、特大'],
+  ['plus','之後新增的完整版功能','也都包含，不用再付']
+];
+var ICON={
+  cloud:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.1 11.2 3.5 3.5 0 0 0 7 18z"/>',
+  grid:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+  pen:'<path d="M12 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/><path d="M17.5 4.5l2 2L12 14l-3 1 1-3z"/>',
+  photo:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
+  lock:'<rect x="5.5" y="10.5" width="13" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+  doc:'<path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 12h6M9 15.5h6"/>',
+  size:'<path d="M3.5 18L8 6l4.5 12M5.2 14h5.6"/><path d="M14 18l3-8 3 8M15.1 15.5h3.8"/>',
+  plus:'<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>'
+};
+var $=function(id){return document.getElementById(id);};
+$('feats').innerHTML=FEATS.map(function(x){
+  return '<div class="feat"><div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+ICON[x[0]]+'</svg></div><div class="ft"><b>'+x[1]+'</b><span>'+x[2]+'</span></div></div>';
+}).join('');
+
+var st={act:'idle',size:128,state:'buy',look:'light'};
+var OPTS={
+  act:[['none','不放（現在）'],['idle','待機'],['wave','揮手']],
+  size:[[64,'小 64'],[96,'中 96'],[128,'大 128'],[160,'特大 160']],
+  state:[['buy','還沒買'],['done','買好了']],
+  look:[['light','淺色'],['dark','深色']]
+};
+Object.keys(OPTS).forEach(function(k){
+  OPTS[k].forEach(function(o){
+    var b=document.createElement('button');b.type='button';b.textContent=o[1];b.dataset.v=o[0];
+    b.addEventListener('click',function(){st[k]=o[0];sync();});
+    $('g-'+k).appendChild(b);
+  });
+});
+function sync(){
+  Object.keys(OPTS).forEach(function(k){
+    Array.prototype.forEach.call($('g-'+k).children,function(b){b.setAttribute('aria-pressed',String(b.dataset.v)===String(st[k])?'true':'false');});
+  });
+  $('phone').dataset.look=st.look;
+  $('hero').hidden=st.act==='none';
+  var man=$('man');man.setAttribute('height',st.size);man.setAttribute('width',Math.round(st.size*200/440));
+  var done=st.state==='done';
+  $('price').textContent=done?'已解鎖 ✓':'NT$390，一次付清，不是訂閱';
+  $('buy').textContent=done?'完成':'用 NT$390 解鎖';
+  $('row').hidden=done;
+  $('sheet').scrollTop=0;
+  judge();
+}
+function judge(){
+  var sheet=$('sheet'),buy=$('buy'),sr=sheet.getBoundingClientRect(),br=buy.getBoundingClientRect();
+  var over=Math.round(br.bottom-sr.bottom),v=$('verdict');
+  if(over>0){v.className='verdict bad';v.innerHTML='<b>付款鈕一打開看不到</b>被擠到畫面底邊下面 '+over+' 點，要往上捲才按得到。';}
+  else{v.className='verdict ok';v.innerHTML='<b>付款鈕一打開就看得到</b>按鈕底邊離畫面底邊還有 '+(-over)+' 點。';}
+}
+var reduce=false;try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
+var clock=0,last=null;
+function draw(){
+  if(st.act==='none')return;
+  var name=st.state==='done'?'bow':st.act;
+  var ink=st.look==='dark'?'#F2EAF1':'#2E2233';
+  $('char').innerHTML=renderChar(poseAt(name,clock),ink);
+}
+function frame(ts){
+  if(last===null)last=ts;
+  var dt=Math.min(0.05,(ts-last)/1000);last=ts;
+  if(!reduce)clock+=dt;
+  draw();
+  requestAnimationFrame(frame);
+}
+sync();draw();requestAnimationFrame(frame);
+window.addEventListener('resize',judge);
+</script>
+</body>
+</html>
