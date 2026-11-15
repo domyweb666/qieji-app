@@ -1,0 +1,98 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.1.0",
+    "copyright": "2026 多米",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "zh-Hant": {
+        "description": "茄記用來隨手記零碎的想法，不用註冊，打開就能打字。記下來就不用再記在腦裡，大部分可能就放著，少部分有做到就劃掉。\n\n它沒有到期日，不會跳通知，圖示上不會有紅色數字，也不會幫你算完成了幾成。放多久都可以，茄記不會催你。\n\n茄記是一張紙。打開就停在你上次寫的那張，右下角按 ＋，想到什麼就打什麼，按右邊的勾記下來。\n\n想完的事往右滑劃掉，不要的往左滑刪掉。刪掉的紙和行會先放進「最近刪除」，30 天內反悔都找得回來。\n\n一件事一張紙也行，九種顏色分開放：茄子、玉米、紅蘿蔔、甜椒、藍莓、青蔥、香菇、黑豆、白蘿蔔。點左上的清單名換一張，常用的可以釘選。清單多了就到目錄排，排法跟手機主畫面一樣，疊起來就是資料夾。找不到就搜尋，每一行都搜得到。\n\n上面這些都免費，沒有廣告。\n\n茄記完整版要另外買，一次付清，不是訂閱。買了多這些：\n・iCloud 同步：換手機或刪掉重裝，紙會自己回來\n・控制中心加一顆「記一行」，鎖著螢幕想到事情，按一下解鎖就能打字（iOS 18 以上）。這顆也能放到鎖定畫面下方，或指定給動作按鈕\n・主畫面和鎖定畫面的小工具，看一眼上次那張紙記了什麼\n・封面圖：紙的頂部放一張自己的照片，目錄裡那塊磚也換成它\n・個別上鎖：挑幾張鎖起來，打開要 Face ID\n・記事本：不分行，一整頁照你的意思寫\n・紙上的字級：小、標準、大、特大\n控制中心和小工具是我自己最常用的。之後新增的完整版功能也包含在內，不用再付。同一個家庭群組的人不用再買。\n\n不用註冊、不用登入，也不跟你要相簿、相機、定位這些權限。紙存在你的手機裡。買了完整版之後，再用你自己的 iCloud 雲碟同步。我拿不到你寫的任何一個字。\n\n沒買完整版的話，紙只存在這一台手機。刪掉茄記再重裝，紙不會回來。\n\n支援深色模式、系統字級放大、減少動態。\n\n第一次打開有一張「從這裡開始」，七行，照著做一遍就會用了。",
+        "keywords": [
+          "念頭",
+          "想法",
+          "靈感",
+          "閃念",
+          "筆記",
+          "便條",
+          "便利貼",
+          "記事本",
+          "購物",
+          "瑣事",
+          "雜事",
+          "劃掉",
+          "極簡",
+          "簡單",
+          "速記",
+          "小工具",
+          "鎖定畫面",
+          "控制中心",
+          "腦袋清空"
+        ],
+        "marketingUrl": "https://domyweb.org/tools/qieji/",
+        "promoText": "1.1 新增茄記完整版，一次付清，不是訂閱。記、劃掉、整理、搜尋照樣免費，沒有廣告。打開就是上次那張紙，右下角 ＋ 直接打字。沒有到期日，也不會跳通知催你。",
+        "supportUrl": "https://domyweb.org/tools/qieji/support/",
+        "title": "茄記：想到就記的隨手備忘錄",
+        "subtitle": "沒有到期日，不會催你的待辦清單",
+        "privacyPolicyUrl": "https://domyweb.org/tools/qieji/privacy/",
+        "screenshots": {
+          "APP_IPHONE_61": [
+            "store-assets/1.1.0/6.3/01-hero.jpg",
+            "store-assets/1.1.0/6.3/02-compose.jpg",
+            "store-assets/1.1.0/6.3/03-switch.jpg",
+            "store-assets/1.1.0/6.3/04-start.jpg",
+            "store-assets/1.1.0/6.3/05-colors.jpg",
+            "store-assets/1.1.0/6.3/06-directory.jpg",
+            "store-assets/1.1.0/6.3/07-trash.jpg",
+            "store-assets/1.1.0/6.3/08-widget.jpg",
+            "store-assets/1.1.0/6.3/09-control.jpg",
+            "store-assets/1.1.0/6.3/10-icloud.jpg"
+          ]
+        },
+        "releaseNotes": "多了一頁「設定」，紙右上的 ⋯ 和目錄最下面都進得去。\n\n新增「茄記完整版」，一次付清，不是訂閱。買了才有 iCloud 同步、主畫面和鎖定畫面小工具、控制中心「記一行」、封面圖、個別上鎖、記事本、紙上的字級，之後新增的完整版功能也包含在內。記、劃掉、整理、搜尋照樣免費，沒有廣告。\n\n設定裡可以選淺色或深色。記一行的時候按 Return 是換行，按右邊的勾才記下來。\n\n原本開著 iCloud 同步的人：更新之後同步會停下來，手機上的紙和 iCloud 雲碟裡的檔案都還在，買了完整版會接著同步。"
+      }
+    },
+    "categories": [
+      "PRODUCTIVITY",
+      "UTILITIES"
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Bing Chang",
+      "lastName": "Chen",
+      "email": "charlie8130@gmail.com",
+      "phone": "+886978551965",
+      "demoRequired": false,
+      "notes": "No account or login is required. The app does not collect any data. It has no servers, analytics or ads. It does not request photo library, camera, microphone or location access: cover images are chosen with the system photo picker, and Face ID is used only when the user locks a note.\n\nVersion 1.1 adds one non-consumable in-app purchase, \"茄記完整版\" (org.domyweb.qieji.full), with Family Sharing enabled. It unlocks iCloud Drive sync, the Home Screen / Lock Screen widgets, the Control Center control \"記一行\" (iOS 18+), cover images, per-note lock with Face ID, a free-form notebook page, and a text size setting. Writing, crossing out, organizing and searching notes remain free.\n\nTo test the purchase: open a note, tap \"⋯\" at the top right, then \"設定\". (The same page is also at the bottom of the directory: tap the list name at the top left, \"管理所有清單\", then \"設定\".) Tap \"茄記完整版\" to open the purchase sheet. \"恢復購買\" (Restore Purchases) is on the same settings page and on the purchase sheet.\n\nBefore purchase, the widgets show a locked message and the Control Center control opens the purchase sheet instead of the input field. The paid entries are hidden until purchase: \"放封面圖\" and \"上鎖\" in the \"⋯\" menu, \"新的記事本\" in the list switcher, and \"紙上的字級\" in settings. The \"iCloud 同步\" row in settings shows a lock and opens the purchase sheet. Not having the purchase never deletes anything: notes stay on the device and existing files stay in the user's iCloud Drive. If a purchase is refunded, existing cover images, notebook pages and locked notes remain usable.\n\nTo test the paid features after purchase: open a note, tap \"⋯\" at the top right for \"放封面圖\" (cover image) and \"上鎖\" (lock); tap the list name at the top left for \"新的記事本\" (new notebook); text size is in \"設定 › 紙上的字級\".\n\nUsers who had iCloud sync in version 1.0 see a one-time notice after updating. Their notes and iCloud files are untouched; sync resumes after purchase.\n\nPurchases use StoreKit 2 only. No third-party purchase SDK or server is involved.\n\nThe settings page has a few links that open outside the app, in Safari or the App Store: my website, my Facebook and Instagram pages, the privacy policy, the App Store review page, and the App Store page of my other app \"豆鍵\" (under \"蔬菜家族的其他 app\"). The app itself makes no network requests other than iCloud Drive sync and StoreKit."
+    }
+  }
+}
