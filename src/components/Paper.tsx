@@ -1283,6 +1283,7 @@ function Rows(p: RowsProps) {
   // 位置表：紙重畫了、量到新高度才重算，單純捲動不用
   const forKey = useRef(''), geoBox = useRef<Geo>(EMPTY_GEO);
   const holdH = useRef(0), holdNew = useRef(false), holdT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mountedIds = useRef<Set<string>>(new Set()); // 上一次畫出來、掛在畫面上的行
   const key = `${stamp}|${tick}`;
   if (forKey.current !== key) {
     forKey.current = key;
@@ -1293,7 +1294,10 @@ function Rows(p: RowsProps) {
     const before = geoBox.current.total;
     geoBox.current = buildGeo(items, it => {
       const r = ROW_H.get(it.id);
-      if (r && (r.t === it.t || it.id === inputId)) return r.h; // 正在打的那行字一直變，高度以量到的為準
+      // 正在打的那行字一直變，高度以量到的為準。
+      // 掛在畫面上的行也一律用量到的（多米 2026-11-16 真機：打字後換行，下一行底下空出約兩行）：量的那一刻記下的字可能還是舊的，
+      // 字對不起來就改用估的，估錯了又因為那行實際高度沒變、系統不再回報，空白就一直留著。掛著的行高度一變系統一定回報，量到的就是真的
+      if (r && (r.t === it.t || it.id === inputId || mountedIds.current.has(it.id))) return r.h;
       const h = Math.max(minH, estimateLines(it.t, width, em) * lineH + PAD_V * 2) + T.shape.borderCard;
       ROW_H.set(it.id, { h, t: it.t });
       return h;
@@ -1387,6 +1391,7 @@ function Rows(p: RowsProps) {
     if (i !== undefined && (i < w.a || i > w.b) && !idx.includes(i)) { idx.push(i); extra = true; }
   }
   if (extra) idx.sort((a, b) => a - b);
+  mountedIds.current = new Set(idx.map(i => geo.ids[i]));
 
   // 行全部包在自己這一層（2026-11-04）：拿起一行時疊放順序變了（zIndex），原生會把排在它後面的兄弟拆下來再裝回去。
   // 把手的偵測元件如果也是兄弟，一拆下來手勢就被取消（真機：began 之後馬上 finalize，拖不動）。包一層，換順序只動這裡面
