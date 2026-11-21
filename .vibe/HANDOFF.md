@@ -1,76 +1,73 @@
-# Handoff: 茄記 1.1 全部寫完（原本十片＋多米追加的八點），第三個開發版打包成功，等多米真機總驗
+# Handoff: 茄記整個重寫成 SwiftUI，第一晚把紙面、規則層、搬舊存檔做完並在模擬器驗過，等多米決定怎麼上真機
 
-> 產出時間：2026-11-14 17:21（+08:00）
-> 專案：Expo SDK 58／RN 0.88，iOS app。多米沒有 Mac、不太看程式、用開發版＋tunnel 真機測，用 EAS 雲端打包（每月 15 次，這個月這條線已用 3 次）
-> 上一版交接：`.vibe/handoff/archive/2026-11-14-1714.md`
+> 產出時間：2026-11-21 21:32（+08:00）
+> 專案：茄記 iOS。這個資料夾（`E:\茄記\qieji-swift`，分支 `overnight-20261121-2038`）是 SwiftUI 版，新程式在 `ios-native/`。Expo 版（1.1／1.1.1）在 `E:\茄記\qieji-1.1`，沒有動，1.1.1 照舊等 12/1 打包
+> 多米沒有 Mac、不太看程式。這台 Windows 沒有 Swift 工具，編譯與測試靠 limrun（以分鐘計費，用完要關）
+> 上一版交接（Expo 1.1 時期的）：`.vibe/handoff/archive/2026-11-14-1721.md`
 
-## ⚠️ 先看：分支與資料夾（接手第一件事）
-- **1.1 在 `feat/1.1`，資料夾是 `E:\茄記\qieji-1.1`**（git worktree，從 master 973e494 長出來，15 個提交，最新 `cf0c9ff` 之後還有這份交接）。工作區乾淨
-- `E:\茄記\qieji-app` 簽出的是 `redesign/domy`（別的會話在做設計代號）。**不要在那邊做 1.1、不要切它的分支**。那邊沒提交的 `送審文案-1.0.0`、`送審步驟-1.0.0`、`審查回覆-2.1` 是多米自己的，別碰
-- 開發伺服器要在 `E:\茄記\qieji-1.1` 裡跑（`npx expo start --tunnel`），在 `qieji-app` 跑會連到另一條分支
-- 網頁預覽：`E:\茄記\.claude\launch.json` 的 `qieji-1.1-web`（8091）。預覽視窗縮小時動畫和浮層不畫，要用 `textContent` 查、用 DOM 的 `click()` 點
-- 還沒推到遠端、還沒合回 master
+## ✅ 這次完成了什麼
 
-## ✅ 這次完成了什麼（2026-11-14 一天，三輪）
-- 第一輪（原本十片）：內購判斷與設定頁、半高付費表單、iCloud 同步看買了沒、小工具鎖住的樣子、控制中心沒買開付費頁、1.0 使用者提示框、評分提示、對外文字
-- 第二輪（多米貼《蔬菜家族共用規格》＋八點）：Return 改換行、設定頁照共用規格重排（外觀切換、分享、新功能、開源授權）、清除所有資料、定價文字改 390
-- 第三輪（多米「直接做」）：封面圖、個別上鎖（Face ID）、記事本、紙上的字級
-- 整理三份可以直接貼的對外文字（送審、隱私權政策、支援頁）
-- 送了三次開發版打包，都成功。最新那個含全部：https://expo.dev/accounts/fcharlie/projects/qieji/builds/d245411d-bc27-4f65-99c2-59fe9169cb35
-- 每一片的做法、證據、沒驗到的，都在 `.vibe/切片帳本.md`
+- 建 `ios-native/`：XcodeGen 專案、SwiftFormat／SwiftLint 設定、圖示、隱私清單。Bundle ID `org.domyweb.qieji`（跟 1.1 同一個）、版本 2.0.0、最低 iOS 16.4
+- 搬設計代號（`Qieji/Design/Tokens.swift`），106 個色碼用程式逐個比過
+- 做紙面（`Qieji/Paper/`）：每一行是原生文字框；滑動、拖曳、點、長按由掛在捲動區上的一組原生手勢處理；拖著的那行另外畫一份浮在清單上
+- 把 `src/lib/model.ts` 的規則逐條搬成 Swift（`Qieji/Core/`）：讀檔補欄位、指紋、iCloud 合併、墓碑、最近刪除 30 天、座位表、空位、資料夾、排列同步
+- 寫對照答案產生器 `tools/gen-swift-fixtures.mjs`：用 Expo 版的規則跑幾百組情境，Swift 測試要算出一字不差的結果
+- 做存檔層：第一次打開讀 1.x 的 AsyncStorage 舊存檔（只讀、原文另存 `from-expo.json`），之後寫自己的 `state.json`
+- 寫 iCloud 傳輸層（`Qieji/Core/Cloud.swift`）與九個「兩台手機共用一個資料夾」的測試
+- 做切換清單、最近刪除、⋯ 選單、設定（只有版本號）、上鎖的紙的擋板
+- 寫 CI 流程檔（沒推）、limrun 用的檢查腳本 `ios-native/tools-check.sh`
+- 33 個測試全過，SwiftFormat、SwiftLint 零錯誤；模擬器上驗過手勢與整條搬家流程
 
 ## 🚧 還沒做完 / 待決定
-- **真機一條都還沒驗**。打包成功只代表編得過。待驗 233～317 條全部等多米
-- **E2 記下新的一則捲回最上面的手感**：沒做。現在用系統的捲動動畫；要多米錄真機影片，看哪裡不順再改（規矩：有量才算數）
-- **H1 量存檔速度**：沒做。塞 300 張 × 200 行假資料量真機，有數字再決定要不要改存檔格式（多米問過要不要寫 Rust，結論不寫）
-- **封面圖、上鎖、記事本、字級沒先對規格就做了**（多米選的）。樣子和細節是 AI 定的，總驗後可能要改。最可能被改的：封面圖固定在頂部不跟著捲、沒有裁切畫面
-- 多米送審前要親手做：App Store Connect 內購價格 150 → 390；隱私權政策、支援頁兩個網頁換新版；內購項目跟 1.1.0 一起送、附付費頁截圖；兩個沙盒測試帳號
-- 已知沒做的：控制中心按鈕沒有鎖住的圖示；上鎖不是加密、多工畫面不遮；換掉的舊封面檔留在 iCloud 不清；開源授權只有直接用到的套件附全文；兩台互改的同步沒有第二台可驗
-- `redesign/domy` 還沒跟 `feat/1.1` 合過，兩邊都動了 `tokens.ts`、`DirPanel.tsx`，合的時候會衝突。先後順序沒問過多米
-- `tools/tests/d1-folders.test.ts` 在 master 上就有 2 條紅的，跟 1.1 無關，沒人處理
 
-## 📌 關鍵決策（多米定的，下次別再爭論）
-- 版本：八點全部做完才送審，1.1 不單獨先送。版本號 1.1.0
-- 定價：一開始就 NT$390，一次買斷，不放廣告，家人共享開。完整版名稱「茄記完整版」（不用 Pro）
-- 完整版有八樣：iCloud 同步、小工具、控制中心「記一行」、封面圖、個別上鎖、記事本、紙上的字級、之後新增的完整版功能
-- 1.0 使用者不保留；開過同步的人更新後跳一次提示框
-- 買了沒只信 Apple 驗過的交易；判斷出錯寧可鎖住；**鎖住只停功能，絕不刪資料**。退款後已經放好的封面、寫好的記事本、上鎖的紙都留著、都打得開
-- Return 記一行時是換行；✓ 記下並收起鍵盤
-- 匯出、匯入維持不做（茄記是共用規格的例外）。一張紙上限 1000 行照舊
-- 外觀（跟隨系統／淺色／深色）加，免費。推翻 11-08、11-11 的「不加切換」
-- 清除所有資料：只清這支手機，先關同步，iCloud 和別台不動，不立墓碑
-- 個別上鎖：上鎖的紙不上傳 iCloud，只存在這支手機
-- 封面圖：跟著 iCloud 同步，先縮圖
-- 蔬菜家族頁：清單內建、不連網（現在是空的，所以不顯示）
-- 不寫 Rust
-- 隱私權政策網址：https://domyweb.org/tools/qieji/privacy/
-- 守門：🔍 的檔送審前要給會寫 iOS／RN 的人看
-- AI 照舊決定沒改的（多米沒另外說）：設定入口留在目錄最底下；評分時機 7 天／4 個日子／劃掉 10 行；版權、信箱照現在上架的；觸覺開關、開發者面板不做
+- **真機一次都沒跑過** — 手感只有多米上手才算數，而且怎麼上真機還沒定（見下一條）
+- **怎麼試手感** — 2.0.0 跟 1.1 同一個 Bundle ID，裝下去會取代 1.1、還沒搬的功能會不見。我推薦另開 `org.domyweb.qieji.swift` 並存（要多米先在 Apple 後台建 app）；另一條路是先搬內購、接 iCloud。**多米還沒回答**
+- **iCloud 沒接上 app** — 同步是完整版功能，內購還沒搬；接上會寫真的雲碟，不可逆，要多米點頭。專案也還沒加 iCloud 權限
+- **真機的舊存檔沒讀過** — 格式對過套件原始碼、用假造的檔測過；主要位置（Application Support）在模擬器上沒能放檔驗證，只走過 Documents 那個位置
+- **上鎖的紙的擋板只編譯過**，沒在模擬器看過畫面
+- **版面是估的** — 標題區、切換清單、最近刪除沒有逐點對 1.1，等多米看
+- **還沒搬的功能** — 內購、Face ID 上鎖、封面圖、桌面小工具、控制中心按鈕、目錄面板的畫面（規則已搬好測過）、付費頁、新功能頁、蔬菜家族頁、授權頁、設定裡的外觀／字級／同步開關／清除資料、備份匯出匯入、評分提示、火柴人
+- **待多米表態的小事** — SwiftLint 門檻我放寬了；repo 是私人的所以 CI 會扣額度；幾個我自己定的行為（都列在 `OVERNIGHT.md` 待確認）
+
+## 📌 關鍵決策（這次定下來的，下次別再爭論）
+
+- 多米選「整個重寫」，不是只換卡手感的畫面。新資料夾、新分支，Expo 版不動
+- 存檔格式不變：Swift 版的 `state.json` 就是 `colornotes.v1` 那份 JSON；鐵則照舊（欄位只能加）
+- 舊存檔只讀不改不刪；搬之前原文先另存，存不成這次就不寫檔
+- 規則層用「跟 Expo 版逐筆比對」驗，不另外手寫一套測試。改 `model.ts` 的規則 → Swift 一起改 → 重跑 `node tools/gen-swift-fixtures.mjs`
+- 紙面不用純 SwiftUI 的手勢：行是 UITextView，手勢是掛在 UIScrollView 上的 UIKit 辨識器（捲動才會是系統原生手感）
+- iCloud 在內購搬完、多米點頭之前一律不碰
+- 上鎖的紙在 Face ID 搬來之前只顯示名字
+- 不自己推 GitHub、不自己打包 TestFlight
 
 ## 📂 下個會話最重要的檔案
-- `.vibe/安全標準.md` ← **下一個會話必讀**（授權段、個別上鎖段）
-- `.vibe/規矩檔.md` ← 手感是最高標準、踩過的坑
-- `.vibe/操作清單-待驗.md` 第二十七～三十二節 ← 多米照這個回報條號（233～317）
-- `.vibe/切片帳本.md` ←「1.1 其餘九片的做法與證據」「1.1 追加」兩段，還有最下面的跳過紀錄
-- `.vibe/代決清單.md` ← 2026-11-14 那四十幾行是 AI 替多米定的，他說不對就照這裡找
-- `.uiux/1.2-提案與共用規格對照.md` ← 八點逐條、共用規格對照、多米的九個決定（檔名寫 1.2，內容都進 1.1）
-- `.vibe/送審貼上版-1.1.0.md`、`.vibe/隱私權政策-1.1.0.md`、`.vibe/支援頁-1.1.0.md`（後兩份各有 .html）
-- 程式（🔍 要外部審查的）：`src/lib/full.ts`、`iap.ts`、`access.ts`、`lock.ts`、`covers.ts`、`cloud.ts`（`allowed` 閘門、`dropCloudNote`、`syncCovers`）、`model.ts`（`pendingUploads`、`mergeRemote` 保住鎖那幾行）、`src/app/+native-intent.tsx`、`widgets/PaperWidget.tsx` 鎖住那段
-- 程式（其他新的）：`src/app/settings.tsx`、`full.tsx`、`news.tsx`、`licenses.tsx`；`src/lib/look.ts`、`textSize.ts`、`review.ts`、`reviewAsk.ts`、`news.ts`、`links.ts`、`family.ts`；`store.ts` 的 `wipe()`；`Paper.tsx` 的上鎖畫面、記事本、封面那幾段
-- 測試：`tools/tests/a1-full`、`c2-review`、`f1-news`、`g-full`（跑法 `node tools/tests/xxx.test.ts`），加 `npm test`
+
+- `OVERNIGHT.md` ← 完整報告：每項做了什麼、九條待確認、還沒搬的清單、執行紀錄
+- `.vibe/安全標準.md` ← **下一個會話必讀**（Expo 時期定的安全清單，Swift 版還沒對過一輪）
+- `.vibe/overnight-截圖/` ← 六張模擬器截圖
+- `ios-native/project.yml`、`ios-native/.swiftlint.yml` ← 專案與規矩設定
+- `ios-native/Qieji/Paper/ListTouch.swift`、`PaperList.swift`、`LineText.swift` ← 紙面的手勢與文字框，調手感都在這
+- `ios-native/Qieji/Core/Disk.swift`、`LegacyStore.swift` ← 搬舊存檔
+- `ios-native/Qieji/Core/Cloud.swift` ← iCloud 傳輸層（沒接）
+- `tools/gen-swift-fixtures.mjs`、`ios-native/QiejiTests/` ← 對照答案與測試
+- `src/lib/`、`src/components/` ← Expo 版原始碼，搬功能時對照用
+- `.vibe/規矩檔.md`、`.vibe/黃金行為.md`、`.uiux/` ← 1.1 的規矩與行為定義
+- 記憶：`project_qieji_swiftui_port.md`、`reference_limrun_swiftui_project.md`（limrun 的指令與坑）
 
 ## ⏭️ 下一步從哪繼續
-1. 先 `cd E:\茄記\qieji-1.1`，`git log --oneline -5` 和 `git status` 看有沒有別的會話動過
-2. 問多米總驗跑到哪。他會照條號回報（例如「251 不對」「290～296 ok」）
-3. 照回報修。動到 🔍 的檔之前先對 `.vibe/安全標準.md`。只改 JS 的不用重新打包，重載就有；動到原生（`app.json`、Swift、加套件）才打包，打包前先 `npx expo-doctor`
-4. 白光閃退：請多米給「設定 › 隱私權與安全性 › 分析與改進功能 › 分析資料」的 `app-*.ips`。這次加了五個原生套件（Face ID、選照片、縮圖、版本、機型），第一嫌疑是它們
-5. 多米有錄捲動的影片就做 E2
-6. 總驗過了之後：打外部審查的交接包 → `vibe-security-gate` 階段 C → `vibe-ship-check` → 問多米 `redesign/domy` 要先合還是後合 → 合回 master → production 打包送審
+
+1. 讀這份，再讀 `OVERNIGHT.md` 的「待確認」九條
+2. 先 `git -C E:\茄記\qieji-swift log --oneline -8` 與 `git status`，確認沒有別的 session 動過
+3. **先問多米「怎麼試手感」的答案**（並存的新 Bundle ID，或先搬內購）。沒有答案之前不要打包
+4. 多米選並存：`project.yml` 的 Bundle ID 改成他建好的那個、照豆鍵的 `testflight.yml` 寫打包流程，等他開口才觸發
+5. 多米選先搬內購：對照 `src/lib/iap.ts`、`access.ts`、`full.ts`，用 StoreKit 2 寫，沿用同一個產品 ID；舊版的購買記號 `qieji.full.v1` 已經在 `Disk.Loaded.legacy` 裡帶著
+6. 兩條路都還沒定時，可以先做不用決定的：目錄面板的畫面（規則在 `Seats.swift`，先照 `feedback_visible_things_compare_first` 給比較頁）、控制中心按鈕（`targets/controls` 兩個 Swift 檔可直接搬）
+7. 每次改完：開 limrun → `lim xcode test` → `sh tools-check.sh` → 關掉並確認清單
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）
-- 廣告方案、保留舊使用者的做法：都否決了
-- 定價 150／290 的討論：多米選 390
-- 匯入規則（一行一則、超過 1000 行切張）：寫過提案，多米選不做，留在提案檔第四節當紀錄
-- 先寫規格再做 G1～G4：提議過，多米選直接做
-- Windows 上不能 `expo prebuild` iOS，試過，不用再試
-- expo-iap 怎麼驗交易：讀過 OpenIAP 4.1.0 的 Swift 原始碼（`Transaction.currentEntitlements`、只交出驗過簽章的），結論寫在 `iap.ts` 開頭
+
+- 要不要轉 SwiftUI、要不要只換部分畫面：已定案，整個重寫
+- limrun 放檔遇到路徑有空白會壞、`typeText` 抓不到文字框、`swipe --duration` 沒作用：繞法都記在記憶裡，不用再試
+- 模擬器是英文系統，中文字形像日文／簡體寫法，不是 bug
+- `ios-native/formatted.tgz` 是排版暫存檔，已設成不進版控
+- limrun 清單上 `project=doujian` 的兩台是別的 session 的，不要刪
