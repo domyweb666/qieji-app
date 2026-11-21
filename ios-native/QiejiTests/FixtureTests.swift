@@ -22,6 +22,34 @@ final class FixtureTests: XCTestCase {
 
     private func canon(_ book: Notebook) -> String { NoteCoding.json(book).stringify() }
 
+    /// 對照答案檔真的有讀到，而且每一組的數量跟產生器印的一樣（不然全部「通過」可能只是什麼都沒比）
+    func testFixturesAreLoaded() {
+        XCTAssertEqual(cases("prints").count, 10)
+        XCTAssertEqual(cases("books").count, 10)
+        XCTAssertEqual(cases("merges").count, 56)
+        XCTAssertEqual(cases("layouts").count, 10)
+        XCTAssertEqual(cases("lines").count, 40)
+        let steps = cases("seats").reduce(0) { $0 + ($1["steps"]?.arrayValue?.count ?? 0) }
+        XCTAssertEqual(cases("seats").count, 60)
+        XCTAssertEqual(steps, 719)
+    }
+
+    /// 改一個字指紋就要不一樣；h、mod、sh 不算內容
+    func testFingerprintReactsToContent() {
+        var note = Note.blank(color: "purple", now: 1)
+        note.id = "a"
+        note.items = [Item(id: "1", text: "想法")]
+        let base = Sync.fingerprint(note)
+        var same = note
+        same.hash = "zz"
+        same.mod = 9
+        same.syncedHash = "yy"
+        XCTAssertEqual(Sync.fingerprint(same), base)
+        var changed = note
+        changed.items[0].text = "想法！"
+        XCTAssertNotEqual(Sync.fingerprint(changed), base)
+    }
+
     // MARK: 指紋、讀存檔
 
     func testFingerprintsMatchExpoVersion() {

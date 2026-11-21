@@ -7,6 +7,7 @@ enum Words {
     static let composerHint = "記一行"
     static let strike = "劃掉"
     static let unstrike = "恢復"
+    static let struck = "已劃掉"
     static let delete = "刪除"
     static let deleteLine = "刪除這行"
     static let copy = "複製"

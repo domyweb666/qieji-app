@@ -58,7 +58,8 @@ struct PaperList: View {
             slide: sliding ? touch.swipeTx : 0,
             armed: sliding && touch.swipeArmed,
             held: held,
-            actions: actions(for: item.id)
+            actions: actions(for: item.id),
+            voice: voiceActions(item, index: index)
         )
         .offset(y: held ? touch.dragDy : touch.giveWay(index: index))
         .animation(held || calm ? nil : Tok.Motion.dragShift, value: touch.dragTo)
@@ -67,16 +68,17 @@ struct PaperList: View {
             Color.clear.preference(key: RowFramesKey.self, value: [item.id: geo.frame(in: .named(PaperList.space))])
         })
         .id(item.id)
-        .accessibilityElement(children: .combine)
-        .accessibilityActions { voiceActions(item, index: index) }
     }
 
-    @ViewBuilder
-    private func voiceActions(_ item: Item, index: Int) -> some View {
-        Button(item.done ? Words.unstrike : Words.strike) { store.toggle(item.id) }
-        Button(Words.deleteLine) { store.binLine(item.id) }
-        if index > 0 { Button(Words.moveUp) { store.move(item.id, to: index - 1) } }
-        if index < note.items.count - 1 { Button(Words.moveDown) { store.move(item.id, to: index + 1) } }
+    /// VoiceOver 用不了滑動和拖曳：從動作選單（上下滑）劃掉、刪除、移動
+    private func voiceActions(_ item: Item, index: Int) -> [VoiceAct] {
+        var out = [
+            VoiceAct(name: item.done ? Words.unstrike : Words.strike) { store.toggle(item.id) },
+            VoiceAct(name: Words.deleteLine) { store.binLine(item.id) },
+        ]
+        if index > 0 { out.append(VoiceAct(name: Words.moveUp) { store.move(item.id, to: index - 1) }) }
+        if index < note.items.count - 1 { out.append(VoiceAct(name: Words.moveDown) { store.move(item.id, to: index + 1) }) }
+        return out
     }
 
     /// 清單的手勢接到資料上
@@ -118,6 +120,12 @@ struct PaperList: View {
     }
 }
 
+/// VoiceOver 動作選單裡的一項
+struct VoiceAct {
+    let name: String
+    let run: () -> Void
+}
+
 /// 每次要對焦都拿一個新號碼
 enum Tick {
     private static var count = 0
@@ -137,6 +145,7 @@ struct PaperRow: View {
     let armed: Bool
     let held: Bool
     let actions: LineActions
+    let voice: [VoiceAct]
     @Environment(\.accessibilityReduceMotion) private var calm
 
     var body: some View {
@@ -145,7 +154,7 @@ struct PaperRow: View {
             HStack(spacing: 0) {
                 LineText(
                     text: item.text, done: item.done, editing: editing, focus: focus,
-                    ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions
+                    ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice
                 )
                 .padding(.leading, Tok.Space.lg)
                 GripDots()

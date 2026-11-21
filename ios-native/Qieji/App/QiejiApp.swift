@@ -24,9 +24,10 @@ struct RootView: View {
     @State private var route: Route?
     @Environment(\.scenePhase) private var phase
 
-    /// 啟動參數帶 -demo：用假資料、不讀不寫（模擬器截圖與手勢測試用）
+    /// 啟動參數帶 -demo、或環境變數 QIEJI_DEMO=1：用假資料、不讀不寫（模擬器截圖與手勢測試用）
     private static func makeStore() -> Store {
-        if ProcessInfo.processInfo.arguments.contains("-demo") { return Store(book: Demo.book()) }
+        let info = ProcessInfo.processInfo
+        if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" { return Store(book: Demo.book()) }
         return Store(disk: Disk.standard())
     }
 

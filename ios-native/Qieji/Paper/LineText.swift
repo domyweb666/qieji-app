@@ -19,6 +19,7 @@ struct LineText: UIViewRepresentable {
     let ink: UIColor
     let strikeInk: UIColor
     let actions: LineActions
+    var voice: [VoiceAct] = []
 
     func makeCoordinator() -> Coordinator { Coordinator(actions: actions) }
 
@@ -32,7 +33,6 @@ struct LineText: UIViewRepresentable {
         view.delegate = context.coordinator
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.setContentHuggingPriority(.required, for: .vertical)
-        view.isAccessibilityElement = true
         return view
     }
 
@@ -53,6 +53,15 @@ struct LineText: UIViewRepresentable {
         }
         coord.shownDone = done
         coord.shownInk = ink
+        coord.voice = voice
+        view.accessibilityCustomActions = voice.enumerated().map { idx, act in
+            UIAccessibilityCustomAction(name: act.name) { [weak coord] _ in
+                guard let list = coord?.voice, idx < list.count else { return false }
+                list[idx].run()
+                return true
+            }
+        }
+        view.accessibilityHint = done ? Words.struck : nil
         view.typingAttributes = attrs
         view.isUserInteractionEnabled = editing
         if editing, let focus, focus.token != coord.lastFocus {
@@ -103,6 +112,7 @@ struct LineText: UIViewRepresentable {
         var lastFocus = -1
         var shownDone = false
         var shownInk: UIColor?
+        var voice: [VoiceAct] = []
 
         init(actions: LineActions) { self.actions = actions }
 
