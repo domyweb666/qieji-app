@@ -47,3 +47,4 @@ ios-native/Qieji/Info.plist
 ios-native/DerivedData/
 ios-native/formatted.tgz
 ios-native/.limbuild-sandbox/
+._*
