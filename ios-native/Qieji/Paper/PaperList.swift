@@ -29,10 +29,7 @@ struct PaperList: View {
                         row(item, index: index)
                     }
                     if note.items.isEmpty {
-                        Text(Words.emptyPaper)
-                            .font(Tok.Font.callout)
-                            .foregroundColor(Tok.Col.textMuted)
-                            .padding(Tok.Space.xl)
+                        EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])
                     }
                 }
                 .coordinateSpace(name: PaperList.space)

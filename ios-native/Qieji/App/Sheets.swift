@@ -93,7 +93,10 @@ struct TrashView: View {
         NavigationStack {
             List {
                 if dead.isEmpty, withBin.isEmpty {
-                    Text(Words.trashEmpty).font(Tok.Font.callout).foregroundColor(Tok.Col.textMuted)
+                    // 不是一列資料：拿掉格子的底和線，置中擺在清單裡
+                    EmptyNote(lines: [Words.trashEmpty, Words.trashEmptyTip])
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
                 if !dead.isEmpty {
                     Section(Words.trashNotes) { ForEach(dead) { noteRow($0) } }
@@ -103,7 +106,9 @@ struct TrashView: View {
                         ForEach(note.bin) { lineRow(note, $0) }
                     }
                 }
-                Section {} footer: { Text(Words.trashNote).font(Tok.Font.footnote) }
+                if !dead.isEmpty || !withBin.isEmpty {
+                    Section {} footer: { Text(Words.trashNote).font(Tok.Font.footnote) }
+                }
             }
             .navigationTitle(Words.trash)
             .navigationBarTitleDisplayMode(.inline)

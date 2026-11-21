@@ -41,8 +41,6 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     private let gripPan = UIPanGestureRecognizer()
     private let tap = UITapGestureRecognizer()
     private let hold = UILongPressGestureRecognizer()
-    private let tick = UISelectionFeedbackGenerator()
-    private let thud = UIImpactFeedbackGenerator(style: .light)
     private var dragScrollStart: CGFloat = 0
     private var landing = false
     private var autoLink: CADisplayLink?
@@ -133,14 +131,14 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             swipeID = row(at: touchStart)
             swipeTx = 0
             swipeArmed = false
-            tick.prepare()
+            Haptic.prepare()
         case .changed:
             let shift = gesture.translation(in: scroll).x
             let armed = shift > 0 ? shift >= strikeLine(width) : -shift >= deleteLine(width)
             if armed != swipeArmed {
                 swipeArmed = armed
                 if armed {
-                    tick.selectionChanged()
+                    Haptic.arm()
                 }
             }
             swipeTx = shift
@@ -193,8 +191,8 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             dragTo = from
             dragDy = 0
             dragID = id
-            tick.selectionChanged()
-            thud.prepare()
+            Haptic.prepare()
+            Haptic.lift()
             followFinger()
         case .changed:
             guard dragID != nil else { return }
@@ -218,7 +216,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         let target = targetIndex(for: id)
         if target != dragTo {
             dragTo = target
-            tick.selectionChanged()
+            Haptic.pass()
         }
     }
 
@@ -286,7 +284,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         guard let id = dragID else { return }
         let from = dragFrom, target = dragTo
         landing = true
-        thud.impactOccurred()
+        Haptic.land()
         let rest = landingOffset(from: from, target: target)
         let offset = scroll?.contentOffset.y ?? 0
         withAnimation(Tok.Motion.dragLand) {
@@ -343,7 +341,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     @objc private func onHeld(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, let id = row(at: touchStart) else { return }
-        tick.selectionChanged()
+        Haptic.menu()
         onLongPress(id)
     }
 }

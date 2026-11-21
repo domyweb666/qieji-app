@@ -63,6 +63,7 @@ struct DirPanel: View {
 
     private var layers: some View {
         ZStack(alignment: .topLeading) {
+            // 這層留暗幕不用霧面：上面那截要「看得到後面的紙」，霧掉就認不出是哪一張（2026-11-21 模擬器試過）
             Tok.Col.scrim
                 .opacity(Double(model.progress))
                 .contentShape(Rectangle())
@@ -92,6 +93,7 @@ struct DirPanel: View {
     private func saveGlyph() {
         guard let id = model.glyphFor else { return }
         if let problem = Labels.glyphProblem(glyphText) {
+            Haptic.reject()
             store.toast = Store.Toast(text: problem)
         } else {
             store.setGlyph(id, glyphText)
@@ -137,9 +139,14 @@ struct DirPanel: View {
                 DirFolderView(model: model, entry: entry, currentID: store.currentID)
             }
             DirGhostView(ghost: model.ghost)
-            if let menu = model.menu, let note = store.book.note(menu.id), !note.deleted {
-                DirMenuView(model: model, menu: menu, note: note, current: note.id == store.currentID)
+            // 選單淡入淡出（動畫只包這一層，不牽連磚的換位與抖動）
+            ZStack {
+                if let menu = model.menu, let note = store.book.note(menu.id), !note.deleted {
+                    DirMenuView(model: model, menu: menu, note: note, current: note.id == store.currentID)
+                        .transition(.opacity)
+                }
             }
+            .animation(Tok.Motion.fade, value: model.menu?.id)
             if let launch = model.launch {
                 DirLaunchView(launch: launch, size: model.screen) { model.close(fade: true) }
             }

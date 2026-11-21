@@ -31,16 +31,11 @@ struct DirFolderView: View {
     }
 
     private var veil: some View {
-        ZStack {
-            if !solid {
-                Rectangle().fill(.ultraThinMaterial)
-            }
-            solid ? Tok.Col.folderVeil : Tok.Col.folderVeilBlur
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { model.closeFolder() }
-        .accessibilityLabel(Words.closeFolder)
-        .accessibilityAddTraits(.isButton)
+        Veil(solidColor: Tok.Col.folderVeil)
+            .contentShape(Rectangle())
+            .onTapGesture { model.closeFolder() }
+            .accessibilityLabel(Words.closeFolder)
+            .accessibilityAddTraits(.isButton)
     }
 
     private var box: some View {
@@ -175,7 +170,7 @@ struct DirMenuView: View {
     var body: some View {
         let width = min(Tok.Shape.menuWide, model.screen.width - Tok.Space.lg * 2)
         ZStack(alignment: .topLeading) {
-            Tok.Col.menuScrim
+            Veil(solidColor: Tok.Col.menuScrim)
                 .contentShape(Rectangle())
                 .onTapGesture { model.menu = nil }
                 .accessibilityLabel(Words.closeMenu)
@@ -290,10 +285,7 @@ struct DirSearchList: View {
                     Tok.Col.separator.frame(height: Tok.Shape.hairline)
                 }
                 if hits.isEmpty {
-                    Text(Words.searchNone(needle))
-                        .font(Tok.Font.callout)
-                        .foregroundColor(Tok.Col.textMuted)
-                        .padding(Tok.Space.xl)
+                    EmptyNote(lines: [Words.searchNone(needle)])
                 }
             }
             .padding(.horizontal, Tok.Space.lg)
@@ -363,10 +355,7 @@ struct DirPickGrid: View {
             }
             .padding(.top, Tok.Space.sm + Tok.Space.md)
             if notes.isEmpty {
-                Text(Words.searchNone(Labels.trim(model.query)))
-                    .font(Tok.Font.callout)
-                    .foregroundColor(Tok.Col.textMuted)
-                    .padding(Tok.Space.xl)
+                EmptyNote(lines: [Words.searchNoneNote(Labels.trim(model.query))])
             }
         }
         .scrollDismissesKeyboard(.interactively)

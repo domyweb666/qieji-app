@@ -34,6 +34,7 @@ enum Words {
     static let trashLines = "刪掉的行"
     static let trashNote = "放滿 30 天會自動清掉"
     static let trashEmpty = "最近刪除是空的"
+    static let trashEmptyTip = "刪掉的清單和行會先放在這裡 30 天，之後自動清掉"
     static let restore = "還原"
     static let deleteForever = "永久刪除"
     static let settings = "設定"
@@ -47,7 +48,8 @@ enum Words {
     static let colorTitle = "顏色"
     static let directory = "目錄"
     static let search = "搜尋清單"
-    static let emptyPaper = "還沒有東西，按右下 ＋ 記一行"
+    static let emptyPaper = "這張還是空的"
+    static let emptyPaperTip = "點右下角的 ＋ 記一行"
     static let lockedNote = "這張上鎖了。這一版還不能解鎖，內容先不顯示。"
     static let saveFailed = "存檔沒成功，等一下會再試"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
@@ -89,6 +91,10 @@ enum Words {
 
     static func searchNone(_ text: String) -> String {
         "找不到含「\(text)」的清單或行"
+    }
+
+    static func searchNoneNote(_ text: String) -> String {
+        "找不到含「\(text)」的清單"
     }
 
     static func folderVoice(_ name: String, _ count: Int) -> String {

@@ -141,7 +141,7 @@ struct Jiggle: ViewModifier {
     }
 }
 
-/// 目錄或資料夾裡的一塊磚，帶各種狀態：抖動、按住放大、被瞄著要疊、剛有東西縮進來、拖走了先藏起來
+/// 目錄或資料夾裡的一塊磚，帶各種狀態：抖動、按著變淡／放大、被瞄著要疊、剛有東西縮進來、拖走了先藏起來
 struct DirTile: View {
     let entry: Seats.Entry
     let cell: CGFloat
@@ -157,10 +157,11 @@ struct DirTile: View {
     var body: some View {
         let side = DirMetrics(cell: cell).side
         DirTileFace(entry: entry, cell: cell, current: current, hideName: target)
-            .opacity(target ? Tok.Motion.stackDim : 1)
+            // 按著：沒抖動＝變淡，抖動中＝放大（等著被拿起來）
+            .opacity(target ? Tok.Motion.stackDim : (held && !editing ? Tok.Motion.pressDim : 1))
             .background(alignment: .top) { plate(side) }
             .overlay(alignment: .topLeading) { minus(side) }
-            .scaleEffect((held ? Tok.Motion.tileHoldScale : 1) * (pop ? Tok.Motion.stackPop : 1))
+            .scaleEffect((held && editing ? Tok.Motion.tileHoldScale : 1) * (pop ? Tok.Motion.stackPop : 1))
             .animation(calm ? nil : Tok.Motion.dragLift, value: held)
             .animation(calm ? nil : Tok.Motion.dragLift, value: pop)
             .animation(calm ? nil : Tok.Motion.stackCue, value: target)
@@ -247,7 +248,10 @@ struct DirGhostView: View {
                     color: Tok.Col.shadow.opacity(Tok.Shape.shadowSoft),
                     radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY
                 )
-                .offset(x: ghost.corner.x + ghost.shift.width, y: ghost.corner.y + ghost.shift.height)
+                .offset(
+                    x: ghost.corner.x + ghost.shift.width + ghost.catchUp.width,
+                    y: ghost.corner.y + ghost.shift.height + ghost.catchUp.height
+                )
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }

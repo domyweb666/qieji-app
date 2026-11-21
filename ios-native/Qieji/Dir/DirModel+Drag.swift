@@ -53,7 +53,8 @@ extension DirModel {
         unstack()
         ghost.corner = hit.corner
         ghost.width = cellWidth
-        ghost.shift = CGSize(width: finger.x - start.x, height: finger.y - start.y)
+        let moved = CGSize(width: finger.x - start.x, height: finger.y - start.y)
+        ghost.shift = moved
         ghost.sinking = false
         geo.width = cellWidth
         switch zone {
@@ -71,7 +72,15 @@ extension DirModel {
             geo.folderPage = folderPage
             setDrag(DirDrag(id: hit.id, source: fid, page: page, cells: nil, inFolder: fid, folderSlot: hit.slot, startSlot: hit.slot))
         }
+        // 手勢要走一段才啟動：磚先留在原位，很快補到手指的位置，不會一拿起就跳一下
+        ghost.catchUp = calm ? .zero : CGSize(width: -moved.width, height: -moved.height)
         ghost.entry = drag.flatMap { DirCells.dragged($0, list: entries, book: store.book) }
+        if !calm {
+            // 先畫出「還在原位」那一格，下一格才開始補：一起改的話會直接出現在手指的位置
+            DispatchQueue.main.async { [ghost] in
+                withAnimation(Tok.Motion.dragCatch) { ghost.catchUp = .zero }
+            }
+        }
         withAnimation(calm ? nil : Tok.Motion.dragLift) { ghost.lifted = true }
         ready = true
         Haptic.lift()
@@ -148,7 +157,13 @@ extension DirModel {
         withAnimation(Tok.Motion.dragLand) {
             ghost.shift = CGSize(width: target.x - ghost.corner.x, height: target.y - ghost.corner.y)
         }
-        _ = after(Tok.Motion.dragLandSeconds) { [weak self] in self?.drop() }
+        landWork = after(Tok.Motion.dragLandSeconds) { [weak self] in self?.drop() }
+    }
+
+    /// 還在滑進落點時手指又碰了：不等滑完，馬上落定，新的這一下照常收
+    func landNow() {
+        guard landing else { return }
+        drop()
     }
 
     // MARK: 瞄的地方變了

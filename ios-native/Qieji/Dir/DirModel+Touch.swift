@@ -4,7 +4,7 @@ import UIKit
 /// 手指點到哪一塊、點了／按住了要做什麼。磚的位置全部用算的（不是每塊磚各掛一組手勢），
 /// 所以磚換位、換頁、進出資料夾時，手上的拖曳不會斷。
 extension DirModel {
-    /// 現在不收觸控：還在滑進落點、正在放大打開、面板還沒停在全開
+    /// 現在不收觸控：還在滑進落點（手指再碰會先 landNow）、正在放大打開、面板還沒停在全開
     var busy: Bool {
         landing || launch != nil || !isOpen
     }
@@ -124,14 +124,17 @@ extension DirModel {
         menu = Menu(id: hit.id, corner: hit.corner, width: cellWidth, top: top, leading: hit.corner.x + cellWidth / 2 < screen.width / 2)
     }
 
-    /// 抖動中手指一按下：那塊磚放大（看得出按到了），放手縮回
+    /// 手指一按下：那塊磚變淡（抖動中是放大），看得出按到了；放手、開始翻頁就復原
     func pressDown(_ zone: Zone, at point: CGPoint) {
-        guard editing, drag == nil, !busy else { return }
+        guard drag == nil, !busy, menu == nil else { return }
+        Haptic.prepare()
         heldID = hit(zone, point)?.id
     }
 
     func pressUp() {
-        heldID = nil
+        if heldID != nil {
+            heldID = nil
+        }
     }
 
     /// 捲動區自己翻了頁

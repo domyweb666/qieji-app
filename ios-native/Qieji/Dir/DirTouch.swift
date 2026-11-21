@@ -11,7 +11,7 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
     private let tap = UITapGestureRecognizer()
     private let hold = UILongPressGestureRecognizer()
     private let pan = UIPanGestureRecognizer() // 抖動中直接拖
-    private let press = UILongPressGestureRecognizer() // 抖動中手指一按下就算（只管磚放大）
+    private let press = UILongPressGestureRecognizer() // 手指一按下就算（只管磚變淡；抖動中是放大）
     private var start: CGPoint = .zero // 手指按下去的地方（螢幕座標）
     private var armed = false // 按住到時間了，再拖一段就拿起
     private var holdDrag = false
@@ -46,6 +46,8 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
         }
         // 抖動中手指在磚上一動就是拿起來；不在磚上我們的拖曳立刻放棄，系統才開始翻頁
         view.panGestureRecognizer.require(toFail: pan)
+        // 開始翻頁：按著變淡的那塊復原（手指還在螢幕上，press 不會自己結束）
+        view.panGestureRecognizer.addTarget(self, action: #selector(onPaging(_:)))
         watch = view.observe(\.contentOffset) { [weak self] view, _ in self?.scrolled(view) }
     }
 
@@ -68,7 +70,10 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
     // MARK: 誰可以開始
 
     func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard let model, !model.busy, !holdDrag, !panDrag else { return false }
+        guard let model else { return false }
+        // 上一張還在滑進落點：不讓手指等，先落定再收這一下
+        model.landNow()
+        guard !model.busy, !holdDrag, !panDrag else { return false }
         start = touch.location(in: nil)
         return true
     }
@@ -82,9 +87,6 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
         if gesture === hold {
             return !model.editing && model.drag == nil
         }
-        if gesture === press {
-            return model.editing
-        }
         return true
     }
 
@@ -97,6 +99,12 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
     @objc private func onTap(_ gesture: UITapGestureRecognizer) {
         guard gesture.state == .ended else { return }
         model?.tap(zone, at: gesture.location(in: nil))
+    }
+
+    @objc private func onPaging(_ gesture: UIPanGestureRecognizer) {
+        if gesture.state == .began {
+            model?.pressUp()
+        }
     }
 
     @objc private func onPress(_ gesture: UILongPressGestureRecognizer) {

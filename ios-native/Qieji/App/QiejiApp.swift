@@ -67,9 +67,11 @@ struct RootView: View {
                 }
             }
         }
+        // 換一張紙：舊的淡出、新的淡入（只寫 transition 不接動畫的話是直接跳）
+        .animation(Tok.Motion.fade, value: store.currentID)
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
         .overlay { DirHost(store: store, model: dir) { route = $0 } }
-        .overlay(alignment: .bottom) { ToastBar(store: store) }
+        .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
         .sheet(item: $route, onDismiss: openDirIfAsked) { sheet($0) }
         .onAppear { store.boot() }
         .onChange(of: phase) { now in

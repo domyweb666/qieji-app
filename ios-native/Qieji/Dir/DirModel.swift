@@ -6,6 +6,7 @@ final class DirGhost: ObservableObject {
     @Published var entry: Seats.Entry?
     @Published var corner: CGPoint = .zero // 拿起時那塊的左上角（螢幕座標）
     @Published var shift: CGSize = .zero // 手指移了多少
+    @Published var catchUp: CGSize = .zero // 拿起那一刻還沒補上的那段（很快補到 0）
     @Published var width: CGFloat = 0
     @Published var lifted = false
     @Published var sinking = false // 疊上去放手：邊滑邊縮小淡掉
@@ -92,6 +93,7 @@ final class DirModel: ObservableObject {
     var leaveWork: DispatchWorkItem?
     var edgeWork: DispatchWorkItem?
     var folderEdgeWork: DispatchWorkItem?
+    var landWork: DispatchWorkItem? // 放手後「滑完才改資料」那一步
     var stillFrom: CGSize = .zero
     var stills = 0
 
@@ -310,6 +312,8 @@ final class DirModel: ObservableObject {
             return
         }
         menu = nil
+        // 紙已經換好了：放大那一小段時間面板不再收觸控，手指碰到的是後面那張紙（不會有一段碰了沒反應）
+        isOpen = false
         launch = Launch(id: id, color: note.color, frame: frame)
     }
 
@@ -356,16 +360,19 @@ final class DirModel: ObservableObject {
         guard let note = store.book.note(id) else { return }
         menu = nil
         if !note.pinned, Seats.pinned(store.book).count >= Seats.pinMax {
+            Haptic.reject()
             store.toast = Store.Toast(text: Words.pinFull(Seats.pinMax))
             return
         }
         store.togglePin(id)
+        Haptic.tick()
         store.toast = Store.Toast(text: note.pinned ? Words.unpinned : Words.pinned)
     }
 
     func delete(_ id: String) {
         menu = nil
         store.trashNote(id)
+        Haptic.land()
     }
 
     // MARK: 資料夾

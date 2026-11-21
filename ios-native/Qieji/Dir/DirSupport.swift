@@ -1,25 +1,38 @@
+import SwiftUI
 import UIKit
 
-/// 震動回饋
-enum Haptic {
-    static func tick() {
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
+/// 浮層後面那一層：霧面（毛玻璃）再疊一層很淡的暗；開了「減少透明度」改用實的暗幕
+struct Veil: View {
+    let solidColor: Color
+    @Environment(\.accessibilityReduceTransparency) private var solid
 
-    static func menu() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    var body: some View {
+        ZStack {
+            if !solid {
+                Rectangle().fill(.ultraThinMaterial)
+            }
+            solid ? solidColor : Tok.Col.folderVeilBlur
+        }
     }
+}
 
-    static func lift() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
+/// 空白畫面：置中的灰色說明，一行講現況、一行講怎麼辦（照 Expo 版 Empty；插圖 2026-11-01 拿掉）
+struct EmptyNote: View {
+    let lines: [String]
 
-    static func pass() {
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    static func land() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    var body: some View {
+        VStack(spacing: Tok.Space.xs) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(Tok.Font.callout)
+                    .foregroundColor(Tok.Col.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Tok.Space.xxl)
+        .padding(.horizontal, Tok.Space.gutter)
+        .accessibilityElement(children: .combine)
     }
 }
 

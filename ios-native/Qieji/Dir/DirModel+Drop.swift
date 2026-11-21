@@ -8,10 +8,11 @@ extension DirModel {
     /// 在打開的資料夾框裡＝放進那格（資料夾裡換順序也是這條）；準備疊了＝疊；目錄＝整排照放手當下的格子存回座位表。
     /// 資料夾開著但在框外放手：從資料夾拿的移出去，從目錄拿的回原位
     func drop() {
-        for work in [aimWork, leaveWork, edgeWork, folderEdgeWork] {
+        for work in [aimWork, leaveWork, edgeWork, folderEdgeWork, landWork] {
             work?.cancel()
         }
         leaveWork = nil
+        landWork = nil
         let now = drag
         let stamp = Clock.now()
         let row = now.map { flat($0) } ?? []
@@ -43,6 +44,7 @@ extension DirModel {
             setDrag(nil)
             ghost.entry = nil
             ghost.shift = .zero
+            ghost.catchUp = .zero
             ghost.sinking = false
             ghost.lifted = false
         }

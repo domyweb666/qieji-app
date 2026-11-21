@@ -300,6 +300,8 @@ enum Tok {
         static let launch = Animation.easeOut(duration: 0.26)
         static let launchSeconds: Double = 0.26
         static let dragLandSeconds: Double = 0.25
+        /// 拿起時磚補上手指已經走的那段（手勢要走一段才啟動），補完磚的位置就是手指的位置
+        static let dragCatch = Animation.easeInOut(duration: 0.12)
     }
 
     // MARK: 手勢門檻

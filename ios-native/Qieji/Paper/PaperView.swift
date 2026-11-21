@@ -53,6 +53,7 @@ struct PaperView: View {
             TextField(Words.glyphHint, text: $newGlyph)
             Button(Words.done) {
                 if let problem = Labels.glyphProblem(newGlyph) {
+                    Haptic.reject()
                     store.toast = Store.Toast(text: problem)
                 } else {
                     store.setGlyph(note.id, newGlyph)
@@ -91,7 +92,7 @@ struct PaperView: View {
     @ViewBuilder private var addButton: some View {
         if !composing, editingID == nil, touch.dragID == nil {
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                Haptic.add()
                 composing = true
                 composerFocused = true
             } label: {
