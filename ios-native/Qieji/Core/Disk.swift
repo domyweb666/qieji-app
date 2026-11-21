@@ -61,17 +61,32 @@ final class Disk {
     func load(now: Double = Clock.now()) -> Loaded {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let raw = try? String(contentsOf: stateFile, encoding: .utf8) {
-            return loadNative(raw)
-        }
-        for legacyDir in legacyDirs {
-            if let old = LegacyStore.read(dir: legacyDir), let raw = old[LegacyStore.bookKey] {
-                return loadLegacy(raw, old: old)
+            let mine = loadNative(raw)
+            // 補搬：上次打開時沒讀到舊版存檔（剛好讀不到、或舊檔後來才出現），所以手上只有一張沒動過的教學紙；
+            // 這次讀得到了就照樣搬。手上已經有使用者自己的東西就不搬（不拿舊的蓋新的）
+            let onlyTutorial = !mine.unreadable && mine.book.notes.allSatisfy(Tutorial.isUntouched)
+            if onlyTutorial, !FileManager.default.fileExists(atPath: expoCopy.path), let found = legacy() {
+                return loadLegacy(found.raw, old: found.old)
             }
+            return mine
+        }
+        if let found = legacy() {
+            return loadLegacy(found.raw, old: found.old)
         }
         var book = Notebook()
         let first = Tutorial.note(now: now)
         book.notes.append(first)
         return Loaded(book: book, source: .fresh, last: first.id, recent: [], unreadable: false, legacy: [:])
+    }
+
+    /// 找 Expo 版留下來的存檔（新的位置先找）
+    private func legacy() -> (raw: String, old: [String: String])? {
+        for legacyDir in legacyDirs {
+            if let old = LegacyStore.read(dir: legacyDir), let raw = old[LegacyStore.bookKey] {
+                return (raw, old)
+            }
+        }
+        return nil
     }
 
     private func loadNative(_ raw: String) -> Loaded {

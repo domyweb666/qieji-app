@@ -41,6 +41,8 @@ struct PaperList: View {
                 .onPreferenceChange(RowFramesKey.self) { touch.frames = $0 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .overlay(alignment: .top) { floating }
+            .clipped()
             .onAppear { wire(proxy) }
             .onChange(of: note.items.map(\.id)) { touch.order = $0 }
             .onChange(of: note.id) { _ in wire(proxy) }
@@ -61,13 +63,27 @@ struct PaperList: View {
             actions: actions(for: item.id),
             voice: voiceActions(item, index: index)
         )
-        .offset(y: held ? touch.dragDy : touch.giveWay(index: index))
+        // 拖著的那一行另外畫一份浮在上面（floating）；清單裡這份先藏起來、位子留著
+        .opacity(held ? 0 : 1)
+        .offset(y: held ? 0 : touch.giveWay(index: index))
         .animation(held || calm ? nil : Tok.Motion.dragShift, value: touch.dragTo)
-        .zIndex(held ? 1 : 0)
         .background(GeometryReader { geo in
             Color.clear.preference(key: RowFramesKey.self, value: [item.id: geo.frame(in: .named(PaperList.space))])
         })
         .id(item.id)
+    }
+
+    /// 拖著排順序的那一行：浮在清單上面跟著手指。不放在清單裡，紙自己捲得再遠它都在
+    @ViewBuilder private var floating: some View {
+        if let id = touch.dragID, let item = note.items.first(where: { $0.id == id }) {
+            PaperRow(
+                item: item, editing: false, focus: nil, colors: colors, slide: 0, armed: false, held: true,
+                actions: LineActions(), voice: []
+            )
+            .offset(y: touch.floatY)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     /// VoiceOver 用不了滑動和拖曳：從動作選單（上下滑）劃掉、刪除、移動

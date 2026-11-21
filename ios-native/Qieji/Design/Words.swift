@@ -48,6 +48,7 @@ enum Words {
     static let directory = "目錄"
     static let search = "搜尋清單"
     static let emptyPaper = "還沒有東西，按右下 ＋ 記一行"
+    static let lockedNote = "這張上鎖了。這一版還不能解鎖，內容先不顯示。"
     static let saveFailed = "存檔沒成功，等一下會再試"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
     static let moved = "從舊版搬過來了"

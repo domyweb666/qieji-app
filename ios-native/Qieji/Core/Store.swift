@@ -21,6 +21,7 @@ final class Store: ObservableObject {
         composePending = false
         return had
     }
+
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（舊存檔沒能先備份）
     var frozen = false

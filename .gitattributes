@@ -2,3 +2,7 @@
 tools/githooks/* text eol=lf
 # patch-package 的 patch 要跟 node_modules 裡的檔案一樣是 LF，CRLF 在 EAS（macOS）上會套不上
 *.patch text eol=lf
+
+# SwiftUI 版：Windows 上也保持 LF（格式檢查、limrun 都吃 LF）
+ios-native/** text eol=lf
+ios-native/**/*.png binary

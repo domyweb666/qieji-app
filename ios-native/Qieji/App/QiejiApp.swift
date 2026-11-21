@@ -32,6 +32,10 @@ struct RootView: View {
         if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" {
             return Store(book: Demo.book())
         }
+        // 跑單元測試時 app 也會被啟動：不讀不寫，免得測試在機器上留下一份存檔
+        if info.environment["XCTestConfigurationFilePath"] != nil {
+            return Store()
+        }
         return Store(disk: Disk.standard())
     }
 
@@ -39,9 +43,13 @@ struct RootView: View {
         ZStack {
             Tok.Col.page.ignoresSafeArea()
             if let note = store.current {
-                PaperView(store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 })
-                    .id(note.id)
-                    .transition(.opacity)
+                if note.locked {
+                    LockedPaper(note: note) { route = .switcher }
+                } else {
+                    PaperView(store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 })
+                        .id(note.id)
+                        .transition(.opacity)
+                }
             }
         }
         .overlay(alignment: .bottom) { ToastBar(store: store) }

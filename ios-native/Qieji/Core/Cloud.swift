@@ -212,8 +212,8 @@ struct CloudSync {
         guard let there = peek(name) else {
             return // 讀不到（還沒下載下來）：這張這輪先不傳
         }
-        if let text = there, let raw = JSONValue.parse(text), let print = Sync.remotePrint(raw),
-           print != note.syncedHash, print != note.hash {
+        let theirs = there.flatMap { JSONValue.parse($0) }.flatMap(Sync.remotePrint)
+        if let theirs, theirs != note.syncedHash, theirs != note.hash {
             out.conflict = true
             return
         }

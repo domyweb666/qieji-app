@@ -114,6 +114,31 @@ final class DiskTests: XCTestCase {
         XCTAssertEqual(again.book.notes.first?.title, "在 Swift 版改過")
     }
 
+    /// 第一次打開沒讀到舊存檔（只建了教學紙），下次打開讀到了：照樣搬
+    func testLegacyFoundLaterIsStillMigrated() throws {
+        let first = disk()
+        let fresh = first.load(now: 5000)
+        XCTAssertEqual(fresh.source, .fresh)
+        XCTAssertTrue(first.write(fresh.book))
+        try writeLegacy([LegacyStore.bookKey: sampleBook(lines: 300), LegacyStore.lastKey: "aaa"])
+        let again = disk().load()
+        XCTAssertEqual(again.source, .legacy)
+        XCTAssertEqual(again.book.notes.first?.title, "舊版的紙")
+        XCTAssertEqual(again.last, "aaa")
+    }
+
+    /// 手上已經有自己記的東西：不拿舊存檔蓋掉
+    func testLegacyDoesNotOverwriteRealNotes() throws {
+        let first = disk()
+        var fresh = first.load(now: 5000).book
+        fresh.notes[0].items.insert(Item(id: "mine", text: "在 Swift 版記的"), at: 0)
+        XCTAssertTrue(first.write(fresh))
+        try writeLegacy([LegacyStore.bookKey: sampleBook(lines: 300)])
+        let again = disk().load()
+        XCTAssertEqual(again.source, .native)
+        XCTAssertEqual(again.book.notes.first?.items.first?.text, "在 Swift 版記的")
+    }
+
     func testUnreadableLegacyIsNotLost() throws {
         try writeLegacy([LegacyStore.bookKey: "{這不是 JSON"])
         let found = disk().load()

@@ -14,10 +14,21 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     @Published var dragFrom = -1
     @Published var dragTo = -1
     @Published var dragHeight: CGFloat = 0
+    @Published var floatY: CGFloat = 0 // 拖著的那一行浮在清單上面的位置（從清單頂算）
 
-    // 清單交進來的
+    /// 清單交進來的
     var order: [String] = []
-    var frames: [String: CGRect] = [:] // 每一行在捲動內容裡的位置
+    /// 每一行在捲動內容裡的位置（只有現在掛在畫面附近的行）
+    var frames: [String: CGRect] = [:] {
+        didSet {
+            for (id, frame) in frames {
+                heights[id] = frame.height
+            }
+        }
+    }
+
+    /// 看過的每一行多高（行離開畫面也記著：拖得很遠時靠它算位置）
+    private var heights: [String: CGFloat] = [:]
     var onStrike: (String) -> Void = { _ in }
     var onDelete: (String) -> Void = { _ in }
     var onTap: (String, CGPoint) -> Void = { _, _ in }
@@ -38,6 +49,8 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     private var autoSpeed: CGFloat = 0 // 點／秒，正的往下捲
     private var dragTouchY: CGFloat = 0 // 手指在捲動區裡的位置（跟著捲動內容走的座標）
     private var dragStartY: CGFloat = 0
+    private var heldTop: CGFloat = 0 // 拖著的那一行原本的頂端（捲動內容的座標）
+    private var touchStart: CGPoint = .zero // 手指按下去的地方（捲動內容的座標）
 
     /// 把手那一條有多寬（從右邊算）
     static let gripStrip = Tok.Shape.hitMin + Tok.Space.xs * 3
@@ -71,7 +84,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let scroll, dragID == nil, !landing else { return false }
-        let point = gesture.location(in: scroll)
+        let point = gesture === tap ? gesture.location(in: scroll) : touchStart
         let inGrip = point.x > scroll.bounds.width - ListTouch.gripStrip
         if gesture === swipePan {
             let speed = swipePan.velocity(in: scroll)
@@ -91,6 +104,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         // 正在打字的那一行自己收觸控（移游標、選字），不跟清單的手勢搶
         if gesture === tap || gesture === hold, touch.view is UITextView {
             return false
+        }
+        if let scroll, gesture !== tap {
+            touchStart = touch.location(in: scroll)
         }
         return true
     }
@@ -114,7 +130,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         let width = scroll.bounds.width
         switch gesture.state {
         case .began:
-            swipeID = row(at: gesture.location(in: scroll))
+            swipeID = row(at: touchStart)
             swipeTx = 0
             swipeArmed = false
             tick.prepare()
@@ -166,20 +182,23 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         guard let scroll else { return }
         switch gesture.state {
         case .began:
-            guard let id = row(at: gesture.location(in: scroll)), let from = order.firstIndex(of: id) else { return }
+            guard let id = row(at: touchStart), let from = order.firstIndex(of: id) else { return }
             dragScrollStart = scroll.contentOffset.y
-            dragStartY = gesture.location(in: scroll).y - scroll.contentOffset.y
+            dragStartY = touchStart.y - scroll.contentOffset.y
+            dragTouchY = gesture.location(in: scroll).y - scroll.contentOffset.y
             dragHeight = frames[id]?.height ?? Tok.Shape.rowMin
+            heldTop = frames[id]?.minY ?? 0
+            floatY = heldTop - scroll.contentOffset.y
             dragFrom = from
             dragTo = from
             dragDy = 0
             dragID = id
             tick.selectionChanged()
             thud.prepare()
+            followFinger()
         case .changed:
-            guard let id = dragID else { return }
+            guard dragID != nil else { return }
             dragTouchY = gesture.location(in: scroll).y - scroll.contentOffset.y
-            _ = id
             followFinger()
             steerAutoScroll()
         case .ended, .cancelled, .failed:
@@ -195,6 +214,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             return
         }
         dragDy = (dragTouchY - dragStartY) + (scroll.contentOffset.y - dragScrollStart)
+        floatY = heldTop + dragDy - scroll.contentOffset.y
         let target = targetIndex(for: id)
         if target != dragTo {
             dragTo = target
@@ -248,14 +268,15 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     /// 拖著的那行現在的中心，排在其他行的第幾個
     private func targetIndex(for id: String) -> Int {
-        guard let mine = frames[id] else { return dragFrom }
-        let mid = mine.midY + dragDy
+        let mid = heldTop + dragHeight / 2 + dragDy
         var slot = 0
-        for other in order where other != id {
-            guard let frame = frames[other] else { continue }
-            if frame.midY < mid {
+        var top: CGFloat = 0
+        for other in order {
+            let height = heights[other] ?? Tok.Shape.rowMin
+            if other != id, top + height / 2 < mid {
                 slot += 1
             }
+            top += height
         }
         return min(slot, max(0, order.count - 1))
     }
@@ -266,7 +287,12 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         let from = dragFrom, target = dragTo
         landing = true
         thud.impactOccurred()
-        withAnimation(Tok.Motion.dragLand) { dragDy = landingOffset(id: id, from: from, target: target) }
+        let rest = landingOffset(from: from, target: target)
+        let offset = scroll?.contentOffset.y ?? 0
+        withAnimation(Tok.Motion.dragLand) {
+            dragDy = rest
+            floatY = heldTop + rest - offset
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.deleteSlideSeconds) { [weak self] in
             guard let self else { return }
             var quiet = Transaction()
@@ -284,11 +310,10 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         }
     }
 
-    private func landingOffset(id: String, from: Int, target: Int) -> CGFloat {
+    private func landingOffset(from: Int, target: Int) -> CGFloat {
         guard from != target else { return 0 }
         let between = from < target ? order[(from + 1) ... target] : order[target ..< from]
-        let sum = between.reduce(CGFloat(0)) { $0 + (frames[$1]?.height ?? Tok.Shape.rowMin) }
-        _ = id
+        let sum = between.reduce(CGFloat(0)) { $0 + (heights[$1] ?? Tok.Shape.rowMin) }
         return from < target ? sum : -sum
     }
 
@@ -317,7 +342,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func onHeld(_ gesture: UILongPressGestureRecognizer) {
-        guard let scroll, gesture.state == .began, let id = row(at: gesture.location(in: scroll)) else { return }
+        guard gesture.state == .began, let id = row(at: touchStart) else { return }
         tick.selectionChanged()
         onLongPress(id)
     }
