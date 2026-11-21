@@ -63,8 +63,8 @@ struct DirPanel: View {
 
     private var layers: some View {
         ZStack(alignment: .topLeading) {
-            // 這層留暗幕不用霧面：上面那截要「看得到後面的紙」，霧掉就認不出是哪一張（2026-11-21 模擬器試過）
-            Tok.Col.scrim
+            // 後面的紙整個霧掉（多米 2026-11-22 看過對照圖選的；原本是黑色暗幕、上面那截看得到紙）
+            Veil(solidColor: Tok.Col.scrim)
                 .opacity(Double(model.progress))
                 .contentShape(Rectangle())
                 .onTapGesture { model.tapOut() }
