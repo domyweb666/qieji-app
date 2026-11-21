@@ -1,6 +1,6 @@
 # Handoff: 茄記整個重寫成 SwiftUI，第一晚把紙面、規則層、搬舊存檔做完並在模擬器驗過，等多米決定怎麼上真機
 
-> 產出時間：2026-11-21 21:32（+08:00）
+> 產出時間：2026-11-21 21:32（+08:00）；同日 22:30 補：控制中心按鈕、目錄面板整套做完（見下面「22:30 補」）
 > 專案：茄記 iOS。這個資料夾（`E:\茄記\qieji-swift`，分支 `overnight-20261121-2038`）是 SwiftUI 版，新程式在 `ios-native/`。Expo 版（1.1／1.1.1）在 `E:\茄記\qieji-1.1`，沒有動，1.1.1 照舊等 12/1 打包
 > 多米沒有 Mac、不太看程式。這台 Windows 沒有 Swift 工具，編譯與測試靠 limrun（以分鐘計費，用完要關）
 > 上一版交接（Expo 1.1 時期的）：`.vibe/handoff/archive/2026-11-14-1721.md`
@@ -18,6 +18,23 @@
 - 寫 CI 流程檔（沒推）、limrun 用的檢查腳本 `ios-native/tools-check.sh`
 - 33 個測試全過，SwiftFormat、SwiftLint 零錯誤；模擬器上驗過手勢與整條搬家流程
 
+## ✅ 22:30 補：控制中心按鈕、目錄面板
+
+- 控制中心「記一行」搬進 `ios-native/Shared/NewLine.swift`、`ios-native/QiejiControls/`，Bundle ID 與 kind 跟 1.1 一樣。`qieji://new` 只有完整版才升起輸入框；內購還沒搬，現在一律當沒買（`Store.isFull`，假資料模式才是 true）
+- 目錄面板整套（多米選丙：一次全做）在 `ios-native/Qieji/Dir/`：面板升起與下拉收起、方磚、翻頁、資料夾（開、改名、裡面翻頁）、搜尋、新的一張、長按選單（顏色、改磚上的字、釘選、刪除）、抖動、拖曳換位、放進空格、疊成資料夾、拖進拖出資料夾、邊緣翻頁與開新頁、「−」刪除、搬行模式、VoiceOver 動作
+- 切換清單改回 1.1 的內容，最下面「管理所有清單」開目錄；長按一行多了「搬到…」
+- 49 個測試全過（新增 16 個在 `QiejiTests/DirGridTests.swift`），SwiftFormat、SwiftLint 零錯誤
+- 模擬器上逐項操作過，截圖 8–14 在 `.vibe/overnight-截圖/`。比較頁在 `.uiux/03-線框/2.0-目錄面板比較.html`
+- 做法跟 1.1 不同的地方：磚的位置全用算的（`DirGrid.swift`），手勢掛在翻頁的捲動區上（`DirTouch.swift`），一組管整頁。磚換位、換頁、進出資料夾時不會有「磚換容器手勢就斷」那類問題
+- 十三條代決在 `.vibe/代決清單.md` 最後（2026-11-21 那幾條）
+
+### 目錄還沒驗、沒做的
+
+- **真機沒跑過**：拖曳順不順、長按後拖的門檻、互換的時機都只在模擬器看過「有作用」
+- 沒在模擬器驗到：資料夾裡拖到框邊翻頁、資料夾裡換順序、VoiceOver 動作、減少動態、深色、搬行模式的搜尋、最近刪除那一列（假資料沒有刪掉的東西）
+- 沒做：拿起時的補位動畫、液態玻璃、釘滿時換掉哪一張的選單、搜尋點一行捲到那行、封面圖的磚
+- 目錄每畫一次會重算整排座位（`DirModel.entries`），紙很多時可能要加快取；還沒量
+
 ## 🚧 還沒做完 / 待決定
 
 - **真機一次都沒跑過** — 手感只有多米上手才算數，而且怎麼上真機還沒定（見下一條）
@@ -26,7 +43,7 @@
 - **真機的舊存檔沒讀過** — 格式對過套件原始碼、用假造的檔測過；主要位置（Application Support）在模擬器上沒能放檔驗證，只走過 Documents 那個位置
 - **上鎖的紙的擋板只編譯過**，沒在模擬器看過畫面
 - **版面是估的** — 標題區、切換清單、最近刪除沒有逐點對 1.1，等多米看
-- **還沒搬的功能** — 內購、Face ID 上鎖、封面圖、桌面小工具、控制中心按鈕、目錄面板的畫面（規則已搬好測過）、付費頁、新功能頁、蔬菜家族頁、授權頁、設定裡的外觀／字級／同步開關／清除資料、備份匯出匯入、評分提示、火柴人
+- **還沒搬的功能** — 內購、Face ID 上鎖、封面圖、桌面小工具、付費頁、新功能頁、蔬菜家族頁、授權頁、設定裡的外觀／字級／同步開關／清除資料、備份匯出匯入、評分提示、火柴人
 - **待多米表態的小事** — SwiftLint 門檻我放寬了；repo 是私人的所以 CI 會扣額度；幾個我自己定的行為（都列在 `OVERNIGHT.md` 待確認）
 
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
@@ -47,6 +64,7 @@
 - `.vibe/overnight-截圖/` ← 六張模擬器截圖
 - `ios-native/project.yml`、`ios-native/.swiftlint.yml` ← 專案與規矩設定
 - `ios-native/Qieji/Paper/ListTouch.swift`、`PaperList.swift`、`LineText.swift` ← 紙面的手勢與文字框，調手感都在這
+- `ios-native/Qieji/Dir/` ← 目錄面板：`DirGrid`（純計算）、`DirModel`＋`+Drag`＋`+Drop`＋`+Touch`（狀態與規則）、`DirTouch`（UIKit 手勢）、`DirPanel`／`DirTiles`／`DirFolder`（畫面）。對照 `src/components/DirPanel.tsx`
 - `ios-native/Qieji/Core/Disk.swift`、`LegacyStore.swift` ← 搬舊存檔
 - `ios-native/Qieji/Core/Cloud.swift` ← iCloud 傳輸層（沒接）
 - `tools/gen-swift-fixtures.mjs`、`ios-native/QiejiTests/` ← 對照答案與測試
@@ -61,7 +79,7 @@
 3. **先問多米「怎麼試手感」的答案**（並存的新 Bundle ID，或先搬內購）。沒有答案之前不要打包
 4. 多米選並存：`project.yml` 的 Bundle ID 改成他建好的那個、照豆鍵的 `testflight.yml` 寫打包流程，等他開口才觸發
 5. 多米選先搬內購：對照 `src/lib/iap.ts`、`access.ts`、`full.ts`，用 StoreKit 2 寫，沿用同一個產品 ID；舊版的購買記號 `qieji.full.v1` 已經在 `Disk.Loaded.legacy` 裡帶著
-6. 兩條路都還沒定時，可以先做不用決定的：目錄面板的畫面（規則在 `Seats.swift`，先照 `feedback_visible_things_compare_first` 給比較頁）、控制中心按鈕（`targets/controls` 兩個 Swift 檔可直接搬）
+6. 目錄面板與控制中心按鈕已經做完（22:30 補）。兩條路都還沒定時，下一個不用決定的是設定頁的外觀／字級、授權頁、新功能頁；要動到購買判斷的都等內購
 7. 每次改完：開 limrun → `lim xcode test` → `sh tools-check.sh` → 關掉並確認清單
 
 ## 🗑️ 這次會話的雜訊（下次別重新討論）

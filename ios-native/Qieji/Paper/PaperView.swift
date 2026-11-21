@@ -7,6 +7,7 @@ struct PaperView: View {
     let note: Note
     var onTitle: () -> Void = {}
     var onRoute: (Route) -> Void = { _ in }
+    var onMoveLine: (String) -> Void = { _ in }
 
     @StateObject private var touch = ListTouch()
     @State private var editingID: String?
@@ -166,6 +167,9 @@ struct PaperView: View {
         if let id = menuID, let item = note.items.first(where: { $0.id == id }) {
             Button(item.done ? Words.unstrike : Words.strike) { store.toggle(id) }
             Button(Words.copy) { UIPasteboard.general.string = item.text }
+            if !Labels.trim(item.text).isEmpty {
+                Button(Words.moveTo) { onMoveLine(id) }
+            }
             Button(Words.deleteLine, role: .destructive) { store.binLine(id) }
             Button(Words.cancel, role: .cancel) {}
         }

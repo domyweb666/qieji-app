@@ -1,47 +1,42 @@
 import SwiftUI
 
-/// 切換清單：點左上清單名升起。釘選的、最近開過的、所有清單（照目錄的座位），可以搜尋、開新的一張。
+/// 切換清單：點左上清單名升起。新的一張、釘選的、最近開過的；最下面「管理所有清單」打開目錄（搜尋、排磚、資料夾都在那裡）。
 struct SwitchSheet: View {
     @ObservedObject var store: Store
     let close: () -> Void
-    @State private var query = ""
+    var manage: () -> Void = {}
 
     var body: some View {
         NavigationStack {
             List {
-                if Labels.trim(query).isEmpty {
-                    let lists = Seats.switchList(store.book, recent: store.disk?.recent ?? [])
-                    Button {
-                        store.newNote()
-                        close()
-                    } label: {
-                        Label(Words.newNote, systemImage: "plus")
-                            .font(Tok.Font.body)
-                            .foregroundColor(Tok.Col.accent)
-                    }
-                    if !lists.pinned.isEmpty {
-                        Section(Words.pinnedGroup) { ForEach(lists.pinned) { row($0) } }
-                    }
-                    if !lists.recent.isEmpty {
-                        Section(Words.recentGroup) { ForEach(lists.recent) { row($0) } }
-                    }
-                    Section(Words.allNotes) { ForEach(Seats.seatedNotes(store.book)) { row($0) } }
-                } else {
-                    ForEach(Seats.searchLines(store.book, query: query), id: \.note.id) { hit in
-                        Section {
-                            row(hit.note)
-                            ForEach(hit.lines) { line in
-                                Text(line.text)
-                                    .font(Tok.Font.callout)
-                                    .foregroundColor(line.done ? Tok.Col.textStrike : Tok.Col.textSecondary)
-                                    .strikethrough(line.done)
-                                    .lineLimit(2)
-                            }
+                let lists = Seats.switchList(store.book, recent: store.disk?.recent ?? [])
+                Button {
+                    store.newNote()
+                    close()
+                } label: {
+                    Label(Words.newNote, systemImage: "plus")
+                        .font(Tok.Font.body)
+                        .foregroundColor(Tok.Col.accent)
+                }
+                if !lists.pinned.isEmpty {
+                    Section(Words.pinnedGroup) { ForEach(lists.pinned) { row($0) } }
+                }
+                if !lists.recent.isEmpty {
+                    Section(Words.recentGroup) { ForEach(lists.recent) { row($0) } }
+                }
+                Section {
+                    Button(action: manage) {
+                        HStack {
+                            Label(Words.manageAll, systemImage: "square.grid.2x2")
+                            Spacer()
+                            Image(systemName: "chevron.right").font(Tok.Font.footnote)
                         }
+                        .font(Tok.Font.body)
+                        .foregroundColor(Tok.Col.textPrimary)
+                        .frame(minHeight: Tok.Shape.hitMin)
                     }
                 }
             }
-            .searchable(text: $query, prompt: Words.search)
             .navigationTitle(Words.switchTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(Words.done, action: close) } }

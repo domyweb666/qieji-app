@@ -52,6 +52,57 @@ enum Words {
     static let saveFailed = "存檔沒成功，等一下會再試"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
     static let moved = "從舊版搬過來了"
+    // 目錄面板
+    static let manageAll = "管理所有清單"
+    static let searchAll = "搜尋"
+    static let clearSearch = "清除搜尋"
+    static let closeDir = "收起目錄"
+    static let doneEditing = "完成編輯"
+    static let moveTo = "搬到…"
+    static let moveToNew = "搬到新的一張"
+    static let pinned = "已釘選"
+    static let unpinned = "已取消釘選"
+    static let deleteAsk = "刪除"
+    static let closeFolder = "收起資料夾"
+    static let folderNameLabel = "資料夾名字"
+    static let newFolder = "新資料夾"
+    static let putIn = "放進資料夾"
+    static let takeOut = "移出資料夾"
+    static let moveForward = "往前移"
+    static let moveBack = "往後移"
+    static let closeMenu = "關閉選單"
+    static func pinFull(_ max: Int) -> String {
+        "已釘滿 \(max) 張，先取消一張再釘"
+    }
+
+    static func movedTo(_ name: String) -> String {
+        "已搬到「\(name)」"
+    }
+
+    static func moveHead(_ line: String) -> String {
+        "把「\(line)」搬到"
+    }
+
+    static func deleteTitle(_ name: String) -> String {
+        "要刪除「\(name)」嗎？"
+    }
+
+    static func searchNone(_ text: String) -> String {
+        "找不到含「\(text)」的清單或行"
+    }
+
+    static func folderVoice(_ name: String, _ count: Int) -> String {
+        "資料夾，\(name)，\(count) 張"
+    }
+
+    static func pageVoice(_ page: Int, _ count: Int) -> String {
+        "第 \(page) 頁，共 \(count) 頁"
+    }
+
+    static func trashVoice(_ count: Int) -> String {
+        "最近刪除，\(count) 項"
+    }
+
     static let fullOnlyControl = "控制中心的「記一行」是完整版功能"
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"

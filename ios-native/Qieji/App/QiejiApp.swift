@@ -22,8 +22,18 @@ enum Route: String, Identifiable {
 
 /// 根畫面：紙是家。打開就是上次那張紙，其他畫面都從紙上面升起來。
 struct RootView: View {
-    @StateObject private var store = RootView.makeStore()
+    @StateObject private var store: Store
+    /// 目錄面板的狀態。不讓根畫面看著它（看著的只有 DirHost）：目錄裡每動一格，紙不用跟著重畫
+    @State private var dir: DirModel
     @State private var route: Route?
+    @State private var wantDir = false // 切換清單收完之後要打開目錄
+
+    init() {
+        let made = RootView.makeStore()
+        _store = StateObject(wrappedValue: made)
+        _dir = State(initialValue: DirModel(store: made))
+    }
+
     @Environment(\.scenePhase) private var phase
 
     /// 啟動參數帶 -demo、或環境變數 QIEJI_DEMO=1：用假資料、不讀不寫（模擬器截圖與手勢測試用）
@@ -48,14 +58,19 @@ struct RootView: View {
                 if note.locked {
                     LockedPaper(note: note) { route = .switcher }
                 } else {
-                    PaperView(store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 })
-                        .id(note.id)
-                        .transition(.opacity)
+                    PaperView(
+                        store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 },
+                        onMoveLine: { dir.open(move: $0) }
+                    )
+                    .id(note.id)
+                    .transition(.opacity)
                 }
             }
         }
+        // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
+        .overlay { DirHost(store: store, model: dir) { route = $0 } }
         .overlay(alignment: .bottom) { ToastBar(store: store) }
-        .sheet(item: $route) { sheet($0) }
+        .sheet(item: $route, onDismiss: openDirIfAsked) { sheet($0) }
         .onAppear { store.boot() }
         .onChange(of: phase) { now in
             if now == .active {
@@ -69,6 +84,7 @@ struct RootView: View {
             // 完整版功能（1.1 片 B4）：沒買的不開輸入框。1.1 是打開付費頁，付費頁還沒搬，先用一句提示
             if url.host == "new" {
                 route = nil
+                dir.close()
                 if store.isFull {
                     store.requestCompose()
                 } else {
@@ -78,10 +94,21 @@ struct RootView: View {
         }
     }
 
+    /// 切換清單的「管理所有清單」：等切換清單收完才升起目錄（兩個同時動會打架）
+    private func openDirIfAsked() {
+        guard wantDir else { return }
+        wantDir = false
+        dir.open()
+    }
+
     @ViewBuilder
     private func sheet(_ route: Route) -> some View {
         switch route {
-        case .switcher: SwitchSheet(store: store) { self.route = nil }
+        case .switcher:
+            SwitchSheet(store: store, close: { self.route = nil }, manage: {
+                wantDir = true
+                self.route = nil
+            })
         case .trash: TrashView(store: store) { self.route = nil }
         case .settings: SettingsView { self.route = nil }
         }
@@ -147,7 +174,25 @@ enum Demo {
         third.title = "買菜"
         third.items = [Item(text: "青蔥"), Item(text: "豆腐")]
         book.notes = [first, second, third]
+        // 目錄要看得出翻頁、資料夾：再放二十幾張各種顏色的，其中四張收在一個資料夾裡
+        let names = [
+            "想讀的書", "影片點子", "這週要交", "睡前", "京都行程", "課程大綱", "會議", "講稿", "要催的", "報帳",
+            "食譜", "禮物", "健身", "電影", "播客", "靈感", "待買", "修東西", "繳費", "植物", "貓", "旅費", "讀書會", "年度",
+        ]
+        for (index, name) in names.enumerated() {
+            var note = Note.blank(color: NoteColor.keys[index % NoteColor.keys.count], now: now - Double(3000 + index))
+            note.title = name
+            note.items = [Item(text: name + "的第一行")]
+            book.notes.append(note)
+        }
         Seats.fixOrder(&book)
+        if let order = book.order, order.count > 9 {
+            let inside = Array(order[6 ... 9])
+            book.folders = [Folder(id: "fdemo", name: "工作", ids: inside)]
+            book.order = order.filter { !inside.contains($0) }
+            book.order?.insert("fdemo", at: 6)
+            Seats.fixOrder(&book)
+        }
         return book
     }
 }

@@ -86,6 +86,13 @@ enum Tok {
         static let rowEditingFill = Raw.white.color(0.45, 0.08)
         static let searchFill = Raw.plum900.color(0.07, 0.14)
         static let menuSep = Raw.plum900.color(0.12, 0.18)
+        // 打開的資料夾：後面的暗幕（疊在霧上）、框的底、框邊的亮線；減少透明度時用比較實的那組
+        static let folderVeilBlur = Raw.black.color(0.12, 0.25)
+        static let folderVeil = Raw.black.color(0.4, 0.5)
+        static let folderGlassBlur = Raw.cream50.color(0.55, 0.5)
+        static let folderGlass = Raw.cream50.color(0.92, 0.9)
+        static let folderGlassEdge = Raw.white.color(0.7, 0.12)
+        static let menuScrim = Raw.black.color(0.28, 0.4)
         static let shadow = Tok.solid(Raw.shadowInk)
     }
 
@@ -229,6 +236,24 @@ enum Tok {
         static let shadowSoft: Double = 0.14
         static let shadowStrong: Double = 0.24
         static let aboutLogo: CGFloat = 64
+        // 目錄面板（數值照 Expo 版 tokens.ts 的 shape）
+        static let borderCard: CGFloat = 1
+        static let tileLabelH: CGFloat = 16
+        static let dirPeek: CGFloat = 92 // 面板上面留一截看得到後面的紙
+        static let dirGrab: CGFloat = 5
+        static let handleSolo: CGFloat = 38
+        static let handleOff: Double = 0.3
+        static let pageDot: CGFloat = 7
+        static let folderCols = 3
+        static let folderRows = 3
+        static let folderDotsH: CGFloat = 14
+        static let folderMinis = 3
+        static let folderMiniGap: CGFloat = 3
+        static let folderMiniPad: CGFloat = 7
+        static let folderMiniGlyph: CGFloat = 1.5
+        static let minusBadge: CGFloat = 22
+        static let menuWide: CGFloat = 320
+        static let swatchRing: CGFloat = 2
     }
 
     // MARK: 動態
@@ -255,6 +280,26 @@ enum Tok {
         static let reducedDimFrom: Double = 0.4
         static let deleteSlideSeconds: Double = 0.22
         static let composerFocusDelay: Double = 0.3
+        // 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
+        static let tileShift = Animation.interpolatingSpring(mass: 1, stiffness: 484, damping: 37)
+        static let dirPanel = Animation.spring(response: 0.34, dampingFraction: 1)
+        static let dirPanelSeconds: Double = 0.34
+        static let dirFade = Animation.easeInOut(duration: 0.2)
+        static let dirFadeSeconds: Double = 0.2
+        static let jiggle = Animation.easeInOut(duration: 0.12)
+        static let jiggleDeg: Double = 1.2
+        static let tileHoldScale: CGFloat = 1.08
+        static let menuLiftScale: CGFloat = 1.04
+        static let stackPlate: CGFloat = 1.25
+        static let stackDim: Double = 0.6
+        static let stackCue = Animation.easeInOut(duration: 0.12)
+        static let stackPop: CGFloat = 1.1
+        static let stackPopSeconds: Double = 0.13
+        static let sink = Animation.easeOut(duration: 0.26)
+        static let sinkScale: CGFloat = 0.3
+        static let launch = Animation.easeOut(duration: 0.26)
+        static let launchSeconds: Double = 0.26
+        static let dragLandSeconds: Double = 0.25
     }
 
     // MARK: 手勢門檻
@@ -270,6 +315,17 @@ enum Tok {
         static let dragAutoSpeed: CGFloat = 900
         static let longPress: Double = 0.5
         static let longPressMove: CGFloat = 10
+        // 目錄面板（數值照 Expo 版 tokens.ts 的 gesture）
+        static let tileDragHeld: CGFloat = 18 // 長按後（選單已跳出）再拖這麼遠才拿起
+        static let edgeZone: CGFloat = 36
+        static let stackY: CGFloat = 0.375
+        static let stackYHold: CGFloat = 0.5
+        static let stackFar: CGFloat = 0.25
+        static let stackFarHold: CGFloat = 0.36
+        static let swapStill: CGFloat = 3
+        static let pullActivate: CGFloat = 10
+        static let pushCloseRatio: CGFloat = 0.15
+        static let flickAhead: CGFloat = 140 // 放手後照慣性還會再走這麼遠就算「甩」
     }
 
     // MARK: 時間
@@ -279,5 +335,12 @@ enum Tok {
         static let saveDebounce: Double = 0.25
         static let cloudOffGrace: Double = 10
         static let cloudPushWait: Double = 2
+        // 目錄拖曳（數值照 Expo 版 tokens.ts 的 timing，換成秒）
+        static let edgeFlip: Double = 0.6
+        static let swapDwell: Double = 0.1
+        static let swapPoll: Double = 0.125
+        static let swapPast: Double = 0.05
+        static let stackHover: Double = 0.12
+        static let folderLeave: Double = 0.35
     }
 }
