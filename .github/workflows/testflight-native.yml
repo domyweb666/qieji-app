@@ -1,0 +1,155 @@
+name: TestFlight (SwiftUI)
+
+# 茄記 SwiftUI 版（ios-native/，版本 2.0.0）送 TestFlight。2026-11-21 寫好，還沒跑過。
+# 只有多米開口才打包：推一個 tfs- 開頭的 tag（例如 tfs-1），或在 Actions 頁按 Run workflow。推一般的 commit 不會觸發。
+# Expo 版（1.1.x）照舊用 EAS，不走這條。
+# Bundle ID 跟 1.1 同一個（多米 2026-11-21 定：直接換掉手機上的 1.1 來試手感）：
+# 這個 build 只會到 TestFlight 的測試者手上，不會到 App Store 的使用者；裝了會取代手機上的 1.1。
+# repo 是私人的，macOS 機器的分鐘數照十倍扣。
+# 簽章與上傳照番茄帳 testflight-native.yml 那套（App Store Connect API 金鑰＋Xcode 自動簽章，app 與控制中心擴充一起簽）。
+# 要先在 repo 的 Settings → Secrets 放四個值：ASC_KEY_ID、ASC_ISSUER_ID、ASC_PRIVATE_KEY、APPLE_TEAM_ID。
+on:
+  push:
+    tags: ['tfs-*']
+  workflow_dispatch:
+
+# 連按多次只編最後一次
+concurrency:
+  group: testflight-native
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  XCODEGEN_VERSION: "2.46.0"
+  XCODEGEN_SHA256: "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806"
+  # build 號＝這條 workflow 的 run 編號往上墊 200：跟 EAS 幫 1.x 編過的號碼拉開，不會撞
+  BUILD_OFFSET: 200
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUNDLE_ID: org.domyweb.qieji
+    defaults:
+      run:
+        working-directory: ios-native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 選 Xcode 26
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: 放置 App Store Connect 金鑰
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          mkdir -p "$HOME/private_keys"
+          # secret 貼進 GitHub 時換行常被吃掉變成一行，xcodebuild 不收；重排成標準的每行 64 字
+          printf '%s' "$ASC_PRIVATE_KEY" | python3 -c '
+          import re, sys, textwrap
+          raw = sys.stdin.read().replace("\\n", "")
+          body = re.sub(r"-----(BEGIN|END) PRIVATE KEY-----", "", raw)
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", body)
+          lines = ["-----BEGIN PRIVATE KEY-----", *textwrap.wrap(body, 64), "-----END PRIVATE KEY-----"]
+          sys.stdout.write("\n".join(lines) + "\n")
+          ' > "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          sed "s/__TEAM_ID__/${APPLE_TEAM_ID}/" ../.github/ExportOptions.plist > "$HOME/ExportOptions.plist"
+
+      # 先問 Apple 再花時間編：金鑰對不對、App Store Connect 有沒有這個 app
+      - name: 金鑰自檢（直接問 Apple）
+        run: |
+          python3 -m venv "$HOME/venv" && "$HOME/venv/bin/pip" install -q pyjwt cryptography requests
+          "$HOME/venv/bin/python" - <<'PY'
+          import os, time, jwt, requests
+          key = open(os.path.expanduser(f"~/private_keys/AuthKey_{os.environ['ASC_KEY_ID']}.p8")).read()
+          token = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "iat": int(time.time()), "exp": int(time.time())+600, "aud": "appstoreconnect-v1"},
+                             key, algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          r = requests.get("https://api.appstoreconnect.apple.com/v1/apps?fields[apps]=bundleId,name&limit=200", headers={"Authorization": f"Bearer {token}"})
+          print("Apple 回應:", r.status_code)
+          if r.status_code != 200:
+              print(r.text[:800]); raise SystemExit("金鑰被 Apple 拒絕：請檢查 Key ID / Issuer ID / .p8 內容，以及金鑰是 Team Key 且角色為 Admin")
+          bundle = os.environ["BUNDLE_ID"]
+          if not any(a["attributes"]["bundleId"] == bundle for a in r.json()["data"]):
+              raise SystemExit(f"App Store Connect 還沒有 bundle ID 為 {bundle} 的 app 紀錄")
+          PY
+
+      - name: 安裝 XcodeGen（釘版本、驗 SHA-256）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+
+      - name: 產生 Xcode 專案
+        run: |
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate --spec project.yml
+          test -d Qieji.xcodeproj
+          grep -q "PrivacyInfo.xcprivacy in Resources" Qieji.xcodeproj/project.pbxproj
+
+      - name: 跑單元測試（不過就不封存）
+        run: |
+          xcodebuild test \
+            -project Qieji.xcodeproj \
+            -scheme Qieji \
+            -destination "platform=iOS Simulator,name=iPhone 17" \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY=-
+
+      - name: 封存（自動簽章）
+        run: |
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + BUILD_OFFSET))
+          echo "build ${BUILD_NUMBER}"
+          xcodebuild archive \
+            -project Qieji.xcodeproj \
+            -scheme Qieji \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$HOME/build/qieji.xcarchive" \
+            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${BUILD_NUMBER}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+
+      - name: 上傳 TestFlight
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$HOME/build/qieji.xcarchive" \
+            -exportOptionsPlist "$HOME/ExportOptions.plist" \
+            -exportPath "$HOME/build/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+
+      - name: 清掉這次 runner 產的開發憑證（runner 用完即丟，憑證留著只會撞上限）
+        if: always()
+        run: |
+          [ -x "$HOME/venv/bin/python" ] || exit 0
+          "$HOME/venv/bin/python" - <<'PY'
+          import os, time, jwt, requests
+          key = open(os.path.expanduser(f"~/private_keys/AuthKey_{os.environ['ASC_KEY_ID']}.p8")).read()
+          tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "iat": int(time.time()), "exp": int(time.time())+600, "aud": "appstoreconnect-v1"},
+                           key, algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          H = {"Authorization": f"Bearer {tok}"}
+          c = requests.get("https://api.appstoreconnect.apple.com/v1/certificates?fields[certificates]=certificateType,displayName&limit=50", headers=H).json()
+          for x in c.get("data", []):
+              a = x["attributes"]
+              if a["certificateType"] in ("DEVELOPMENT", "IOS_DEVELOPMENT") and a.get("displayName") == "Created via API":
+                  r = requests.delete(f"https://api.appstoreconnect.apple.com/v1/certificates/{x['id']}", headers=H)
+                  print("清掉開發憑證", x["id"], r.status_code)
+          PY
+
+      - name: 清掉金鑰
+        if: always()
+        run: rm -rf "$HOME/private_keys"
