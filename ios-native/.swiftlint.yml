@@ -1,0 +1,102 @@
+# SwiftLint（可驗證的規矩）。CI 用 `swiftlint lint --strict` 強制。設定照番茄帳；門檻放寬（函式 80 行、檔案 500 行、行寬 140、識別字最少 2 字）：茄記的規則是從 TypeScript 逐條搬的，照原本的切法才對得回去。
+# 能被這裡抓到的，不寫進 .vibe/規矩檔.md。
+included:
+  - .
+excluded:
+  - .build
+  - DerivedData
+
+opt_in_rules:
+  - cyclomatic_complexity
+  - function_body_length
+  - file_length
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - empty_count
+  - closure_spacing
+  - sorted_imports
+  - explicit_init
+  - fatal_error_message
+  - discouraged_optional_boolean
+  - todo
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+function_body_length:
+  warning: 80
+  error: 120
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+file_length:
+  warning: 500
+  error: 700
+line_length:
+  warning: 140
+  error: 180
+type_body_length:
+  warning: 400
+  error: 600
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - ms
+
+# SwiftFormat 的 trailingCommas 會在多行集合結尾加逗號，SwiftLint 預設禁；兩邊要一致，以 SwiftFormat 為準
+trailing_comma:
+  mandatory_comma: true
+
+# 錯誤要大聲
+force_cast: error
+force_try: error
+force_unwrapping: error
+implicitly_unwrapped_optional: error
+todo: error
+
+custom_rules:
+  no_print:
+    name: "不准 print / NSLog / debugPrint"
+    regex: '^\s*(print|NSLog|debugPrint)\('
+    message: "用 os.Logger，而且使用者寫的字不准進 log"
+    severity: error
+  no_empty_catch:
+    name: "不准空的 catch"
+    regex: 'catch\s*(\w+\s*)?\{\s*\}'
+    message: "錯誤不准默默吞；真的不用處理要寫一行為什麼"
+    severity: error
+  no_combine:
+    name: "不用 Combine"
+    regex: '^\s*import Combine'
+    message: "用 async/await，不用 Combine"
+    severity: error
+  # 以下四條：畫面寫死數值檢查（Expo 版 token-check 的同一條規矩）。Design/Tokens.swift 是唯一例外。
+  no_hardcoded_color:
+    name: "畫面不准寫死顏色"
+    regex: '#[0-9A-Fa-f]{3,8}\b|Color\(red:|Color\(hex:|UIColor\(red:|Color\(\.sRGB|Color\(white:'
+    excluded: "Design/Tokens\\.swift$"
+    message: "顏色只准用 Tokens"
+    severity: error
+  no_hardcoded_font_size:
+    name: "畫面不准寫死字級"
+    regex: '\.font\(\.system\(size:|Font\.system\(size:'
+    excluded: "Design/Tokens\\.swift$"
+    message: "字級只准用 Tokens，跟著系統字級走"
+    severity: error
+  no_hardcoded_spacing:
+    name: "畫面不准寫死間距與圓角"
+    regex: '\.padding\((\.[a-zA-Z]+, *)?[0-9]|cornerRadius: *[0-9]|spacing: *[0-9]'
+    excluded: "Design/Tokens\\.swift$"
+    message: "間距與圓角只准用 Tokens"
+    severity: error
+  no_hardcoded_duration:
+    name: "畫面不准寫死動畫秒數"
+    regex: 'duration: *[0-9]'
+    excluded: "Design/Tokens\\.swift$"
+    message: "動畫只准用 Tokens"
+    severity: error

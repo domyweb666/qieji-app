@@ -1,0 +1,68 @@
+# 茄記 iOS（SwiftUI）的專案描述檔。Xcode 專案不進 repo，CI 與 limrun 用 XcodeGen 照這份產生。
+# 2026-11-21 多米決定整個重寫成 SwiftUI；做法照番茄帳（E:\豆帳\ios-native）那套。
+# Bundle ID 跟 Expo 版同一個：追平之後直接接手 App Store 上那個 app，使用者更新上來資料留在原地。
+name: Qieji
+
+options:
+  bundleIdPrefix: org.domyweb
+  deploymentTarget:
+    iOS: "16.4" # 跟 Expo 58 版一樣（react-native 0.88 的最低版本）：不讓任何現有使用者被擋在外面
+
+targets:
+  Qieji:
+    type: application
+    platform: iOS
+    sources:
+      - Qieji
+    info:
+      path: Qieji/Info.plist
+      properties:
+        CFBundleDisplayName: 茄記
+        # 沒宣告語言時 App 用英文的日期格式與系統按鈕字（米說 2026-11-02 踩過）
+        CFBundleDevelopmentRegion: zh-Hant
+        CFBundleLocalizations:
+          - zh-Hant
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        # 控制中心「記一行」按鈕開 qieji://new（Expo 版同一個 scheme）
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - qieji
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji
+        MARKETING_VERSION: "2.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # 只給 iPhone（1），跟 Expo 版的 supportsTablet: false 一樣
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.10"
+
+  QiejiTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - QiejiTests
+    dependencies:
+      - target: Qieji
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.QiejiTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.10"
+
+schemes:
+  Qieji:
+    build:
+      targets:
+        Qieji: all
+        QiejiTests: [test]
+    test:
+      config: Debug
+      targets:
+        - QiejiTests
