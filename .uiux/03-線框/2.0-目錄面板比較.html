@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>茄記 2.0 目錄面板：第一批做到哪</title>
+<style>
+  :root {
+    --page: #FBF3E7; --surface: #FFFCF6; --sep: #EADFCF; --ink: #2E2233; --ink2: #75677A;
+    --accent: #7D467F; --danger: #C83C32; --search: rgba(46,34,51,.07); --scrim: rgba(0,0,0,.2);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F3EADB; color: var(--ink); font: 16px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 40px 0 6px; }
+  p { margin: 6px 0; }
+  .sub { color: var(--ink2); }
+  .phones { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; }
+  figure { margin: 0; width: 250px; }
+  figcaption { font-size: 14px; margin-top: 8px; }
+  figcaption b { display: block; font-size: 15px; }
+  .frame { width: 250px; height: 541px; border-radius: 30px; overflow: hidden; border: 5px solid #2E2233; background: #000; position: relative; }
+  .phone { width: 390px; height: 844px; transform: scale(.6154); transform-origin: 0 0; position: relative; background: #F4EEF2; overflow: hidden; font-size: 17px; line-height: 1.3; }
+  /* 後面的紙 */
+  .paper-title { position: absolute; top: 54px; left: 20px; font-size: 28px; font-weight: 700; }
+  .paper-title small { font-size: 16px; color: var(--ink2); margin-left: 4px; }
+  .scrim { position: absolute; inset: 0; background: var(--scrim); }
+  /* 面板 */
+  .panel { position: absolute; left: 0; right: 0; top: 92px; bottom: 0; background: var(--surface); border-radius: 24px 24px 0 0; box-shadow: 0 -4px 16px rgba(59,32,80,.12); }
+  .grab { position: absolute; top: 19px; left: 50%; width: 38px; height: 5px; margin-left: -19px; border-radius: 3px; background: var(--ink2); opacity: .35; }
+  .top { position: absolute; top: 44px; left: 20px; right: 20px; display: flex; gap: 12px; align-items: center; }
+  .search { flex: 1; height: 44px; border-radius: 10px; background: var(--search); display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--ink2); }
+  .round { width: 44px; height: 44px; border-radius: 22px; background: #fff; box-shadow: 0 1px 6px rgba(59,32,80,.18); display: grid; place-items: center; font-size: 24px; font-weight: 600; }
+  .done { height: 44px; border-radius: 22px; padding: 0 16px; background: #fff; box-shadow: 0 1px 6px rgba(59,32,80,.18); display: grid; place-items: center; font-weight: 600; }
+  .grid { position: absolute; top: 116px; left: 16px; right: 16px; display: grid; grid-template-columns: repeat(4, 89px); row-gap: 20px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+  .tile { width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; font-size: 28px; font-weight: 600; position: relative; border: 1px solid rgba(46,34,51,.08); }
+  .tile.cur { border: 2px solid var(--accent); }
+  .name { font-size: 12px; font-weight: 500; line-height: 16px; max-width: 81px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .name.un { color: var(--ink2); }
+  .pin { position: absolute; top: 3px; right: 5px; font-size: 10px; }
+  .folder { background: var(--page); border-color: var(--sep); display: grid; grid-template-columns: repeat(3, 16px); grid-auto-rows: 16px; gap: 3px; padding: 5px; place-content: start; }
+  .folder i { border-radius: 4px; display: block; width: 16px; height: 16px; }
+  .minus { position: absolute; top: -8px; left: 4px; width: 24px; height: 24px; border-radius: 12px; background: #DAD3CC; display: grid; place-items: center; font-weight: 700; font-size: 18px; line-height: 1; }
+  .wob-a { transform: rotate(-2deg); } .wob-b { transform: rotate(2deg); }
+  .dots { position: absolute; bottom: 152px; left: 0; right: 0; display: flex; gap: 8px; justify-content: center; }
+  .dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--ink2); opacity: .35; } .dots i.on { opacity: 1; }
+  .rows { position: absolute; bottom: 34px; left: 16px; right: 16px; }
+  .row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 12px 0; border-top: 1px solid var(--sep); color: var(--ink2); }
+  .row span { flex: 1; }
+  /* 打開的資料夾 */
+  .veil { position: absolute; inset: 0; background: rgba(251,243,231,.72); backdrop-filter: blur(14px); }
+  .fname { position: absolute; top: 210px; left: 62px; font-size: 28px; font-weight: 700; }
+  .fbox { position: absolute; top: 262px; left: 45px; width: 299px; height: 322px; border-radius: 24px; background: rgba(255,252,246,.8); border: 1px solid var(--sep); box-shadow: 0 6px 20px rgba(59,32,80,.14); }
+  .fbox .grid { top: 16px; left: 16px; grid-template-columns: repeat(3, 89px); }
+  /* 長按選單 */
+  .dark { position: absolute; inset: 0; background: rgba(46,34,51,.28); }
+  .lift { position: absolute; top: 208px; left: 105px; transform: scale(1.08); }
+  .menu { position: absolute; top: 314px; left: 60px; width: 250px; border-radius: 24px; background: rgba(255,252,246,.96); box-shadow: 0 8px 28px rgba(59,32,80,.25); padding: 8px 0; }
+  .sw { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid rgba(46,34,51,.12); }
+  .sw i { width: 20px; height: 20px; border-radius: 10px; display: block; }
+  .mi { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
+  .mi.red { color: var(--danger); }
+  /* 三個選項 */
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 14px; }
+  .opt { background: var(--surface); border: 1px solid var(--sep); border-radius: 16px; padding: 18px 18px 14px; }
+  .opt.pick { border: 2px solid var(--accent); }
+  .opt h3 { margin: 0 0 2px; font-size: 18px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 10px; padding: 1px 9px; margin-left: 6px; vertical-align: 2px; }
+  .opt ul { margin: 8px 0; padding-left: 20px; }
+  .opt li { margin: 3px 0; }
+  .no { color: var(--ink2); }
+  .cost { font-size: 14px; border-top: 1px solid var(--sep); margin-top: 10px; padding-top: 8px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; background: var(--surface); border-radius: 12px; overflow: hidden; font-size: 15px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--sep); vertical-align: top; }
+  th { background: #F6ECDD; font-weight: 600; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>茄記 2.0 目錄面板：第一批做到哪</h1>
+  <p class="sub">2026-11-21。樣子照 1.1 搬，尺寸、色碼都是 1.1 的數字。要你選的只有一件事：第一批先做到哪一段。</p>
+
+  <h2>一、搬過來長這樣（跟 1.1 同一套尺寸）</h2>
+  <p class="sub">入口照 1.1：點左上清單名 → 切換清單 →「管理所有清單」→ 目錄從下面升上來，上面留一截紙。長按一行的「搬到…」也是開這個面板。</p>
+  <div class="phones" id="phones"></div>
+
+  <h2>二、第一批做到哪</h2>
+  <div class="opts">
+    <div class="opt">
+      <h3>甲　先能看、能點</h3>
+      <ul>
+        <li>面板跟著手指升起、往下拉收起</li>
+        <li>方磚、資料夾磚、頁點、左右翻頁</li>
+        <li>點磚換紙（磚放大鋪滿那個動畫）</li>
+        <li>點資料夾打開、裡面翻頁</li>
+        <li>搜尋（列出符合的行）、新的一張</li>
+        <li>最近刪除、設定兩列</li>
+        <li>「搬到…」選一張</li>
+        <li class="no">沒有：長按選單、抖動、拖曳</li>
+      </ul>
+      <div class="cost">圖 1、2。改顏色、釘選、刪除要回紙上的 ⋯ 做。磚的順序動不了。</div>
+    </div>
+    <div class="opt pick">
+      <h3>乙　甲＋長按選單<span class="tag">我推薦</span></h3>
+      <ul>
+        <li>甲的全部</li>
+        <li>長按磚：換顏色、釘選、刪除（留空位、可復原）</li>
+        <li>資料夾名字點了能改</li>
+        <li>VoiceOver 的動作（改名字、放進資料夾、往前往後移）</li>
+        <li class="no">沒有：抖動、拖曳排磚、疊成資料夾</li>
+      </ul>
+      <div class="cost">圖 1、2、4。不靠拖的都到齊；資料夾只能用 1.1 做好的那些，新的疊不出來。模擬器驗得完，不用等真機。</div>
+    </div>
+    <div class="opt">
+      <h3>丙　一次全做</h3>
+      <ul>
+        <li>乙的全部</li>
+        <li>長按後拖、抖動中直接拖</li>
+        <li>換位、空位、跨頁、新開一頁</li>
+        <li>疊成資料夾、拖進拖出、資料夾裡排順序</li>
+        <li>抖動中的「−」、空白處翻頁</li>
+      </ul>
+      <div class="cost">圖 1–4。拖曳這段在 1.1 佔目錄程式的六成，11/02–11/04 靠你真機回報來回改了三天。現在還沒有上真機的路，我做完也只能在模擬器驗，手感等於沒驗。</div>
+    </div>
+  </div>
+
+  <h2>三、我推薦乙的原因</h2>
+  <div class="scroll">
+  <table>
+    <tr><th></th><th>甲</th><th>乙</th><th>丙</th></tr>
+    <tr><td>目錄裡能做的事</td><td>看、找、換紙</td><td>加上改色、釘選、刪除、改資料夾名</td><td>跟 1.1 一樣</td></tr>
+    <tr><td>模擬器驗得完嗎</td><td>可以</td><td>可以</td><td>拖曳只驗得到「有作用」，順不順要真機</td></tr>
+    <tr><td>卡在等真機的部分</td><td>升起收起的手感</td><td>同甲</td><td>再加整段拖曳</td></tr>
+    <tr><td>之後接拖曳</td><td colspan="2">磚先用「位置」排好，之後加拖曳不用重排版（1.1 踩過：磚一換容器手勢就斷）</td><td>—</td></tr>
+  </table>
+  </div>
+  <p>拖曳是 1.1 最花真機來回的一段，放到真機的路定了之後做，改一輪你就能摸一輪。乙做完，目錄在 2.0 就不是缺的那塊了。</p>
+
+  <h2>四、選乙的話，這幾件我會直接照 1.1 做</h2>
+  <ul>
+    <li>切換清單改回 1.1 的內容：新的一張、釘選的、最近開過的、「管理所有清單」。現在 Swift 版是把所有清單列成一長串，目錄做好就不需要了</li>
+    <li>上鎖的紙：磚照畫（色塊、字、左上一個鎖），點了還是只看得到名字（Face ID 還沒搬）</li>
+    <li>封面圖還沒搬：有封面的紙先畫成色塊加字</li>
+    <li>面板用自己做的，不用系統的半高面板（1.1 的目錄本來就是自己做的；11/04 切換清單試過系統那種，你在真機看了四角都圓、關不掉，當時換掉）</li>
+  </ul>
+</main>
+
+<script>
+const N = { purple: ['#A985AE', '#2B2230'], yellow: ['#E8C468', '#2B2230'], orange: ['#E8945C', '#2B2230'], red: ['#D97C6C', '#2B2230'],
+  blue: ['#8E9BC6', '#2B2230'], green: ['#9DAF6A', '#2B2230'], gray: ['#BFA88E', '#2B2230'], black: ['#4E3F4C', '#fff'], white: ['#EDE3D2', '#2B2230'] };
+const notes = [
+  { c: 'purple', g: '今', n: '今天想到的', cur: 1 }, { c: 'yellow', g: '教', n: '怎麼用茄記', pin: 1 }, { c: 'green', g: '買', n: '買菜' },
+  { f: '工作', m: ['blue', 'orange', 'red', 'gray'] },
+  { c: 'orange', g: '書', n: '想讀的書' }, { c: 'blue', g: '影', n: '影片點子' }, { c: 'red', g: '急', n: '這週要交' }, { c: 'black', g: '夜', n: '睡前' },
+  { c: 'white', g: '未', n: '未命名', un: 1 }, { c: 'gray', g: '旅', n: '京都行程' }, { hole: 1 }, { c: 'yellow', g: '課', n: '課程大綱' },
+];
+const inFolder = [{ c: 'blue', g: '會', n: '會議' }, { c: 'orange', g: '稿', n: '講稿' }, { c: 'red', g: '催', n: '要催的' }, { c: 'gray', g: '帳', n: '報帳' }];
+
+function cell(x, o = {}) {
+  if (x.hole) return '<div class="cell"></div>';
+  const wob = o.jiggle ? (o.i % 2 ? ' wob-a' : ' wob-b') : '';
+  const minus = o.jiggle ? '<div class="minus">−</div>' : '';
+  if (x.f) {
+    return `<div class="cell${wob}"><div class="tile folder">${x.m.map(k => `<i style="background:${N[k][0]}"></i>`).join('')}</div>${minus}<div class="name">${x.f}</div></div>`;
+  }
+  const [bg, ink] = N[x.c];
+  return `<div class="cell${wob}"><div class="tile${x.cur ? ' cur' : ''}" style="background:${bg};color:${ink}">${x.g}${x.pin ? '<span class="pin">📌</span>' : ''}</div>${minus}<div class="name${x.un ? ' un' : ''}">${x.n}</div></div>`;
+}
+function phone(kind) {
+  const jiggle = kind === 'jiggle';
+  let h = `<div class="phone"><div class="paper-title">今天想到的<small>▾</small></div><div class="scrim"></div><div class="panel"><div class="grab"></div>
+    <div class="top"><div class="search">🔍 搜尋</div>${jiggle ? '<div class="done">完成</div>' : '<div class="round">+</div>'}</div>
+    <div class="grid">${notes.map((x, i) => cell(x, { jiggle, i })).join('')}</div>
+    <div class="dots"><i class="on"></i><i></i></div>
+    <div class="rows"><div class="row">🗑 <span>最近刪除</span>3 ›</div><div class="row">⚙ <span>設定</span>›</div></div></div>`;
+  if (kind === 'folder') h += `<div class="veil"></div><div class="fname">工作</div><div class="fbox"><div class="grid">${inFolder.map(x => cell(x)).join('')}</div></div>`;
+  if (kind === 'menu') h += `<div class="dark"></div><div class="lift">${cell(notes[2])}</div><div class="menu">
+    <div class="sw">${Object.values(N).map(v => `<i style="background:${v[0]}"></i>`).join('')}</div>
+    <div class="mi">釘選<span>📌</span></div><div class="mi red">刪除<span>🗑</span></div></div>`;
+  return h + '</div>';
+}
+const shots = [
+  ['grid', '1　目錄', '一排四塊、名字在磚下面；正在看的那張茄紫框；右上圖釘＝釘選；空位照留。'],
+  ['folder', '2　打開的資料夾', '點資料夾磚：後面霧掉，名字大字靠左，框裡三欄。'],
+  ['jiggle', '3　抖動（排磚）', '長按空白處或長按後一拖：磚開始抖，左上「−」，右上變「完成」。'],
+  ['menu', '4　長按一塊磚', '那塊浮起來，下面接選單：一排顏色、釘選、刪除。'],
+];
+document.getElementById('phones').innerHTML = shots.map(([k, t, d]) =>
+  `<figure><div class="frame">${phone(k)}</div><figcaption><b>${t}</b>${d}</figcaption></figure>`).join('');
+</script>
+</body>
+</html>

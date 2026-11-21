@@ -30,7 +30,9 @@ struct RootView: View {
     private static func makeStore() -> Store {
         let info = ProcessInfo.processInfo
         if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" {
-            return Store(book: Demo.book())
+            let demo = Store(book: Demo.book())
+            demo.isFull = true
+            return demo
         }
         // 跑單元測試時 app 也會被啟動：不讀不寫，免得測試在機器上留下一份存檔
         if info.environment["XCTestConfigurationFilePath"] != nil {
@@ -63,10 +65,15 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框
+            // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框。
+            // 完整版功能（1.1 片 B4）：沒買的不開輸入框。1.1 是打開付費頁，付費頁還沒搬，先用一句提示
             if url.host == "new" {
                 route = nil
-                store.requestCompose()
+                if store.isFull {
+                    store.requestCompose()
+                } else {
+                    store.toast = Store.Toast(text: Words.fullOnlyControl)
+                }
             }
         }
     }

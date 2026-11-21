@@ -14,6 +14,9 @@ targets:
     platform: iOS
     sources:
       - Qieji
+      - Shared # 控制中心按鈕的動作：app 與擴充都要編進去
+    dependencies:
+      - target: QiejiControls
     info:
       path: Qieji/Info.plist
       properties:
@@ -41,6 +44,32 @@ targets:
         # 只給 iPhone（1），跟 Expo 版的 supportsTablet: false 一樣
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.10"
+
+  # 控制中心「記一行」按鈕（Expo 版 targets/controls 搬過來）。Bundle ID、kind 跟 1.1 一樣，使用者放好的那顆更新後照樣在。
+  # 整個擴充設 iOS 18：控制項目是 18 才有的，更舊的 iOS 不載這個擴充，app 照常。
+  QiejiControls:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - QiejiControls
+      - Shared
+    info:
+      path: QiejiControls/Info.plist
+      properties:
+        CFBundleDisplayName: 茄記
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.controls
+        # 版本號要跟 app 一樣，不然上傳會被擋
+        MARKETING_VERSION: "2.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.10"
 
   QiejiTests:

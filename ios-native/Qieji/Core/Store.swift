@@ -22,6 +22,9 @@ final class Store: ObservableObject {
         return had
     }
 
+    /// 買了完整版沒。內購還沒搬來（StoreKit 2 待做），現在只有假資料模式是 true；判斷不出來一律當沒買（安全標準授權段）
+    var isFull = false
+
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（舊存檔沒能先備份）
     var frozen = false

@@ -52,6 +52,7 @@ enum Words {
     static let saveFailed = "存檔沒成功，等一下會再試"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
     static let moved = "從舊版搬過來了"
+    static let fullOnlyControl = "控制中心的「記一行」是完整版功能"
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"
     }

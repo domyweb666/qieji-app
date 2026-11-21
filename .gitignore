@@ -44,6 +44,7 @@ art-src/
 # SwiftUI 版（ios-native/）：Xcode 專案與 Info.plist 由 XcodeGen 產生，不進 repo
 ios-native/*.xcodeproj/
 ios-native/Qieji/Info.plist
+ios-native/QiejiControls/Info.plist
 ios-native/DerivedData/
 ios-native/formatted.tgz
 ios-native/.limbuild-sandbox/
