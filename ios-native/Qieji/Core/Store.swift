@@ -6,6 +6,21 @@ final class Store: ObservableObject {
     @Published private(set) var book: Notebook
     @Published private(set) var currentID: String?
     @Published var toast: Toast?
+    /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
+    @Published var composeAsk = 0
+    private var composePending = false
+
+    /// 要現在這張紙升起輸入框。紙還沒出現就先留著，出現時自己拿
+    func requestCompose() {
+        composePending = true
+        composeAsk += 1
+    }
+
+    func takeCompose() -> Bool {
+        let had = composePending
+        composePending = false
+        return had
+    }
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（舊存檔沒能先備份）
     var frozen = false
@@ -17,7 +32,9 @@ final class Store: ObservableObject {
         let id = UUID()
         var text: String
         var undo: (() -> Void)?
-        static func == (lhs: Toast, rhs: Toast) -> Bool { lhs.id == rhs.id }
+        static func == (lhs: Toast, rhs: Toast) -> Bool {
+            lhs.id == rhs.id
+        }
     }
 
     init(book: Notebook = Notebook(), disk: Disk? = nil) {
@@ -26,7 +43,9 @@ final class Store: ObservableObject {
         currentID = book.notes.first { !$0.deleted }?.id
     }
 
-    var current: Note? { currentID.flatMap { book.note($0) } }
+    var current: Note? {
+        currentID.flatMap { book.note($0) }
+    }
 
     // MARK: 改資料的共用入口
 
@@ -40,7 +59,9 @@ final class Store: ObservableObject {
     func editCurrent(touch: Bool = true, _ change: (inout Note) -> Void) {
         guard let id = currentID, let idx = book.index(id) else { return }
         change(&book.notes[idx])
-        if touch { book.notes[idx].updated = Clock.now() }
+        if touch {
+            book.notes[idx].updated = Clock.now()
+        }
         scheduleSave()
     }
 
@@ -72,8 +93,8 @@ final class Store: ObservableObject {
 
     func toggle(_ itemID: String) {
         editCurrent { note in
-            guard let idx = note.items.firstIndex(where: { $0.id == itemID }) else { return }
-            guard !note.items[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard let idx = note.items.firstIndex(where: { $0.id == itemID }),
+                  !note.items[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             note.items[idx].done.toggle()
         }
     }
@@ -93,8 +114,8 @@ final class Store: ObservableObject {
 
     /// 打字打到空的就離開那一行：直接拿掉（沒有字，不進最近刪除）
     func dropIfEmpty(_ itemID: String) {
-        guard let note = current, let item = note.items.first(where: { $0.id == itemID }) else { return }
-        guard item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let note = current, let item = note.items.first(where: { $0.id == itemID }),
+              item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         editCurrent(touch: false) { $0.items.removeAll { $0.id == itemID } }
     }
 
@@ -146,7 +167,9 @@ final class Store: ObservableObject {
         guard let disk, loaded, !frozen else { return }
         Sync.stampMods(&book, now: Clock.now())
         _ = Seats.fixOrder(&book)
-        if !disk.write(book) { toast = Toast(text: Words.saveFailed) }
+        if !disk.write(book) {
+            toast = Toast(text: Words.saveFailed)
+        }
     }
 
     /// 讀完資料後呼叫一次

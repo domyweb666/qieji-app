@@ -7,18 +7,34 @@ enum Seats {
     static let recentMax = 5
     static let gridCols: Double = 4
 
-    static func isBreak(_ id: String) -> Bool { id.hasPrefix("|") }
-    static func isHole(_ id: String) -> Bool { id.hasPrefix(".") }
-    static func newBreak() -> String { "|" + Ident.make() }
-    static func newHole() -> String { "." + Ident.make() }
+    static func isBreak(_ id: String) -> Bool {
+        id.hasPrefix("|")
+    }
+
+    static func isHole(_ id: String) -> Bool {
+        id.hasPrefix(".")
+    }
+
+    static func newBreak() -> String {
+        "|" + Ident.make()
+    }
+
+    static func newHole() -> String {
+        "." + Ident.make()
+    }
+
     /// 刪掉一張時留在它座位前面、它專用的空位：還原時還挨著就拿掉，紙站回原本那格
-    static func holeFor(_ noteID: String) -> String { "." + noteID }
+    static func holeFor(_ noteID: String) -> String {
+        "." + noteID
+    }
 
     // MARK: 找、排
 
     /// q 要先 trim、轉小寫。上鎖的紙只比名字
     static func hit(_ note: Note, _ query: String) -> Bool {
-        if query.isEmpty { return true }
+        if query.isEmpty {
+            return true
+        }
         let hay = note.locked ? note.title : note.title + "\n" + note.body + "\n" + note.items.map(\.text).joined(separator: "\n")
         return hay.lowercased().contains(query)
     }
@@ -26,8 +42,12 @@ enum Seats {
     /// 穩定排序（JavaScript 的 sort 是穩定的，Swift 的不保證）：一樣的照原本先後
     static func stable<T>(_ list: [T], _ before: (T, T) -> Bool) -> [T] {
         list.enumerated().sorted { lhs, rhs in
-            if before(lhs.element, rhs.element) { return true }
-            if before(rhs.element, lhs.element) { return false }
+            if before(lhs.element, rhs.element) {
+                return true
+            }
+            if before(rhs.element, lhs.element) {
+                return false
+            }
             return lhs.offset < rhs.offset
         }.map(\.element)
     }
@@ -38,7 +58,9 @@ enum Seats {
         let notes = book.notes.filter { $0.deleted == trash && (filter == "all" || $0.color == filter) && hit($0, needle) }
         let zhTW = Locale(identifier: "zh-Hant")
         return stable(notes) { lhs, rhs in
-            if !trash, lhs.pinned != rhs.pinned { return lhs.pinned }
+            if !trash, lhs.pinned != rhs.pinned {
+                return lhs.pinned
+            }
             switch sort {
             case "created": return lhs.created > rhs.created
             case "title": return Labels.label(lhs).compare(Labels.label(rhs), locale: zhTW) == .orderedAscending
@@ -61,9 +83,13 @@ enum Seats {
         var used = Set<String>(), fids = Set<String>()
         var out: [Folder] = []
         for folder in raw ?? [] {
-            if ids.contains(folder.id) || fids.contains(folder.id) { continue }
+            if ids.contains(folder.id) || fids.contains(folder.id) {
+                continue
+            }
             let inner = folder.ids.filter { ids.contains($0) && used.insert($0).inserted }
-            if inner.isEmpty { continue }
+            if inner.isEmpty {
+                continue
+            }
             fids.insert(folder.id)
             let name = Labels.trim(folder.name).isEmpty ? NoteCoding.folderName : folder.name
             out.append(Folder(id: folder.id, name: name, ids: inner))
@@ -84,16 +110,22 @@ enum Seats {
             let real = (ids.contains(id) && !inFolder.contains(id)) || fids.contains(id) || isBreak(id) || isHole(id)
             return real && seen.insert(id).inserted
         }
-        for folder in folders where seen.insert(folder.id).inserted { kept.append(folder.id) }
+        for folder in folders where seen.insert(folder.id).inserted {
+            kept.append(folder.id)
+        }
         let loose = book.notes.filter { !seen.contains($0.id) && !inFolder.contains($0.id) }
-        for note in stable(loose, { $0.updated > $1.updated }) { kept.append(note.id) }
+        for note in stable(loose, { $0.updated > $1.updated }) {
+            kept.append(note.id)
+        }
 
         let shown = fids.union(book.notes.filter { !$0.deleted }.map(\.id))
         var order: [String] = []
         var since = false // 上一個標記（或最前面）之後有沒有看得到的格子
         var held: [String] = [] // 這一頁裡還沒等到後面有看得到的格子的空位
         for id in kept {
-            if isHole(id) { held.append(id); continue }
+            if isHole(id) {
+                held.append(id); continue
+            }
             if !isBreak(id) {
                 if shown.contains(id) {
                     order.append(contentsOf: held)
@@ -104,17 +136,27 @@ enum Seats {
                 continue
             }
             held = []
-            if since { order.append(id); since = false }
+            if since {
+                order.append(id); since = false
+            }
         }
         // 最後一個標記後面沒有看得到的格子：拿掉
         for idx in order.indices.reversed() {
-            if isBreak(order[idx]) { order.remove(at: idx); break }
-            if shown.contains(order[idx]) { break }
+            if isBreak(order[idx]) {
+                order.remove(at: idx); break
+            }
+            if shown.contains(order[idx]) {
+                break
+            }
         }
         let sameFolders = folders == (book.folders ?? [])
-        if let old = book.order, old == order, sameFolders { return false }
+        if let old = book.order, old == order, sameFolders {
+            return false
+        }
         book.order = order
-        if !sameFolders { book.folders = folders }
+        if !sameFolders {
+            book.folders = folders
+        }
         return true
     }
 
@@ -132,12 +174,20 @@ enum Seats {
         let old = book.order ?? []
         var next: [String] = []
         for id in old {
-            if !set.contains(id), !isHole(id), !isBreak(id) { next.append(id); continue }
-            if used < visible.count { next.append(visible[used]); used += 1 }
+            if !set.contains(id), !isHole(id), !isBreak(id) {
+                next.append(id); continue
+            }
+            if used < visible.count {
+                next.append(visible[used]); used += 1
+            }
         }
-        if used < visible.count { next.append(contentsOf: visible[used...]) }
+        if used < visible.count {
+            next.append(contentsOf: visible[used...])
+        }
         book.order = next
-        if next != old { touchLayout(&book, now: now) }
+        if next != old {
+            touchLayout(&book, now: now)
+        }
         fixOrder(&book)
     }
 
@@ -145,14 +195,18 @@ enum Seats {
     private static func flatSeats(_ book: Notebook) -> [String] {
         guard let order = book.order else { return firstSeats(book) }
         var inner: [String: [String]] = [:]
-        for folder in book.folders ?? [] { inner[folder.id] = folder.ids }
+        for folder in book.folders ?? [] {
+            inner[folder.id] = folder.ids
+        }
         return order.flatMap { inner[$0] ?? [$0] }
     }
 
     /// 目錄裡的紙（不含最近刪除），照座位排；搜尋也照座位。還沒寫進座位表的先排在最後
     static func seatedNotes(_ book: Notebook, query: String = "") -> [Note] {
         var seat: [String: Int] = [:]
-        for (idx, id) in flatSeats(book).enumerated() { seat[id] = idx }
+        for (idx, id) in flatSeats(book).enumerated() {
+            seat[id] = idx
+        }
         let needle = Labels.trim(query).lowercased()
         let end = seat.count
         let live = book.notes.filter { !$0.deleted && hit($0, needle) }
@@ -171,7 +225,9 @@ enum Seats {
     /// 搜尋：照目錄的座位順序，每張列出名字有沒有中、中了哪幾行。上鎖的紙只比名字
     static func searchLines(_ book: Notebook, query: String) -> [LineHit] {
         let needle = Labels.trim(query).lowercased()
-        if needle.isEmpty { return [] }
+        if needle.isEmpty {
+            return []
+        }
         return seatedNotes(book, query: needle).map { note in
             var lines: [Item] = []
             if !note.locked {
@@ -199,8 +255,12 @@ enum Seats {
             guard let note, !note.deleted, out.count < recentMax, seen.insert(note.id).inserted else { return }
             out.append(note)
         }
-        for id in recent { take(book.note(id)) }
-        for note in stable(book.notes.filter { !$0.deleted && !seen.contains($0.id) }, { $0.updated > $1.updated }) { take(note) }
+        for id in recent {
+            take(book.note(id))
+        }
+        for note in stable(book.notes.filter { !$0.deleted && !seen.contains($0.id) }, { $0.updated > $1.updated }) {
+            take(note)
+        }
         return (pins, out)
     }
 
@@ -222,7 +282,11 @@ enum Seats {
 
     static func seatedEntries(_ book: Notebook) -> [Entry] {
         var owner: [String: Folder] = [:]
-        for folder in book.folders ?? [] { for id in folder.ids where owner[id] == nil { owner[id] = folder } }
+        for folder in book.folders ?? [] {
+            for id in folder.ids where owner[id] == nil {
+                owner[id] = folder
+            }
+        }
         var out: [Entry] = []
         var open: [String: Int] = [:]
         for note in seatedNotes(book) {
@@ -230,7 +294,9 @@ enum Seats {
                 out.append(Entry(id: note.id, note: note, notes: [note]))
                 continue
             }
-            if let idx = open[folder.id] { out[idx].notes.append(note); continue }
+            if let idx = open[folder.id] {
+                out[idx].notes.append(note); continue
+            }
             open[folder.id] = out.count
             out.append(Entry(id: folder.id, folder: folder, notes: [note]))
         }
@@ -242,7 +308,9 @@ enum Seats {
         let all = seatedEntries(book)
         guard let order = book.order else { return all }
         var pos: [String: Int] = [:]
-        for (idx, id) in order.enumerated() { pos[id] = idx }
+        for (idx, id) in order.enumerated() {
+            pos[id] = idx
+        }
         let marks = order.enumerated().filter { isBreak($0.element) || isHole($0.element) }
         var out: [Entry] = []
         var next = 0
@@ -260,7 +328,9 @@ enum Seats {
                     held.append(Entry(id: id, isHole: true))
                 }
             }
-            if let cut, !out.isEmpty { out.append(Entry(id: cut, isBreak: true)) }
+            if let cut, !out.isEmpty {
+                out.append(Entry(id: cut, isBreak: true))
+            }
             out.append(contentsOf: held)
             out.append(entry)
         }
@@ -270,9 +340,13 @@ enum Seats {
     /// 磚改成一排四個時，寬磚時期留的空位、換頁標記清掉一次（記在 grid）。算親手排
     @discardableResult
     static func packGrid(_ book: inout Notebook, now: Double) -> Bool {
-        if book.grid == gridCols { return false }
+        if book.grid == gridCols {
+            return false
+        }
         book.grid = gridCols
-        if let order = book.order { book.order = order.filter { !isHole($0) && !isBreak($0) } }
+        if let order = book.order {
+            book.order = order.filter { !isHole($0) && !isBreak($0) }
+        }
         touchLayout(&book, now: now)
         fixOrder(&book)
         return true

@@ -40,7 +40,9 @@ enum Tok {
         )
     }
 
-    static func solid(_ hex: UInt32, _ alpha: Double = 1) -> Color { Color(uiColor(hex, alpha)) }
+    static func solid(_ hex: UInt32, _ alpha: Double = 1) -> Color {
+        Color(uiColor(hex, alpha))
+    }
 
     // MARK: 第一層：原始值（名字是顏色不是用途，畫面不准用）
 
@@ -171,9 +173,15 @@ enum Tok {
         static let label = SwiftUI.Font.caption.weight(.medium) // 12
         static let fabSymbol = SwiftUI.Font.system(size: 24, weight: .semibold)
         static let glyphRatio: CGFloat = 0.44 // 磚上的字＝邊長 × 這個比例
-        static func glyph(_ side: CGFloat) -> SwiftUI.Font { .system(size: side * glyphRatio, weight: .semibold) }
+        static func glyph(_ side: CGFloat) -> SwiftUI.Font {
+            .system(size: side * glyphRatio, weight: .semibold)
+        }
+
         /// 紙上每一行（UIKit 那邊量高度、畫輸入框用同一個字）
-        static var lineUI: UIFont { UIFont.preferredFont(forTextStyle: .body) }
+        static var lineUI: UIFont {
+            UIFont.preferredFont(forTextStyle: .body)
+        }
+
         static let lineHeightRatio: CGFloat = 26.0 / 17.0 // 內文 17 點、行高 26
         static let titleMaxScale: DynamicTypeSize = .xxxLarge
     }
@@ -181,6 +189,7 @@ enum Tok {
     // MARK: 間距（4 的倍數）
 
     enum Space {
+        static let zero: CGFloat = 0
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8
         static let md: CGFloat = 12
@@ -245,6 +254,7 @@ enum Tok {
         static let pressDim: Double = 0.6
         static let reducedDimFrom: Double = 0.4
         static let deleteSlideSeconds: Double = 0.22
+        static let composerFocusDelay: Double = 0.3
     }
 
     // MARK: 手勢門檻

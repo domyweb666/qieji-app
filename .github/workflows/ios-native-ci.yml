@@ -1,0 +1,109 @@
+name: iOS Native CI
+
+# 茄記 SwiftUI 版（ios-native/）：沒有 Mac 也編得過、測試跑得過。做法照番茄帳（E:\豆帳）跑通的那套。
+# 不需要任何 secret、不簽章、不上傳 TestFlight（Expo 版照舊用 EAS，不受影響）。
+# 只在 ios-native/ 或這個檔有改動時跑；手動按 Run workflow 也會跑。一批做完才推一次。
+on:
+  push:
+    # 只看分支：推 tag 時 GitHub 不管 paths，會再跑一次同一個 commit
+    branches:
+      - "**"
+    paths:
+      - "ios-native/**"
+      - ".github/workflows/ios-native-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # 版本與 SHA-256 照米說的 ios-native-ci.yml（2026-10-31、11-02 從官方 release 下載後算出），版本與內容一起釘死
+  XCODEGEN_VERSION: "2.46.0"
+  XCODEGEN_SHA256: "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806"
+  SWIFTLINT_VERSION: "0.65.1"
+  SWIFTLINT_SHA256: "c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0"
+  SWIFTFORMAT_VERSION: "0.64.0"
+  SWIFTFORMAT_SHA256: "95ea62625d0b898a7af870293311ae6f09e4a3147ecd900593687e4b9ab2fd98"
+  SIMULATOR: "platform=iOS Simulator,name=iPhone 17"
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ios-native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安裝 XcodeGen（釘版本、驗 SHA-256）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          test -x "$RUNNER_TEMP/xcodegen/bin/xcodegen"
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" --version
+
+      - name: 安裝 SwiftLint（釘版本、驗 SHA-256）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          echo "${SWIFTLINT_SHA256}  $RUNNER_TEMP/swiftlint.zip" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/swiftlint"
+          unzip -q "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          test -x "$RUNNER_TEMP/swiftlint/swiftlint"
+          "$RUNNER_TEMP/swiftlint/swiftlint" version
+
+      - name: 安裝 SwiftFormat（釘版本、驗 SHA-256）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/swiftformat.zip" \
+            "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
+          echo "${SWIFTFORMAT_SHA256}  $RUNNER_TEMP/swiftformat.zip" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/swiftformat"
+          unzip -q "$RUNNER_TEMP/swiftformat.zip" -d "$RUNNER_TEMP/swiftformat"
+          chmod +x "$RUNNER_TEMP/swiftformat/swiftformat"
+          "$RUNNER_TEMP/swiftformat/swiftformat" --version
+
+      - name: 產生 Xcode 專案
+        run: |
+          xcodebuild -version
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate --spec project.yml
+          test -d Qieji.xcodeproj
+          # Privacy Manifest 要真的被放進 App 的資源裡，送審才看得到（XcodeGen 靠副檔名判斷）
+          grep -q "PrivacyInfo.xcprivacy in Resources" Qieji.xcodeproj/project.pbxproj
+
+      # 下面四步都跑完才判紅（!cancelled()）：一輪就看到格式、規矩、編譯、測試的全部問題，
+      # 不用格式紅一次、修完再推才看到編譯紅。
+      - name: 格式檢查（SwiftFormat）
+        if: ${{ !cancelled() }}
+        run: |
+          "$RUNNER_TEMP/swiftformat/swiftformat" --lint .
+
+      - name: 規矩檢查（SwiftLint）
+        if: ${{ !cancelled() }}
+        run: |
+          "$RUNNER_TEMP/swiftlint/swiftlint" lint --strict
+
+      # 模擬器版用本機自簽（ad-hoc，不需要任何憑證或 secret）。
+      - name: 編譯模擬器版
+        id: build
+        if: ${{ !cancelled() }}
+        run: |
+          xcodebuild build \
+            -project Qieji.xcodeproj \
+            -scheme Qieji \
+            -destination "${SIMULATOR}" \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY=-
+
+      # 編譯沒過就不跑測試：測試會再編一次、紅在同一個地方。
+      - name: 跑單元測試
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          xcodebuild test \
+            -project Qieji.xcodeproj \
+            -scheme Qieji \
+            -destination "${SIMULATOR}" \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY=-

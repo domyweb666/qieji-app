@@ -33,7 +33,9 @@ enum Sync {
         for idx in book.notes.indices {
             let note = book.notes[idx]
             let print = PrintCache.shared.print(of: note)
-            if note.hash == print { continue }
+            if note.hash == print {
+                continue
+            }
             if note.hash == nil {
                 book.notes[idx].mod = Clock.validTime(note.mod) ? note.mod : (note.updated != 0 ? note.updated : now)
             } else {
@@ -60,7 +62,9 @@ enum Sync {
         return removed
     }
 
-    private static func lastTouch(_ note: Note) -> Double { note.mod ?? note.updated }
+    private static func lastTouch(_ note: Note) -> Double {
+        note.mod ?? note.updated
+    }
 
     /// 墓碑比這張紙最後一次改動還新（或一樣）＝被永久拿掉之後就沒人動過
     private static func buried(_ gone: [String: Double], _ note: Note) -> Bool {
@@ -69,7 +73,9 @@ enum Sync {
     }
 
     private static func rawTouch(_ note: Note) -> Double {
-        if let mod = note.mod, Clock.validTime(mod) { return mod }
+        if let mod = note.mod, Clock.validTime(mod) {
+            return mod
+        }
         return note.updated
     }
 
@@ -84,7 +90,9 @@ enum Sync {
     /// iCloud 看起來換了一個：這台有同步過的紙，iCloud 資料夾裡卻一張都沒有、墓碑也沒提到任何一張
     static func seemsNewCloud(_ book: Notebook, names: [String], gone: JSONValue?) -> Bool {
         let synced = book.notes.filter { $0.syncedHash != nil }
-        if synced.isEmpty { return false }
+        if synced.isEmpty {
+            return false
+        }
         let there = Set(names)
         let stones = NoteCoding.gone(gone)
         return !synced.contains { there.contains("\($0.id).json") || stones[$0.id] != nil }
@@ -92,7 +100,9 @@ enum Sync {
 
     /// 忘掉跟舊 iCloud 對過的記號：每張紙都當成沒傳過
     static func forgetSync(_ book: inout Notebook) {
-        for idx in book.notes.indices { book.notes[idx].syncedHash = nil }
+        for idx in book.notes.indices {
+            book.notes[idx].syncedHash = nil
+        }
         book.orderSent = nil
     }
 
@@ -116,7 +126,9 @@ enum Sync {
         var push: [String] = []
         var spare = 0
         var retyped: [String] = []
-        var changed: Bool { added + taken + united + removed + spare > 0 }
+        var changed: Bool {
+            added + taken + united + removed + spare > 0
+        }
     }
 
     /// 兩邊都改了同一張：以比較新的那張為主，另一張多出來的行插回它原本的前一行後面；
@@ -131,12 +143,16 @@ enum Sync {
                 items.insert(item, at: spot)
                 seen.insert(item.id)
             }
-            if items.contains(where: { $0.id == item.id }) { prev = item.id }
+            if items.contains(where: { $0.id == item.id }) {
+                prev = item.id
+            }
         }
         var out = main
         out.items = items
         out.bin = main.bin + other.bin.filter { !seen.contains($0.id) }
-        if main.title.isEmpty { out.title = other.title }
+        if main.title.isEmpty {
+            out.title = other.title
+        }
         if main.body != other.body, !Labels.trim(other.body).isEmpty {
             out.body = Labels.trim(main.body).isEmpty ? other.body : main.body + "\n\n" + other.body
         }
@@ -153,9 +169,13 @@ enum Sync {
             var note = NoteCoding.note(dict)
             note.locked = false // 上鎖只算這支手機的事，iCloud 來的檔不能把這台的紙鎖上
             note.hash = PrintCache.shared.print(of: note)
-            if !Clock.validTime(note.mod) { note.mod = note.updated }
+            if !Clock.validTime(note.mod) {
+                note.mod = note.updated
+            }
             if let old = notes[note.id] {
-                if (note.mod ?? 0) > (old.mod ?? 0) { notes[note.id] = note }
+                if (note.mod ?? 0) > (old.mod ?? 0) {
+                    notes[note.id] = note
+                }
             } else {
                 ids.append(note.id)
                 notes[note.id] = note
@@ -167,7 +187,9 @@ enum Sync {
     /// 把 iCloud 上的紙與墓碑合進本機。push＝合完之後本機比 iCloud 新、要上傳的紙 id
     static func mergeRemote(_ book: inout Notebook, notes raws: [JSONValue], gone: JSONValue?, now: Double) -> MergeResult {
         stampMods(&book, now: now)
-        for (id, at) in NoteCoding.gone(gone) { book.gone[id] = max(book.gone[id] ?? 0, at) }
+        for (id, at) in NoteCoding.gone(gone) {
+            book.gone[id] = max(book.gone[id] ?? 0, at)
+        }
         let stones = book.gone
         var (order, theirs) = prepare(raws)
         var out: [Note] = []
@@ -175,13 +197,19 @@ enum Sync {
         for local in book.notes {
             guard var remote = theirs.removeValue(forKey: local.id) else {
                 // iCloud 上沒有：墓碑擋住就拿掉；不然留著（還沒上傳、或 iCloud 那份還沒下載），要上傳
-                if buried(stones, local) { res.removed += 1; continue }
+                if buried(stones, local) {
+                    res.removed += 1; continue
+                }
                 out.append(local)
-                if local.hash != local.syncedHash { res.push.append(local.id) }
+                if local.hash != local.syncedHash {
+                    res.push.append(local.id)
+                }
                 continue
             }
             let newest = max(local.mod ?? 0, remote.mod ?? 0)
-            if let at = stones[local.id], at >= newest { res.removed += 1; continue }
+            if let at = stones[local.id], at >= newest {
+                res.removed += 1; continue
+            }
             if local.hash == remote.hash {
                 var same = local
                 same.syncedHash = remote.hash
@@ -191,7 +219,9 @@ enum Sync {
             if local.syncedHash != nil, local.hash == local.syncedHash {
                 // 只有 iCloud 那邊改了。這台上鎖的紙內容照合，但鎖要留著
                 remote.syncedHash = remote.hash
-                if local.locked { remote.locked = true }
+                if local.locked {
+                    remote.locked = true
+                }
                 out.append(remote)
                 res.taken += 1
                 continue
@@ -252,11 +282,17 @@ enum Sync {
 
     private static func retyped(before: [Note], after: [Note]) -> [String] {
         var old: [String: String] = [:]
-        for note in before { for item in note.items { old["\(note.id)/\(item.id)"] = item.text } }
+        for note in before {
+            for item in note.items {
+                old["\(note.id)/\(item.id)"] = item.text
+            }
+        }
         var out: [String] = []
         for note in after {
             for item in note.items {
-                if let was = old["\(note.id)/\(item.id)"], was != item.text { out.append(item.id) }
+                if let was = old["\(note.id)/\(item.id)"], was != item.text {
+                    out.append(item.id)
+                }
             }
         }
         return out
@@ -276,7 +312,9 @@ final class PrintCache {
         bare.syncedHash = nil
         lock.lock()
         defer { lock.unlock() }
-        if let hit = seen[note.id], hit.note == bare { return hit.print }
+        if let hit = seen[note.id], hit.note == bare {
+            return hit.print
+        }
         let fresh = Sync.fingerprint(note)
         seen[note.id] = (bare, fresh)
         return fresh

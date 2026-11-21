@@ -44,7 +44,9 @@ struct Note: Equatable, Identifiable {
     var syncedHash: String? // sh：上次跟 iCloud 對上時的指紋
     var extra: [String: JSONValue] = [:] // 這一版不認得的欄位，原樣留著
 
-    var isText: Bool { kind == "text" }
+    var isText: Bool {
+        kind == "text"
+    }
 
     static func blank(color: String = "yellow", now: Double) -> Note {
         Note(
@@ -74,8 +76,13 @@ struct Notebook: Equatable {
     var grid: Double?
     var extra: [String: JSONValue] = [:]
 
-    func note(_ id: String) -> Note? { notes.first { $0.id == id } }
-    func index(_ id: String) -> Int? { notes.firstIndex { $0.id == id } }
+    func note(_ id: String) -> Note? {
+        notes.first { $0.id == id }
+    }
+
+    func index(_ id: String) -> Int? {
+        notes.firstIndex { $0.id == id }
+    }
 }
 
 enum Ident {
@@ -89,7 +96,10 @@ enum Ident {
 
 enum Clock {
     /// 毫秒（跟 JavaScript 的 Date.now() 同一個單位，存檔裡的時間都是這個）
-    static func now() -> Double { (Date().timeIntervalSince1970 * 1000).rounded() }
+    static func now() -> Double {
+        (Date().timeIntervalSince1970 * 1000).rounded()
+    }
+
     static func validTime(_ val: Double?) -> Bool {
         guard let val else { return false }
         return val.isFinite && val > 0
@@ -104,7 +114,9 @@ enum NoteColor {
         "red": ("甜椒", "紅色"), "blue": ("藍莓", "藍色"), "green": ("青蔥", "綠色"),
         "gray": ("香菇", "奶茶色"), "black": ("黑豆", "深灰"), "white": ("白蘿蔔", "白色"),
     ]
-    static func isKey(_ key: String) -> Bool { keys.contains(key) }
+    static func isKey(_ key: String) -> Bool {
+        keys.contains(key)
+    }
 }
 
 enum Sorts {

@@ -54,7 +54,9 @@ enum LegacyStore {
     /// 找第一個讀得到東西的位置
     static func readFirst(bundleID: String) -> [String: String]? {
         for dir in candidates(bundleID: bundleID) {
-            if let found = read(dir: dir) { return found }
+            if let found = read(dir: dir) {
+                return found
+            }
         }
         return nil
     }

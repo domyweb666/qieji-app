@@ -4,8 +4,14 @@ import XCTest
 /// 讀 Expo 版留下來的舊存檔、搬到 Swift 版自己的存檔。用假造的 AsyncStorage 資料夾測（格式對過套件的原生程式）。
 final class DiskTests: XCTestCase {
     private var root = URL(fileURLWithPath: NSTemporaryDirectory())
-    private var legacyDir: URL { root.appendingPathComponent("support/org.domyweb.qieji/RCTAsyncLocalStorage_V1") }
-    private var nativeDir: URL { root.appendingPathComponent("support/org.domyweb.qieji/QiejiNative") }
+    private var legacyDir: URL {
+        root.appendingPathComponent("support/org.domyweb.qieji/RCTAsyncLocalStorage_V1")
+    }
+
+    private var nativeDir: URL {
+        root.appendingPathComponent("support/org.domyweb.qieji/QiejiNative")
+    }
+
     private var defaults = UserDefaults.standard
     private let suite = "qieji.tests.disk"
 
@@ -22,7 +28,9 @@ final class DiskTests: XCTestCase {
         super.tearDown()
     }
 
-    private func disk() -> Disk { Disk(dir: nativeDir, legacyDirs: [legacyDir], defaults: defaults) }
+    private func disk() -> Disk {
+        Disk(dir: nativeDir, legacyDirs: [legacyDir], defaults: defaults)
+    }
 
     /// 照 AsyncStorage 的規矩寫一個假的舊存檔：短的值放 manifest 裡，超過 1024 字的另外放一個以 MD5 命名的檔
     private func writeLegacy(_ pairs: [String: String]) throws {

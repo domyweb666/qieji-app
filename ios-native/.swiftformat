@@ -7,3 +7,4 @@
 --stripunusedargs closure-only
 --self remove
 --header strip
+--exclude .limbuild-sandbox,DerivedData,.build

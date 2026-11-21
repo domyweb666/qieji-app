@@ -18,6 +18,8 @@ enum Words {
     static let more = "更多"
     static let rename = "改名字"
     static let renameHint = "這張叫什麼"
+    static let glyphEdit = "改磚上的字"
+    static let glyphHint = "一個字（清空就用名字的第一個字）"
     static let clearDone = "清掉劃掉的行"
     static let deleteNote = "刪除這張"
     static let pin = "釘選"
@@ -49,5 +51,7 @@ enum Words {
     static let saveFailed = "存檔沒成功，等一下會再試"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
     static let moved = "從舊版搬過來了"
-    static func full(_ max: Int) -> String { "這張已經滿 \(max) 行，開一張新的吧" }
+    static func full(_ max: Int) -> String {
+        "這張已經滿 \(max) 行，開一張新的吧"
+    }
 }

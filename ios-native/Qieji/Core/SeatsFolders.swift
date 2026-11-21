@@ -29,7 +29,11 @@ extension Seats {
         fixOrder(&book)
         let folder = Folder(id: id, name: NoteCoding.folderName, ids: [noteID])
         leaveOldFolder(&book, noteID: noteID)
-        if let spot = book.order?.firstIndex(of: noteID) { book.order?[spot] = id } else { book.order?.append(id) }
+        if let spot = book.order?.firstIndex(of: noteID) {
+            book.order?[spot] = id
+        } else {
+            book.order?.append(id)
+        }
         book.folders = (book.folders ?? []) + [folder]
         touchLayout(&book, now: now)
         fixOrder(&book)
@@ -44,7 +48,9 @@ extension Seats {
         leaveOldFolder(&book, noteID: noteID)
         let order = book.order ?? []
         book.order = leave ? order.map { $0 == noteID ? newHole() : $0 } : order.filter { $0 != noteID }
-        if let idx = book.folders?.firstIndex(where: { $0.id == folderID }) { book.folders?[idx].ids.append(noteID) }
+        if let idx = book.folders?.firstIndex(where: { $0.id == folderID }) {
+            book.folders?[idx].ids.append(noteID)
+        }
         touchLayout(&book, now: now)
         fixOrder(&book)
         return true
@@ -68,7 +74,9 @@ extension Seats {
             }
             dissolveIfOne(&book, folderID: folder.id)
         } else {
-            if let spot { book.order?[spot] = noteID }
+            if let spot {
+                book.order?[spot] = noteID
+            }
             book.folders?.removeAll { $0.id == folder.id }
         }
         touchLayout(&book, now: now)
@@ -83,7 +91,9 @@ extension Seats {
         let order = book.order ?? []
         let holeOK = hole.map { isHole($0) && order.contains($0) } ?? false
         let afterOK = after.map { $0 != noteID && order.contains($0) } ?? false
-        if !holeOK, !afterOK { return false }
+        if !holeOK, !afterOK {
+            return false
+        }
         var next = order.filter { $0 != noteID }
         if holeOK, let hole, let spot = next.firstIndex(of: hole) {
             next[spot] = noteID
@@ -122,7 +132,9 @@ extension Seats {
               let holeSpot = order.firstIndex(of: holeFor(noteID)) else { return false }
         let between = order[(min(spot, holeSpot) + 1) ..< max(spot, holeSpot)]
         let clear = between.allSatisfy { id in isHole(id) || book.notes.contains { $0.id == id && $0.deleted } }
-        if !clear { return false }
+        if !clear {
+            return false
+        }
         book.order?.remove(at: holeSpot)
         touchLayout(&book, now: now)
         fixOrder(&book)
@@ -136,8 +148,12 @@ extension Seats {
         guard let folder = book.folders?.first(where: { $0.id == folderID }), visible.contains(noteID),
               book.folders?.contains(where: { $0.id == noteID }) == false else { return false }
         // 先驗再動：visible 只能有這張和這個資料夾原本的紙、不重複
-        if Set(visible).count != visible.count || visible.contains(where: { $0 != noteID && !folder.ids.contains($0) }) { return false }
-        if !folder.ids.contains(noteID), !intoFolder(&book, noteID: noteID, folderID: folderID, now: now) { return false }
+        if Set(visible).count != visible.count || visible.contains(where: { $0 != noteID && !folder.ids.contains($0) }) {
+            return false
+        }
+        if !folder.ids.contains(noteID), !intoFolder(&book, noteID: noteID, folderID: folderID, now: now) {
+            return false
+        }
         guard let idx = book.folders?.firstIndex(where: { $0.id == folderID }), let ids = book.folders?[idx].ids else { return false }
         let set = Set(visible)
         var used = 0
@@ -153,7 +169,9 @@ extension Seats {
 
     /// 把紙放到目錄的指定位置；在資料夾裡的先拿出來
     static func placeTop(_ book: inout Notebook, noteID: String, visible: [String], now: Double) {
-        if folderOf(book, noteID) != nil { outOfFolder(&book, noteID: noteID, now: now) }
+        if folderOf(book, noteID) != nil {
+            outOfFolder(&book, noteID: noteID, now: now)
+        }
         reseat(&book, visible: visible, now: now)
         touchLayout(&book, now: now)
     }
@@ -162,7 +180,9 @@ extension Seats {
     @discardableResult
     static func renameFolder(_ book: inout Notebook, folderID: String, name: String, now: Double) -> Bool {
         guard let idx = book.folders?.firstIndex(where: { $0.id == folderID }) else { return false }
-        if Labels.trim(name).isEmpty || name == book.folders?[idx].name { return false }
+        if Labels.trim(name).isEmpty || name == book.folders?[idx].name {
+            return false
+        }
         book.folders?[idx].name = name
         touchLayout(&book, now: now)
         return true
@@ -204,7 +224,9 @@ extension Seats {
     /// 這台有自己的排列（已經有真的紙）：iCloud 上沒有 layout.json 時拿這台的當第一份，mod 從 0 起算。
     /// 剛裝好、只有教學紙的不算
     static func ownLayout(_ book: inout Notebook) {
-        if book.orderMod == nil, book.notes.contains(where: { !Tutorial.isUntouched($0) }) { book.orderMod = 0 }
+        if book.orderMod == nil, book.notes.contains(where: { !Tutorial.isUntouched($0) }) {
+            book.orderMod = 0
+        }
     }
 
     /// 要傳上 iCloud 的排列：跟上次對上的不一樣才傳
@@ -224,11 +246,15 @@ extension Seats {
         case let .found(val): raw = val
         }
         guard let remote = readLayout(raw) else {
-            if book.orderMod != nil { book.orderSent = nil }
+            if book.orderMod != nil {
+                book.orderSent = nil
+            }
             return false
         }
         if let mine = book.orderMod, mine > remote.mod {
-            if book.orderSent == mine { book.orderSent = nil }
+            if book.orderSent == mine {
+                book.orderSent = nil
+            }
             return false
         }
         let beforeOrder = book.order ?? [], beforeFolders = book.folders ?? []

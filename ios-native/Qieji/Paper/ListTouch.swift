@@ -34,6 +34,10 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     private let thud = UIImpactFeedbackGenerator(style: .light)
     private var dragScrollStart: CGFloat = 0
     private var landing = false
+    private var autoLink: CADisplayLink?
+    private var autoSpeed: CGFloat = 0 // 點／秒，正的往下捲
+    private var dragTouchY: CGFloat = 0 // 手指在捲動區裡的位置（跟著捲動內容走的座標）
+    private var dragStartY: CGFloat = 0
 
     /// 把手那一條有多寬（從右邊算）
     static let gripStrip = Tok.Shape.hitMin + Tok.Space.xs * 3
@@ -77,13 +81,17 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             let speed = gripPan.velocity(in: scroll)
             return inGrip && row(at: point) != nil && abs(speed.y) >= abs(speed.x)
         }
-        if gesture === hold { return row(at: point) != nil && !inGrip }
+        if gesture === hold {
+            return row(at: point) != nil && !inGrip
+        }
         return true
     }
 
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         // 正在打字的那一行自己收觸控（移游標、選字），不跟清單的手勢搶
-        if gesture === tap || gesture === hold, touch.view is UITextView { return false }
+        if gesture === tap || gesture === hold, touch.view is UITextView {
+            return false
+        }
         return true
     }
 
@@ -93,8 +101,13 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     // MARK: 左右滑
 
-    private func strikeLine(_ width: CGFloat) -> CGFloat { min(Tok.Gesture.strikeMax, width * Tok.Gesture.strikeRatio) }
-    private func deleteLine(_ width: CGFloat) -> CGFloat { min(Tok.Gesture.deleteMax, width * Tok.Gesture.deleteRatio) }
+    private func strikeLine(_ width: CGFloat) -> CGFloat {
+        min(Tok.Gesture.strikeMax, width * Tok.Gesture.strikeRatio)
+    }
+
+    private func deleteLine(_ width: CGFloat) -> CGFloat {
+        min(Tok.Gesture.deleteMax, width * Tok.Gesture.deleteRatio)
+    }
 
     @objc private func onSwipe(_ gesture: UIPanGestureRecognizer) {
         guard let scroll else { return }
@@ -110,7 +123,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             let armed = shift > 0 ? shift >= strikeLine(width) : -shift >= deleteLine(width)
             if armed != swipeArmed {
                 swipeArmed = armed
-                if armed { tick.selectionChanged() }
+                if armed {
+                    tick.selectionChanged()
+                }
             }
             swipeTx = shift
         case .ended, .cancelled, .failed:
@@ -134,10 +149,14 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             }
             return
         }
-        if armed { onStrike(id) }
+        if armed {
+            onStrike(id)
+        }
         withAnimation(armed ? Tok.Motion.strikeReturn : Tok.Motion.snapBack) { swipeTx = 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.deleteSlideSeconds) { [weak self] in
-            if self?.swipeID == id, self?.swipeTx == 0 { self?.swipeID = nil }
+            if self?.swipeID == id, self?.swipeTx == 0 {
+                self?.swipeID = nil
+            }
         }
     }
 
@@ -149,6 +168,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         case .began:
             guard let id = row(at: gesture.location(in: scroll)), let from = order.firstIndex(of: id) else { return }
             dragScrollStart = scroll.contentOffset.y
+            dragStartY = gesture.location(in: scroll).y - scroll.contentOffset.y
             dragHeight = frames[id]?.height ?? Tok.Shape.rowMin
             dragFrom = from
             dragTo = from
@@ -158,16 +178,72 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             thud.prepare()
         case .changed:
             guard let id = dragID else { return }
-            dragDy = gesture.translation(in: scroll).y + (scroll.contentOffset.y - dragScrollStart)
-            let target = targetIndex(for: id)
-            if target != dragTo {
-                dragTo = target
-                tick.selectionChanged()
-            }
+            dragTouchY = gesture.location(in: scroll).y - scroll.contentOffset.y
+            _ = id
+            followFinger()
+            steerAutoScroll()
         case .ended, .cancelled, .failed:
+            stopAutoScroll()
             land()
         default: break
         }
+    }
+
+    /// 拖著的那行跟著手指：手指移了多少＋這段時間紙自己捲了多少
+    private func followFinger() {
+        guard let scroll, let id = dragID else {
+            return
+        }
+        dragDy = (dragTouchY - dragStartY) + (scroll.contentOffset.y - dragScrollStart)
+        let target = targetIndex(for: id)
+        if target != dragTo {
+            dragTo = target
+            tick.selectionChanged()
+        }
+    }
+
+    /// 手指離上緣、下緣不到 dragAutoEdge：紙往那邊捲，貼到最邊上最快
+    private func steerAutoScroll() {
+        guard let scroll else {
+            return
+        }
+        let edge = Tok.Gesture.dragAutoEdge
+        let top = dragTouchY, bottom = scroll.bounds.height - scroll.adjustedContentInset.bottom - dragTouchY
+        if top < edge {
+            autoSpeed = -Tok.Gesture.dragAutoSpeed * min(1, (edge - top) / edge)
+        } else if bottom < edge {
+            autoSpeed = Tok.Gesture.dragAutoSpeed * min(1, (edge - bottom) / edge)
+        } else {
+            autoSpeed = 0
+        }
+        if autoSpeed == 0 {
+            stopAutoScroll()
+        } else if autoLink == nil {
+            let link = CADisplayLink(target: self, selector: #selector(autoStep(_:)))
+            link.add(to: .main, forMode: .common)
+            autoLink = link
+        }
+    }
+
+    @objc private func autoStep(_ link: CADisplayLink) {
+        guard let scroll, dragID != nil else {
+            stopAutoScroll()
+            return
+        }
+        let low = -scroll.adjustedContentInset.top
+        let high = max(low, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+        let next = min(high, max(low, scroll.contentOffset.y + autoSpeed * CGFloat(link.targetTimestamp - link.timestamp)))
+        if next == scroll.contentOffset.y {
+            return
+        }
+        scroll.contentOffset.y = next
+        followFinger()
+    }
+
+    private func stopAutoScroll() {
+        autoLink?.invalidate()
+        autoLink = nil
+        autoSpeed = 0
     }
 
     /// 拖著的那行現在的中心，排在其他行的第幾個
@@ -177,7 +253,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         var slot = 0
         for other in order where other != id {
             guard let frame = frames[other] else { continue }
-            if frame.midY < mid { slot += 1 }
+            if frame.midY < mid {
+                slot += 1
+            }
         }
         return min(slot, max(0, order.count - 1))
     }
@@ -194,13 +272,15 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             var quiet = Transaction()
             quiet.disablesAnimations = true
             withTransaction(quiet) {
-                if target != from { self.onMove(id, target) }
+                if target != from {
+                    self.onMove(id, target)
+                }
                 self.dragID = nil
                 self.dragDy = 0
                 self.dragFrom = -1
                 self.dragTo = -1
             }
-            self.landing = false
+            landing = false
         }
     }
 
@@ -215,8 +295,12 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     /// 排順序時，別的行要讓多少
     func giveWay(index: Int) -> CGFloat {
         guard dragFrom >= 0, index != dragFrom else { return 0 }
-        if dragFrom < dragTo, index > dragFrom, index <= dragTo { return -dragHeight }
-        if dragFrom > dragTo, index < dragFrom, index >= dragTo { return dragHeight }
+        if dragFrom < dragTo, index > dragFrom, index <= dragTo {
+            return -dragHeight
+        }
+        if dragFrom > dragTo, index < dragFrom, index >= dragTo {
+            return dragHeight
+        }
         return 0
     }
 
@@ -226,7 +310,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         guard let scroll, gesture.state == .ended else { return }
         let point = gesture.location(in: scroll)
         guard let id = row(at: point), let frame = frames[id] else { onTapBlank(); return }
-        if point.x > scroll.bounds.width - ListTouch.gripStrip { return }
+        if point.x > scroll.bounds.width - ListTouch.gripStrip {
+            return
+        }
         onTap(id, CGPoint(x: point.x - frame.minX - Tok.Space.lg, y: point.y - frame.minY))
     }
 

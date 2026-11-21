@@ -13,7 +13,9 @@ final class SeatFixtureTests: XCTestCase {
         (SeatFixtureTests.all[name]?.arrayValue ?? []).compactMap(\.objectValue)
     }
 
-    private func strings(_ val: JSONValue?) -> [String] { (val?.arrayValue ?? []).compactMap(\.stringValue) }
+    private func strings(_ val: JSONValue?) -> [String] {
+        (val?.arrayValue ?? []).compactMap(\.stringValue)
+    }
 
     // MARK: 座位表
 
@@ -24,7 +26,9 @@ final class SeatFixtureTests: XCTestCase {
         book.order = order.map { id in
             guard Seats.isHole(id) else { return id }
             let hit = known?.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)) != nil
-            if hit { return id }
+            if hit {
+                return id
+            }
             count += 1
             return ".H\(count)"
         }
@@ -32,10 +36,16 @@ final class SeatFixtureTests: XCTestCase {
 
     private func seatView(_ book: Notebook) -> String {
         let ids = Set(book.notes.map(\.id))
-        func norm(_ id: String) -> String { Seats.isHole(id) && !ids.contains(String(id.dropFirst())) ? ".?" : id }
+        func norm(_ id: String) -> String {
+            Seats.isHole(id) && !ids.contains(String(id.dropFirst())) ? ".?" : id
+        }
         let layout: [JSONValue] = Seats.seatedLayout(book).map { entry in
             var tag = ""
-            if entry.isBreak { tag = "B" } else if entry.isHole { tag = "H" } else if entry.folder != nil {
+            if entry.isBreak {
+                tag = "B"
+            } else if entry.isHole {
+                tag = "H"
+            } else if entry.folder != nil {
                 tag = "F" + entry.notes.map(\.id).joined(separator: "+")
             }
             return .string(norm(entry.id) + tag)
@@ -49,7 +59,8 @@ final class SeatFixtureTests: XCTestCase {
         ]).stringify()
     }
 
-    /// 做一步。回傳值有的話轉成 JSON 好比對
+    // 做一步。回傳值有的話轉成 JSON 好比對
+    // swiftlint:disable:next cyclomatic_complexity
     private func run(_ opr: [String: JSONValue], on book: inout Notebook) -> JSONValue {
         let now = opr["now"]?.numberValue ?? 0
         let note = opr["note"]?.stringValue ?? ""
@@ -75,9 +86,13 @@ final class SeatFixtureTests: XCTestCase {
             Seats.placeTop(&book, noteID: note, visible: strings(opr["visible"]), now: now)
         case "trash":
             Seats.leaveHole(&book, noteID: note, now: now)
-            if let idx = book.index(note) { Trash.markDeleted(&book.notes[idx], now: now) }
+            if let idx = book.index(note) {
+                Trash.markDeleted(&book.notes[idx], now: now)
+            }
         case "restore":
-            if let idx = book.index(note) { Trash.markRestored(&book.notes[idx]) }
+            if let idx = book.index(note) {
+                Trash.markRestored(&book.notes[idx])
+            }
             Seats.fillHole(&book, noteID: note, now: now)
         case "drop":
             Sync.dropNotes(&book, now: now) { $0.id == note }
@@ -111,7 +126,9 @@ final class SeatFixtureTests: XCTestCase {
                 let ret = run(opr, on: &book)
                 tameHoles(&book, count: &holes)
                 let kind = opr["kind"]?.stringValue ?? ""
-                if let want = step["ret"], want != .null { XCTAssertEqual(ret, want, "第 \(num) 組第 \(idx) 步 \(kind) 的回傳值") }
+                if let want = step["ret"], want != .null {
+                    XCTAssertEqual(ret, want, "第 \(num) 組第 \(idx) 步 \(kind) 的回傳值")
+                }
                 let got = seatView(book)
                 if got != step["view"]?.stringValue {
                     XCTFail("第 \(num) 組第 \(idx) 步 \(kind)：\n得到 \(got)\n應該 \(step["view"]?.stringValue ?? "")")
@@ -150,7 +167,9 @@ final class SeatFixtureTests: XCTestCase {
                     ret = .number(Double(gone.count))
                 case "unbinDone": ret = .number(Double(Lines.unbinDone(&note, before: before, ids: ids)))
                 case "toggle":
-                    if let spot = note.items.firstIndex(where: { $0.id == id }) { note.items[spot].done.toggle() }
+                    if let spot = note.items.firstIndex(where: { $0.id == id }) {
+                        note.items[spot].done.toggle()
+                    }
                 case "add": note.items.insert(Item(id: id, text: "新 \(id.dropFirst(3))", flagB: true), at: 0)
                 case "purge":
                     var list = [note]
@@ -159,7 +178,9 @@ final class SeatFixtureTests: XCTestCase {
                 default: XCTFail("不認得的動作")
                 }
                 let kind = opr["kind"]?.stringValue ?? ""
-                if let want = step["ret"], want != .null { XCTAssertEqual(ret, want, "第 \(num) 組第 \(idx) 步 \(kind) 的回傳值") }
+                if let want = step["ret"], want != .null {
+                    XCTAssertEqual(ret, want, "第 \(num) 組第 \(idx) 步 \(kind) 的回傳值")
+                }
                 let got = lineView(note)
                 if got != step["view"]?.stringValue {
                     XCTFail("第 \(num) 組第 \(idx) 步 \(kind)：\n得到 \(got)\n應該 \(step["view"]?.stringValue ?? "")")

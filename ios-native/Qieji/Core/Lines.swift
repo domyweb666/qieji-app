@@ -5,7 +5,9 @@ enum Lines {
     /// 一張紙最多幾行（多米 2026-11-03）
     static let max = 1000
 
-    static func room(_ note: Note) -> Int { Swift.max(0, max - note.items.count) }
+    static func room(_ note: Note) -> Int {
+        Swift.max(0, max - note.items.count)
+    }
 
     /// 刪一行：進這張紙的最近刪除（排最前面）。回傳被移走的那行
     static func bin(_ note: inout Note, _ id: String, now: Double) -> Item? {
@@ -32,16 +34,24 @@ enum Lines {
         var after: [String: [Item]] = [:] // 接在哪一行後面（""＝最上面）
         var anchor = "", back = 0
         for item in before {
-            if here.contains(item.id) { anchor = item.id; continue }
-            if !removed.contains(item.id) || binned.contains(item.id) { continue }
+            if here.contains(item.id) {
+                anchor = item.id; continue
+            }
+            if !removed.contains(item.id) || binned.contains(item.id) {
+                continue
+            }
             after[anchor, default: []].append(item)
             back += 1
         }
-        if back == 0 { return 0 }
+        if back == 0 {
+            return 0
+        }
         var out = after[""] ?? []
         for item in note.items {
             out.append(item)
-            if !item.id.isEmpty, let list = after[item.id] { out.append(contentsOf: list) }
+            if !item.id.isEmpty, let list = after[item.id] {
+                out.append(contentsOf: list)
+            }
         }
         note.items = out
         return back
@@ -50,9 +60,13 @@ enum Lines {
     /// 清掉劃掉的行：全部進這張紙的最近刪除，照紙上的先後排在最前面。回傳清掉的那幾行
     static func binDone(_ note: inout Note, now: Double) -> [Item] {
         var gone = note.items.filter(\.done)
-        if gone.isEmpty { return gone }
+        if gone.isEmpty {
+            return gone
+        }
         note.items.removeAll(where: \.done)
-        for idx in gone.indices { gone[idx].binnedAt = now }
+        for idx in gone.indices {
+            gone[idx].binnedAt = now
+        }
         note.bin.insert(contentsOf: gone, at: 0)
         return gone
     }
@@ -67,7 +81,9 @@ enum Lines {
             pulled[item.id] = back
             return true
         }
-        if pulled.isEmpty { return 0 }
+        if pulled.isEmpty {
+            return 0
+        }
         return putBack(&note, before: before.map { pulled[$0.id] ?? $0 }, removed: Set(pulled.keys))
     }
 
@@ -92,7 +108,9 @@ enum Trash {
     /// 四條規則合在一處：時間可信、現在可信、時間不比現在晚（手機時間被調過）、已滿 30 天
     static func isExpired(at: Double?, now: Double) -> Bool {
         guard Clock.validTime(now), let at, Clock.validTime(at) else { return false }
-        if at > now { return false }
+        if at > now {
+            return false
+        }
         return now - at >= span
     }
 

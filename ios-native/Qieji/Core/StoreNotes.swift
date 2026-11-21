@@ -15,7 +15,9 @@ extension Store {
         frozen = found.frozen
         disk.seedRecent(found.recent, last: found.last)
         adopt(found.book, last: found.last)
-        if found.unreadable { toast = Toast(text: Words.unreadable) }
+        if found.unreadable {
+            toast = Toast(text: Words.unreadable)
+        }
         purgeTrash()
         flush()
     }
@@ -34,7 +36,9 @@ extension Store {
 
     /// 現在這張不見了（被刪、被同步拿掉）就換到目錄第一張；一張都沒有就開一張新的
     func ensureCurrent() {
-        if let note = current, !note.deleted { return }
+        if let note = current, !note.deleted {
+            return
+        }
         if let first = Seats.seatedNotes(book).first {
             open(first.id)
         } else {
@@ -54,6 +58,7 @@ extension Store {
             Seats.seatFirstHole(&book, noteID: note.id, now: now)
         }
         open(note.id)
+        requestCompose()
         return note.id
     }
 
@@ -119,7 +124,9 @@ extension Store {
     func emptyTrash() {
         edit { book in
             Sync.dropNotes(&book, now: Clock.now()) { $0.deleted }
-            for idx in book.notes.indices { book.notes[idx].bin = [] }
+            for idx in book.notes.indices {
+                book.notes[idx].bin = []
+            }
         }
     }
 
@@ -138,7 +145,16 @@ extension Store {
         edit { book in
             guard let idx = book.index(id) else { return }
             change(&book.notes[idx])
-            if touch { book.notes[idx].updated = Clock.now() }
+            if touch {
+                book.notes[idx].updated = Clock.now()
+            }
         }
+    }
+}
+
+extension Store {
+    /// 改磚上的字：只收一個字，清空＝回到用名字的第一個字
+    func setGlyph(_ id: String, _ text: String) {
+        editNote(id, touch: false) { _ = Labels.setGlyph(&$0, text) }
     }
 }

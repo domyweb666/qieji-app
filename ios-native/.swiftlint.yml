@@ -5,6 +5,7 @@ included:
 excluded:
   - .build
   - DerivedData
+  - .limbuild-sandbox
 
 opt_in_rules:
   - cyclomatic_complexity

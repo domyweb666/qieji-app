@@ -20,7 +20,9 @@ final class FixtureTests: XCTestCase {
         NoteCoding.readBook(text?.stringValue) ?? Notebook()
     }
 
-    private func canon(_ book: Notebook) -> String { NoteCoding.json(book).stringify() }
+    private func canon(_ book: Notebook) -> String {
+        NoteCoding.json(book).stringify()
+    }
 
     /// 對照答案檔真的有讀到，而且每一組的數量跟產生器印的一樣（不然全部「通過」可能只是什麼都沒比）
     func testFixturesAreLoaded() {
@@ -105,11 +107,10 @@ final class FixtureTests: XCTestCase {
         for one in cases("layouts") {
             let name = one["name"]?.stringValue ?? ""
             var local = book(one["local"])
-            let fetch: Seats.LayoutFetch
-            switch one["fetch"]?.stringValue {
-            case "missing": fetch = .missing
-            case "unreadable": fetch = .unreadable
-            default: fetch = .found(one["raw"] ?? .null)
+            let fetch: Seats.LayoutFetch = switch one["fetch"]?.stringValue {
+            case "missing": .missing
+            case "unreadable": .unreadable
+            default: .found(one["raw"] ?? .null)
             }
             let changed = Seats.mergeLayout(&local, fetch)
             XCTAssertEqual(changed, one["changed"] == .bool(true), "有沒有變：\(name)")

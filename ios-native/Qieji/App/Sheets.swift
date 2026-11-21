@@ -53,7 +53,9 @@ struct SwitchSheet: View {
         Button {
             let leaving = store.currentID
             store.open(note.id)
-            if let leaving, leaving != note.id { store.dropIfBlank(leaving) }
+            if let leaving, leaving != note.id {
+                store.dropIfBlank(leaving)
+            }
             close()
         } label: {
             HStack(spacing: Tok.Space.md) {

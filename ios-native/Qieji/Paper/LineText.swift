@@ -21,7 +21,9 @@ struct LineText: UIViewRepresentable {
     let actions: LineActions
     var voice: [VoiceAct] = []
 
-    func makeCoordinator() -> Coordinator { Coordinator(actions: actions) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(actions: actions)
+    }
 
     func makeUIView(context: Context) -> UITextView {
         let view = LineTextView()
@@ -68,7 +70,9 @@ struct LineText: UIViewRepresentable {
             coord.lastFocus = focus.token
             DispatchQueue.main.async { LineText.place(view, focus) }
         }
-        if !editing, view.isFirstResponder { view.resignFirstResponder() }
+        if !editing, view.isFirstResponder {
+            view.resignFirstResponder()
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context _: Context) -> CGSize? {
@@ -103,7 +107,9 @@ struct LineText: UIViewRepresentable {
             .foregroundColor: done ? strikeInk : ink,
             .baselineOffset: (lineHeight - font.lineHeight) / 2,
         ]
-        if done { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+        if done {
+            attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        }
         return attrs
     }
 
@@ -114,14 +120,18 @@ struct LineText: UIViewRepresentable {
         var shownInk: UIColor?
         var voice: [VoiceAct] = []
 
-        init(actions: LineActions) { self.actions = actions }
+        init(actions: LineActions) {
+            self.actions = actions
+        }
 
         func textViewDidChange(_ view: UITextView) {
             view.invalidateIntrinsicContentSize()
             actions.change(view.text ?? "")
         }
 
-        func textViewDidEndEditing(_ view: UITextView) { actions.end(view.text ?? "") }
+        func textViewDidEndEditing(_ view: UITextView) {
+            actions.end(view.text ?? "")
+        }
 
         func textView(_ view: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             let whole = (view.text ?? "") as NSString
@@ -149,7 +159,9 @@ final class LineTextView: UITextView {
     var onDeleteAtStart: (() -> Bool)?
 
     override func deleteBackward() {
-        if selectedRange.location == 0, selectedRange.length == 0, markedTextRange == nil, onDeleteAtStart?() == true { return }
+        if selectedRange.location == 0, selectedRange.length == 0, markedTextRange == nil, onDeleteAtStart?() == true {
+            return
+        }
         super.deleteBackward()
     }
 }

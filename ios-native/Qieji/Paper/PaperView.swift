@@ -16,15 +16,24 @@ struct PaperView: View {
     @State private var draft = ""
     @State private var renaming = false
     @State private var newName = ""
+    @State private var glyphing = false
+    @State private var newGlyph = ""
     @FocusState private var composerFocused: Bool
 
     var body: some View {
         let colors = Tok.note(note.color)
-        VStack(spacing: 0) {
-            PaperHeader(store: store, note: note, colors: colors, onTitle: onTitle, onRoute: onRoute) {
-                newName = note.title
-                renaming = true
-            }
+        VStack(spacing: Tok.Space.zero) {
+            PaperHeader(
+                store: store, note: note, colors: colors, onTitle: onTitle, onRoute: onRoute,
+                onRename: {
+                    newName = note.title
+                    renaming = true
+                },
+                onGlyph: {
+                    newGlyph = note.glyph ?? ""
+                    glyphing = true
+                }
+            )
             PaperList(
                 store: store, touch: touch, note: note,
                 editingID: $editingID, focus: $focus, menuID: $menuID, colors: colors
@@ -39,7 +48,24 @@ struct PaperView: View {
             Button(Words.done) { store.rename(note.id, newName) }
             Button(Words.cancel, role: .cancel) {}
         }
-        .onChange(of: composerFocused) { on in if !on, composing { commit() } }
+        .alert(Words.glyphEdit, isPresented: $glyphing) {
+            TextField(Words.glyphHint, text: $newGlyph)
+            Button(Words.done) {
+                if let problem = Labels.glyphProblem(newGlyph) {
+                    store.toast = Store.Toast(text: problem)
+                } else {
+                    store.setGlyph(note.id, newGlyph)
+                }
+            }
+            Button(Words.cancel, role: .cancel) {}
+        }
+        .onAppear { openIfAsked() }
+        .onChange(of: store.composeAsk) { _ in openIfAsked() }
+        .onChange(of: composerFocused) { focused in
+            if !focused, composing {
+                commit()
+            }
+        }
         .onChange(of: note.id) { _ in
             editingID = nil
             composing = false
@@ -47,6 +73,19 @@ struct PaperView: View {
     }
 
     // MARK: 右下 ＋ 與輸入框
+
+    /// 開了新的一張、或控制中心按了「記一行」：輸入框直接升起
+    private func openIfAsked() {
+        guard store.takeCompose() else {
+            return
+        }
+        editingID = nil
+        composing = true
+        // 紙剛出現的那一格還對不到焦，等它掛好
+        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.composerFocusDelay) {
+            composerFocused = true
+        }
+    }
 
     @ViewBuilder private var addButton: some View {
         if !composing, editingID == nil, touch.dragID == nil {
@@ -108,13 +147,19 @@ struct PaperView: View {
         draft = ""
         composing = false
         composerFocused = false
-        if store.addTop(text) != nil { touch.scrollToTop() }
+        if store.addTop(text) != nil {
+            touch.scrollToTop()
+        }
     }
 
     // MARK: 按住一行的選單
 
     private var menuShown: Binding<Bool> {
-        Binding(get: { menuID != nil }, set: { if !$0 { menuID = nil } })
+        Binding(get: { menuID != nil }, set: {
+            if !$0 {
+                menuID = nil
+            }
+        })
     }
 
     @ViewBuilder private var lineMenu: some View {
@@ -135,6 +180,7 @@ struct PaperHeader: View {
     let onTitle: () -> Void
     let onRoute: (Route) -> Void
     let onRename: () -> Void
+    let onGlyph: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tok.Space.xs) {
@@ -154,7 +200,7 @@ struct PaperHeader: View {
                 }
                 .accessibilityHint(Words.switchTitle)
                 Spacer(minLength: Tok.Space.sm)
-                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename) } label: {
+                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onGlyph: onGlyph) } label: {
                     Image(systemName: "ellipsis")
                         .font(Tok.Font.headline)
                         .foregroundColor(Tok.Col.textPrimary)
@@ -180,6 +226,7 @@ struct PaperMenu: View {
     let note: Note
     let onRoute: (Route) -> Void
     let onRename: () -> Void
+    let onGlyph: () -> Void
 
     var body: some View {
         Picker(Words.colorTitle, selection: Binding(get: { note.color }, set: { store.setColor(note.id, $0) })) {
@@ -189,6 +236,7 @@ struct PaperMenu: View {
         }
         .pickerStyle(.menu)
         Button(action: onRename) { Label(Words.rename, systemImage: "pencil") }
+        Button(action: onGlyph) { Label(Words.glyphEdit, systemImage: "character") }
         Button { store.togglePin(note.id) } label: {
             Label(note.pinned ? Words.unpin : Words.pin, systemImage: note.pinned ? "pin.slash" : "pin")
         }

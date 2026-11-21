@@ -17,17 +17,17 @@ enum NoteCoding {
     /// 字：字串原樣、數字轉成字、其他當成空的
     static func str(_ val: JSONValue?) -> String {
         switch val {
-        case let .string(text): return text
-        case let .number(num) where num.isFinite: return JSONValue.jsNumber(num)
-        default: return ""
+        case let .string(text): text
+        case let .number(num) where num.isFinite: JSONValue.jsNumber(num)
+        default: ""
         }
     }
 
     static func idOf(_ val: JSONValue?) -> String {
         switch val {
-        case let .string(text) where !text.isEmpty: return text
-        case let .number(num) where num.isFinite: return JSONValue.jsNumber(num)
-        default: return Ident.make()
+        case let .string(text) where !text.isEmpty: text
+        case let .number(num) where num.isFinite: JSONValue.jsNumber(num)
+        default: Ident.make()
         }
     }
 
@@ -51,17 +51,24 @@ enum NoteCoding {
 
     static func note(_ dict: [String: JSONValue]) -> Note {
         var color = dict["color"]?.stringValue ?? ""
-        if !NoteColor.isKey(color) { color = color == "pink" ? "red" : "yellow" }
+        if !NoteColor.isKey(color) {
+            color = color == "pink" ? "red" : "yellow"
+        }
         let deleted = dict["deleted"]?.truthy ?? false
         var glyph: String?
         if let raw = dict["glyph"]?.stringValue {
             glyph = Labels.graphemes(Labels.trim(raw)).first
         }
         var cover = dict["cover"]?.stringValue
-        if let name = cover, !isCoverName(name) { cover = nil }
+        if let name = cover, !isCoverName(name) {
+            cover = nil
+        }
         let rawID = dict["id"]
-        let noteID: String
-        if case let .string(text) = rawID { noteID = text } else { noteID = idOf(rawID) }
+        let noteID: String = if case let .string(text) = rawID {
+            text
+        } else {
+            idOf(rawID)
+        }
         return Note(
             id: noteID,
             kind: dict["type"]?.stringValue ?? "check",
@@ -99,7 +106,9 @@ enum NoteCoding {
         var dict: [String: JSONValue] = [
             "id": .string(item.id), "t": .string(item.text), "done": .bool(item.done), "b": .bool(item.flagB),
         ]
-        if let at = item.binnedAt { dict["at"] = .number(at) }
+        if let at = item.binnedAt {
+            dict["at"] = .number(at)
+        }
         return .object(dict)
     }
 
@@ -117,13 +126,27 @@ enum NoteCoding {
         dict["created"] = .number(note.created)
         dict["updated"] = .number(note.updated)
         dict["b"] = .bool(note.flagB)
-        if let glyph = note.glyph { dict["glyph"] = .string(glyph) }
-        if let cover = note.cover { dict["cover"] = .string(cover) }
-        if note.locked { dict["locked"] = .bool(true) }
-        if let at = note.deletedAt { dict["deletedAt"] = .number(at) }
-        if let hash = note.hash { dict["h"] = .string(hash) }
-        if let mod = note.mod { dict["mod"] = .number(mod) }
-        if let synced = note.syncedHash { dict["sh"] = .string(synced) }
+        if let glyph = note.glyph {
+            dict["glyph"] = .string(glyph)
+        }
+        if let cover = note.cover {
+            dict["cover"] = .string(cover)
+        }
+        if note.locked {
+            dict["locked"] = .bool(true)
+        }
+        if let at = note.deletedAt {
+            dict["deletedAt"] = .number(at)
+        }
+        if let hash = note.hash {
+            dict["h"] = .string(hash)
+        }
+        if let mod = note.mod {
+            dict["mod"] = .number(mod)
+        }
+        if let synced = note.syncedHash {
+            dict["sh"] = .string(synced)
+        }
         return .object(dict)
     }
 
@@ -135,12 +158,18 @@ enum NoteCoding {
         var book = Notebook()
         book.notes = dedupe(list.compactMap(\.objectValue).map(note))
         book.garden = garden(dict["garden"], notes: book.notes)
-        if let sort = dict["sort"]?.stringValue, Sorts.keys.contains(sort) { book.sort = sort }
+        if let sort = dict["sort"]?.stringValue, Sorts.keys.contains(sort) {
+            book.sort = sort
+        }
         book.gone = gone(dict["gone"])
-        if let order = dict["order"]?.arrayValue { book.order = order.compactMap(\.stringValue) }
+        if let order = dict["order"]?.arrayValue {
+            book.order = order.compactMap(\.stringValue)
+        }
         book.orderMod = dict["orderMod"]?.numberValue
         book.orderSent = dict["orderSent"]?.numberValue
-        if let folders = dict["folders"]?.arrayValue { book.folders = folders.compactMap(folder) }
+        if let folders = dict["folders"]?.arrayValue {
+            book.folders = folders.compactMap(folder)
+        }
         book.grid = dict["grid"]?.numberValue
         book.extra = dict.filter { !bookKeys.contains($0.key) }
         return book
@@ -150,7 +179,9 @@ enum NoteCoding {
     private static func dedupe(_ notes: [Note]) -> [Note] {
         var best: [String: Int] = [:]
         for (idx, note) in notes.enumerated() {
-            if let old = best[note.id], notes[old].updated >= note.updated { continue }
+            if let old = best[note.id], notes[old].updated >= note.updated {
+                continue
+            }
             best[note.id] = idx
         }
         return notes.enumerated().filter { best[$0.element.id] == $0.offset }.map(\.element)
@@ -158,7 +189,9 @@ enum NoteCoding {
 
     /// 茄子田（網頁版的功能）：app 不再計數，原樣留著。沒有的話照現有的紙算第一次
     private static func garden(_ val: JSONValue?, notes: [Note]) -> JSONValue {
-        if let dict = val?.objectValue, dict["days"]?.truthy == true, dict["tot"]?.truthy == true { return .object(dict) }
+        if let dict = val?.objectValue, dict["days"]?.truthy == true, dict["tot"]?.truthy == true {
+            return .object(dict)
+        }
         let live = notes.filter { !$0.deleted }
         let lines = live.flatMap(\.items)
         let filled = lines.filter { !Labels.trim($0.text).isEmpty }.count
@@ -170,7 +203,9 @@ enum NoteCoding {
     static func gone(_ val: JSONValue?) -> [String: Double] {
         var out: [String: Double] = [:]
         for (id, stamp) in val?.objectValue ?? [:] {
-            if let at = time(stamp) { out[id] = at }
+            if let at = time(stamp) {
+                out[id] = at
+            }
         }
         return out
     }
@@ -193,13 +228,25 @@ enum NoteCoding {
         dict["notes"] = .array(book.notes.map(json))
         dict["garden"] = book.garden
         dict["gone"] = .object(book.gone.mapValues { .number($0) })
-        if let order = book.order { dict["order"] = .array(order.map { .string($0) }) }
-        if let mod = book.orderMod { dict["orderMod"] = .number(mod) }
-        if let sent = book.orderSent { dict["orderSent"] = .number(sent) }
-        if let folders = book.folders { dict["folders"] = .array(folders.map(json)) }
-        if let grid = book.grid { dict["grid"] = .number(grid) }
+        if let order = book.order {
+            dict["order"] = .array(order.map { .string($0) })
+        }
+        if let mod = book.orderMod {
+            dict["orderMod"] = .number(mod)
+        }
+        if let sent = book.orderSent {
+            dict["orderSent"] = .number(sent)
+        }
+        if let folders = book.folders {
+            dict["folders"] = .array(folders.map(json))
+        }
+        if let grid = book.grid {
+            dict["grid"] = .number(grid)
+        }
         return .object(dict)
     }
 
-    static func write(_ book: Notebook) -> String { json(book).stringify() }
+    static func write(_ book: Notebook) -> String {
+        json(book).stringify()
+    }
 }

@@ -15,7 +15,9 @@ enum Route: String, Identifiable {
     case trash // 最近刪除
     case settings
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 }
 
 /// 根畫面：紙是家。打開就是上次那張紙，其他畫面都從紙上面升起來。
@@ -27,7 +29,9 @@ struct RootView: View {
     /// 啟動參數帶 -demo、或環境變數 QIEJI_DEMO=1：用假資料、不讀不寫（模擬器截圖與手勢測試用）
     private static func makeStore() -> Store {
         let info = ProcessInfo.processInfo
-        if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" { return Store(book: Demo.book()) }
+        if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" {
+            return Store(book: Demo.book())
+        }
         return Store(disk: Disk.standard())
     }
 
@@ -44,11 +48,18 @@ struct RootView: View {
         .sheet(item: $route) { sheet($0) }
         .onAppear { store.boot() }
         .onChange(of: phase) { now in
-            if now == .active { store.purgeTrash() } else { store.flush() }
+            if now == .active {
+                store.purgeTrash()
+            } else {
+                store.flush()
+            }
         }
         .onOpenURL { url in
-            // 控制中心「記一行」：qieji://new（接到紙上的輸入框是之後的事，先確定打得開）
-            if url.host == "new" { route = nil }
+            // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框
+            if url.host == "new" {
+                route = nil
+                store.requestCompose()
+            }
         }
     }
 
@@ -92,7 +103,9 @@ struct ToastBar: View {
             .transition(.opacity)
             .task(id: toast.id) {
                 try? await Task.sleep(nanoseconds: UInt64(Tok.Timing.toastStay * 1_000_000_000))
-                if store.toast?.id == toast.id { store.toast = nil }
+                if store.toast?.id == toast.id {
+                    store.toast = nil
+                }
             }
         }
     }

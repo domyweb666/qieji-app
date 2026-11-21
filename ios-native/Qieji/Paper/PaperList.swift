@@ -24,7 +24,7 @@ struct PaperList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: Tok.Space.zero) {
                     ForEach(Array(note.items.enumerated()), id: \.element.id) { index, item in
                         row(item, index: index)
                     }
@@ -76,8 +76,12 @@ struct PaperList: View {
             VoiceAct(name: item.done ? Words.unstrike : Words.strike) { store.toggle(item.id) },
             VoiceAct(name: Words.deleteLine) { store.binLine(item.id) },
         ]
-        if index > 0 { out.append(VoiceAct(name: Words.moveUp) { store.move(item.id, to: index - 1) }) }
-        if index < note.items.count - 1 { out.append(VoiceAct(name: Words.moveDown) { store.move(item.id, to: index + 1) }) }
+        if index > 0 {
+            out.append(VoiceAct(name: Words.moveUp) { store.move(item.id, to: index - 1) })
+        }
+        if index < note.items.count - 1 {
+            out.append(VoiceAct(name: Words.moveDown) { store.move(item.id, to: index + 1) })
+        }
         return out
     }
 
@@ -86,7 +90,9 @@ struct PaperList: View {
         touch.order = note.items.map(\.id)
         touch.onStrike = { store.toggle($0) }
         touch.onDelete = { id in
-            if editingID == id { editingID = nil }
+            if editingID == id {
+                editingID = nil
+            }
             store.binLine(id)
         }
         touch.onMove = { store.move($0, to: $1) }
@@ -102,7 +108,9 @@ struct PaperList: View {
         LineActions(
             change: { store.setText(id, $0) },
             end: { _ in
-                if editingID == id { editingID = nil }
+                if editingID == id {
+                    editingID = nil
+                }
                 store.dropIfEmpty(id)
             },
             split: { before, after in
@@ -150,8 +158,10 @@ struct PaperRow: View {
 
     var body: some View {
         ZStack {
-            if slide != 0 { SwipeUnder(slide: slide, armed: armed, done: item.done) }
-            HStack(spacing: 0) {
+            if slide != 0 {
+                SwipeUnder(slide: slide, armed: armed, done: item.done)
+            }
+            HStack(spacing: Tok.Space.zero) {
                 LineText(
                     text: item.text, done: item.done, editing: editing, focus: focus,
                     ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice
@@ -165,7 +175,9 @@ struct PaperRow: View {
             .frame(minHeight: Tok.Shape.rowMin)
             .background(ZStack {
                 colors.paper
-                if editing { Tok.Col.rowEditingFill }
+                if editing {
+                    Tok.Col.rowEditingFill
+                }
             })
             .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.hairline) }
             .offset(x: slide)

@@ -31,9 +31,17 @@ final class Disk {
     private let defaults: UserDefaults
     private var written: String?
 
-    private var stateFile: URL { dir.appendingPathComponent("state.json") }
-    private var expoCopy: URL { dir.appendingPathComponent("from-expo.json") }
-    private var rescueFile: URL { dir.appendingPathComponent("unreadable.json") }
+    private var stateFile: URL {
+        dir.appendingPathComponent("state.json")
+    }
+
+    private var expoCopy: URL {
+        dir.appendingPathComponent("from-expo.json")
+    }
+
+    private var rescueFile: URL {
+        dir.appendingPathComponent("unreadable.json")
+    }
 
     init(dir: URL, legacyDirs: [URL], defaults: UserDefaults = .standard) {
         self.dir = dir
@@ -101,7 +109,9 @@ final class Disk {
     /// 整份存檔。跟上次寫的一字不差就不再寫。回傳有沒有成功
     func write(_ book: Notebook) -> Bool {
         let text = NoteCoding.write(book)
-        if text == written { return true }
+        if text == written {
+            return true
+        }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try text.write(to: stateFile, atomically: true, encoding: .utf8)
@@ -123,10 +133,16 @@ final class Disk {
         defaults.set(Array(recent.prefix(20)), forKey: LegacyStore.recentKey)
     }
 
-    var recent: [String] { defaults.stringArray(forKey: LegacyStore.recentKey) ?? [] }
+    var recent: [String] {
+        defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
+    }
 
     func seedRecent(_ list: [String], last: String?) {
-        if defaults.stringArray(forKey: LegacyStore.recentKey) == nil { defaults.set(list, forKey: LegacyStore.recentKey) }
-        if defaults.string(forKey: LegacyStore.lastKey) == nil, let last { defaults.set(last, forKey: LegacyStore.lastKey) }
+        if defaults.stringArray(forKey: LegacyStore.recentKey) == nil {
+            defaults.set(list, forKey: LegacyStore.recentKey)
+        }
+        if defaults.string(forKey: LegacyStore.lastKey) == nil, let last {
+            defaults.set(last, forKey: LegacyStore.lastKey)
+        }
     }
 }
