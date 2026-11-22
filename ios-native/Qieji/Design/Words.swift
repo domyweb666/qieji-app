@@ -61,12 +61,30 @@ enum Words {
     static let newNote = "新的一張"
     static let switchTitle = "切換清單"
     static let pinnedGroup = "已釘選"
+    static let pinGroup = "釘選"
+    static let newPad = "新的記事本"
+    static let closeSwitch = "收起切換清單"
     static let recentGroup = "最近"
     static let allNotes = "所有清單"
     static let trash = "最近刪除"
     static let trashNotes = "刪掉的清單"
     static let trashLines = "刪掉的行"
     static let trashNote = "放滿 30 天會自動清掉"
+    static let trashRule = "放滿 30 天會自動清掉。點一下可以還原或永久刪除。"
+    static let restored = "已還原"
+    static let emptyTrashAsk = "永久刪除這裡的所有清單和行？"
+    static func emptyTrash(_ count: Int) -> String {
+        "清空最近刪除（\(count)）"
+    }
+
+    static func restoreTo(_ name: String) -> String {
+        "還原到「\(name)」"
+    }
+
+    static func lineFrom(_ text: String, _ name: String) -> String {
+        "\(text)，原本在「\(name)」"
+    }
+
     static let trashEmpty = "最近刪除是空的"
     static let trashEmptyTip = "刪掉的清單和行會先放在這裡 30 天，之後自動清掉"
     static let restore = "還原"

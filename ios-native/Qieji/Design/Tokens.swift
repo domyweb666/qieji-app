@@ -219,6 +219,7 @@ enum Tok {
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 32
         static let belowList: CGFloat = 200 // 清單最下面留白，最後一行才捲得上來
+        static let pageBottom: CGFloat = 120 // 推進來的頁最下面留白，最後一組才捲得上來
     }
 
     // MARK: 形狀與尺寸
@@ -242,6 +243,7 @@ enum Tok {
         static let rowMin: CGFloat = 52
         static let menuRow: CGFloat = 48
         static let menuW: CGFloat = 260 // 長按一行的選單卡寬
+        static let switchMaxRatio: CGFloat = 0.7 // 切換清單最高佔螢幕幾成（清單多就在裡面捲）
         static let fab: CGFloat = 52 // barH：右下 ＋ 的直徑
         static let gripDot: CGFloat = 3
         static let gripDotGap: CGFloat = 4
@@ -255,6 +257,8 @@ enum Tok {
         static let noteIcon: CGFloat = 32
         static let titleIcon: CGFloat = 22
         static let swatchDot: CGFloat = 28
+        static let dot: CGFloat = 10 // 最近刪除每一列前面的色點
+        static let trashDetailMax: CGFloat = 130 // 刪掉的行右邊那張紙的名字最寬多少
         static let shadowRadius: CGFloat = 12
         static let shadowY: CGFloat = 8
         static let shadowSoft: Double = 0.14
@@ -331,6 +335,8 @@ enum Tok {
         // 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
         static let tileShift = Animation.interpolatingSpring(mass: 1, stiffness: 484, damping: 37)
         static let dirPanel = Animation.spring(response: 0.34, dampingFraction: 1)
+        /// 切換清單收起：點了一張紙馬上換，面板只是讓開，比升起快（1.1 switchClose 240）
+        static let switchClose = Animation.spring(response: 0.24, dampingFraction: 1)
         static let dirPanelSeconds: Double = 0.34
         static let dirFade = Animation.easeInOut(duration: 0.2)
         static let dirFadeSeconds: Double = 0.2

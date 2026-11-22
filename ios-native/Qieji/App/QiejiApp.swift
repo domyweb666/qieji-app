@@ -10,7 +10,7 @@ struct QiejiApp: App {
     }
 }
 
-/// 紙以外的畫面
+/// 紙以外的畫面（紙上、目錄裡要去哪）
 enum Route: String, Identifiable {
     case switcher // 切換清單（點左上清單名）
     case trash // 最近刪除
@@ -22,13 +22,20 @@ enum Route: String, Identifiable {
     }
 }
 
+/// 從右邊推進來的一整頁
+enum Page: Hashable {
+    case trash
+    case settings
+}
+
 /// 根畫面：紙是家。打開就是上次那張紙，其他畫面都從紙上面升起來。
 struct RootView: View {
     @StateObject private var store: Store
     /// 目錄面板的狀態。不讓根畫面看著它（看著的只有 DirHost）：目錄裡每動一格，紙不用跟著重畫
     @State private var dir: DirModel
-    @State private var route: Route?
-    @State private var wantDir = false // 切換清單收完之後要打開目錄
+    @State private var sheet: Route? // 從下面升起的表單：只有付費頁
+    @State private var path: [Page] = [] // 推進來的頁
+    @State private var switching = false // 切換清單開著
     @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
     @State private var shownID: String?
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
@@ -67,41 +74,26 @@ struct RootView: View {
     }
 
     var body: some View {
-        ZStack {
-            // 換紙時底下墊的是上一張的顏色（1.1 2026-11-04）：新的那張淡入時不會先露出奶油底、看起來閃一下
-            Tok.note(underKey).paper.ignoresSafeArea()
-            if let note = store.current {
-                PaperView(
-                    store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 },
-                    onMoveLine: { dir.open(move: $0) }
-                )
-                .id(note.id)
-                .transition(.asymmetric(insertion: .opacity, removal: .identity))
-            }
+        // 最近刪除、設定從右邊推進一整頁（1.1 Stack）；紙是最底下那頁、沒有標題列
+        NavigationStack(path: $path) {
+            paperRoot
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: Page.self) { page in
+                    switch page {
+                    case .trash: TrashPage(store: store)
+                    case .settings: SettingsView { path.removeAll() }
+                    }
+                }
         }
-        // 換一張紙：只有新的那張淡入（1.1 S2）。第一次打開 app 那張不淡，交給啟動畫面
-        .animation(booted ? Tok.Motion.fade : nil, value: store.currentID)
-        .onChange(of: store.currentID) { id in
-            DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
-                shownID = id
-                underKey = store.current?.color ?? underKey
-                booted = true
-            }
-        }
-        .onChange(of: store.current?.color) { key in
-            // 同一張換了顏色：底色跟著換（換紙時由上面那段等新的淡入完才換）
-            if store.currentID == shownID, let key {
-                underKey = key
-            }
-        }
-        // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
-        .overlay(alignment: .bottomTrailing) {
-            PlusButton(shown: store.fabShown) { store.plusAsk += 1 }
-        }
-        // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
-        .overlay { DirHost(store: store, model: dir) { route = $0 } }
+        .tint(Tok.Col.accent)
         .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
-        .sheet(item: $route, onDismiss: openDirIfAsked) { sheet($0) }
+        .sheet(item: $sheet) { _ in
+            // 付費頁：系統表單，從下面升起、一次展開到全高（2026-11-14 多米真機：半高要再滑一次才看得到購買鍵）、往下拉可以關
+            FullView(shop: shop, store: store) { sheet = nil }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(Tok.Shape.radiusLg)
+        }
         // 外觀（跟隨系統／淺色／深色）：整個 app 連系統提示框、選單一起換
         .preferredColorScheme(look.scheme)
         .onAppear {
@@ -152,44 +144,81 @@ struct RootView: View {
             switch url.host {
             case "new":
                 dir.close()
+                switching = false
                 if store.isFull {
-                    route = nil
+                    path.removeAll()
+                    sheet = nil
                     store.requestCompose()
                 } else {
-                    route = .full
+                    sheet = .full
                 }
             case "full":
                 dir.close()
-                route = .full
+                sheet = .full
             default:
                 break
             }
         }
     }
 
-    /// 切換清單的「管理所有清單」：等切換清單收完才升起目錄（兩個同時動會打架）
-    private func openDirIfAsked() {
-        guard wantDir else { return }
-        wantDir = false
-        dir.open()
+    /// 紙、右下 ＋、目錄、切換清單疊在一起：紙是家，其他都從紙上面升起來
+    private var paperRoot: some View {
+        ZStack {
+            // 換紙時底下墊的是上一張的顏色（1.1 2026-11-04）：新的那張淡入時不會先露出奶油底、看起來閃一下
+            Tok.note(underKey).paper.ignoresSafeArea()
+            if let note = store.current {
+                PaperView(
+                    store: store, note: note, onTitle: { go(.switcher) }, onRoute: go,
+                    onMoveLine: { dir.open(move: $0) }
+                )
+                .id(note.id)
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            }
+        }
+        // 換一張紙：只有新的那張淡入（1.1 S2）。第一次打開 app 那張不淡，交給啟動畫面
+        .animation(booted ? Tok.Motion.fade : nil, value: store.currentID)
+        .onChange(of: store.currentID) { id in
+            DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
+                shownID = id
+                underKey = store.current?.color ?? underKey
+                booted = true
+            }
+        }
+        .onChange(of: store.current?.color) { key in
+            // 同一張換了顏色：底色跟著換（換紙時由上面那段等新的淡入完才換）
+            if store.currentID == shownID, let key {
+                underKey = key
+            }
+        }
+        // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
+        .overlay(alignment: .bottomTrailing) {
+            PlusButton(shown: store.fabShown && !switching) { store.plusAsk += 1 }
+        }
+        // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
+        .overlay { DirHost(store: store, model: dir, onRoute: go) }
+        // 切換清單（點左上清單名）：自己做的底部面板，蓋在最上面
+        .overlay {
+            if switching {
+                SwitchPanel(
+                    store: store, gone: { switching = false }, onManage: { dir.open() }, onFull: { sheet = .full }
+                )
+            }
+        }
     }
 
-    @ViewBuilder
-    private func sheet(_ route: Route) -> some View {
-        switch route {
+    /// 紙上、目錄裡要去別的畫面
+    private func go(_ next: Route) {
+        switch next {
         case .switcher:
-            SwitchSheet(store: store, close: { self.route = nil }, manage: {
-                wantDir = true
-                self.route = nil
-            })
-        case .trash: TrashView(store: store) { self.route = nil }
-        case .settings: SettingsView { self.route = nil }
+            KeyboardWatch.dismiss()
+            switching = true
+        case .trash:
+            path.append(.trash)
+        case .settings:
+            KeyboardWatch.dismiss()
+            path.append(.settings)
         case .full:
-            // 系統表單：從下面升起、一次展開到全高（2026-11-14 多米真機：半高要再滑一次才看得到購買鍵）、往下拉可以關
-            FullView(shop: shop, store: store) { self.route = nil }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(Tok.Shape.radiusLg)
+            sheet = .full
         }
     }
 }
