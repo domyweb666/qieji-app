@@ -196,6 +196,11 @@ enum Tok {
         }
 
         static let lineHeightRatio: CGFloat = 26.0 / 17.0 // 內文 17 點、行高 26
+        /// 紙上的內文再乘字級（完整版：小 0.88、標準 1、大 1.15、特大 1.3）；跟著系統字級走
+        static func line(_ scale: CGFloat) -> SwiftUI.Font {
+            SwiftUI.Font(lineUI.withSize(lineUI.pointSize * scale) as CTFont)
+        }
+
         static let padLineGap: CGFloat = 5.7 // 記事本：17 點字的行距補到行高 26（26 − 17 × 1.1934）
         static let titleMaxScale: DynamicTypeSize = .xxxLarge
     }

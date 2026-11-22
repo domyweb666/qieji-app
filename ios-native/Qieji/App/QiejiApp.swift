@@ -33,6 +33,7 @@ struct RootView: View {
     @State private var shownID: String?
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
     @ObservedObject private var shop = Purchases.shared
+    @ObservedObject private var look = Look.shared
 
     /// 假資料模式、跑單元測試：不碰 App Store
     private static var offline: Bool {
@@ -104,8 +105,12 @@ struct RootView: View {
         .overlay { DirHost(store: store, model: dir) { route = $0 } }
         .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
         .sheet(item: $route, onDismiss: openDirIfAsked) { sheet($0) }
+        // 外觀（跟隨系統／淺色／深色）：整個 app 連系統提示框、選單一起換
+        .preferredColorScheme(look.scheme)
         .onAppear {
             store.boot()
+            TextSize.shared.load()
+            look.load()
             if !RootView.offline {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
             }

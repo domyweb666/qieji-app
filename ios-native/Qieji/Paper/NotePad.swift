@@ -7,12 +7,13 @@ struct NotePad: View {
     @ObservedObject var store: Store
     let note: Note
     var focused: FocusState<Bool>.Binding
+    var scale: CGFloat = 1 // 紙上的字級（完整版）
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             TextEditor(text: Binding(get: { note.body }, set: { store.setBody(note.id, $0) }))
-                .font(Tok.Font.body)
-                .lineSpacing(Tok.Font.padLineGap)
+                .font(Tok.Font.line(scale))
+                .lineSpacing(Tok.Font.padLineGap * scale)
                 .foregroundColor(Tok.Col.textPrimary)
                 .scrollContentBackground(.hidden)
                 .focused(focused)
@@ -20,7 +21,7 @@ struct NotePad: View {
             if note.body.isEmpty {
                 // 系統的多行輸入框沒有提示字：自己畫一行、不擋觸控
                 Text(Words.padHint)
-                    .font(Tok.Font.body)
+                    .font(Tok.Font.line(scale))
                     .foregroundColor(Tok.Col.textMuted)
                     .padding(.top, Tok.Space.sm)
                     .padding(.leading, Tok.Space.xs)

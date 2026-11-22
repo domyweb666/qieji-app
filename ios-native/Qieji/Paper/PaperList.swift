@@ -18,6 +18,8 @@ struct PaperList: View {
     let colors: Tok.NoteColors
     /// 按住一行：id 和那一行在螢幕上的底邊
     var onMenu: (String, CGFloat) -> Void = { _, _ in }
+    /// 紙上的字級（完整版）
+    var scale: CGFloat = 1
     @Environment(\.accessibilityReduceMotion) private var calm
 
     static let space = "paperList"
@@ -68,6 +70,7 @@ struct PaperList: View {
                 }
             },
             held: held,
+            scale: scale,
             actions: actions(for: item.id),
             voice: voiceActions(item, index: index)
         )
@@ -89,7 +92,7 @@ struct PaperList: View {
             Lifting { up in
                 PaperRow(
                     item: item, editing: false, focus: nil, colors: colors, slide: 0, armed: false, held: up,
-                    actions: LineActions(), voice: []
+                    scale: scale, actions: LineActions(), voice: []
                 )
             }
             .id(id)
@@ -204,6 +207,7 @@ struct PaperRow: View {
     var fresh = false
     var onFreshDone: () -> Void = {}
     let held: Bool
+    var scale: CGFloat = 1
     let actions: LineActions
     let voice: [VoiceAct]
     @Environment(\.accessibilityReduceMotion) private var calm
@@ -219,7 +223,8 @@ struct PaperRow: View {
                 HStack(alignment: .top, spacing: Tok.Space.zero) {
                     LineText(
                         text: item.text, done: item.done, editing: editing, focus: focus,
-                        ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice
+                        ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice,
+                        scale: scale
                     )
                     .padding(.leading, Tok.Space.gutter)
                     .padding(.trailing, Tok.Space.sm)

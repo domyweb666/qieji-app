@@ -20,6 +20,7 @@ struct LineText: UIViewRepresentable {
     let strikeInk: UIColor
     let actions: LineActions
     var voice: [VoiceAct] = []
+    var scale: CGFloat = 1 // 紙上的字級（完整版）：在系統字級上再乘一段
 
     func makeCoordinator() -> Coordinator {
         Coordinator(actions: actions)
@@ -42,10 +43,10 @@ struct LineText: UIViewRepresentable {
         let coord = context.coordinator
         coord.actions = actions
         (view as? LineTextView)?.onDeleteAtStart = { [weak view] in actions.joinUp(view?.text ?? "") }
-        let attrs = LineText.attributes(done: done, ink: ink, strikeInk: strikeInk)
+        let attrs = LineText.attributes(done: done, ink: ink, strikeInk: strikeInk, scale: scale)
         // 正在打字的那一行以文字框為準：外面塞字進來會打斷注音選字
         let typing = view.isFirstResponder
-        if !typing, view.text != text || coord.shownDone != done || coord.shownInk != ink {
+        if !typing, view.text != text || coord.shownDone != done || coord.shownInk != ink || coord.shownScale != scale {
             view.attributedText = NSAttributedString(string: text, attributes: attrs)
             view.invalidateIntrinsicContentSize()
         } else if typing, view.markedTextRange == nil, view.text != text {
@@ -55,6 +56,7 @@ struct LineText: UIViewRepresentable {
         }
         coord.shownDone = done
         coord.shownInk = ink
+        coord.shownScale = scale
         coord.voice = voice
         view.accessibilityCustomActions = voice.enumerated().map { idx, act in
             UIAccessibilityCustomAction(name: act.name) { [weak coord] _ in
@@ -96,8 +98,9 @@ struct LineText: UIViewRepresentable {
 
     /// 內文 17 點、行高 26（跟著系統字級一起放大）；劃掉的行加刪除線、變淡。
     /// 字貼著每一行的底部（不置中）：1.1 的輸入框就是這樣，一般文字也往下移了 2.86 點對齊它，看起來字比格子中線低一點
-    static func attributes(done: Bool, ink: UIColor, strikeInk: UIColor) -> [NSAttributedString.Key: Any] {
-        let font = Tok.Font.lineUI
+    static func attributes(done: Bool, ink: UIColor, strikeInk: UIColor, scale: CGFloat = 1) -> [NSAttributedString.Key: Any] {
+        let base = Tok.Font.lineUI
+        let font = base.withSize(base.pointSize * scale)
         let lineHeight = (font.pointSize * Tok.Font.lineHeightRatio).rounded()
         let para = NSMutableParagraphStyle()
         para.minimumLineHeight = lineHeight
@@ -118,6 +121,7 @@ struct LineText: UIViewRepresentable {
         var lastFocus = -1
         var shownDone = false
         var shownInk: UIColor?
+        var shownScale: CGFloat = 1
         var voice: [VoiceAct] = []
 
         init(actions: LineActions) {

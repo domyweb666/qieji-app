@@ -11,6 +11,7 @@ struct PaperView: View {
 
     @StateObject private var touch = ListTouch()
     @StateObject private var keyboard = KeyboardWatch()
+    @ObservedObject private var size = TextSize.shared
     @Environment(\.scenePhase) private var phase
     @Environment(\.accessibilityReduceMotion) private var calm
     @State private var editingID: String?
@@ -41,12 +42,12 @@ struct PaperView: View {
             )
             Group {
                 if note.isText {
-                    NotePad(store: store, note: note, focused: $padFocused)
+                    NotePad(store: store, note: note, focused: $padFocused, scale: size.scale)
                 } else {
                     PaperList(
                         store: store, touch: touch, note: note,
                         editingID: $editingID, focus: $focus, colors: colors,
-                        onMenu: { openRowMenu($0, bottom: $1) }
+                        onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale
                     )
                 }
             }
