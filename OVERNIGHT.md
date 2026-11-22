@@ -164,3 +164,4 @@ git checkout overnight-20261121-2038; git branch -D overnight-20261122-1813
 - 20:05 收尾：寫早上摘要、`.vibe/HANDOFF.md`（舊的搬進 `.vibe/handoff/archive/`）。limrun 清單是空的。
 - 20:20 多米回待確認第 0 條：iCloud 同步保持開著。程式不用改（本來就是開著的），只把決定記進這份和交接檔。
 - 22:42 多米選「合併」：快轉合併回 `overnight-20261121-2038`（父分支這段時間沒有新 commit，沒有衝突）。子分支留著沒刪；沒推、沒打包。
+- 22:58 多米說「打包成 TestFlight」：推分支（596fb52），再單獨推 tag `tfs-2`。GitHub 的打包 run #2（`45035662066`）兩秒就失敗，沒開始編：「The job was not started because an Actions budget is preventing further use」。要多米在 GitHub 帳單設定處理預算，之後 `gh run rerun 45035662066 --repo domyweb666/qieji-app`（build 202）。

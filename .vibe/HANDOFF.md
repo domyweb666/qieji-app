@@ -1,9 +1,9 @@
-# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項做完、已合併回 overnight-20261121-2038，等打包與真機
+# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項已合併、已推；tfs-2 打包被 GitHub Actions 預算擋住，等多米調預算
 
 > 產出時間：2026-11-22 20:10（+08:00）。上一版（2.0.0 (201) 上 TestFlight 那時）全文在 `.vibe/handoff/archive/2026-11-22-0412.md`
 > 專案：茄記 iOS。`E:\茄記\qieji-swift` 是 SwiftUI 版，新程式在 `ios-native/`。Expo 版（1.1／1.1.1）在 `E:\茄記\qieji-1.1`，沒有動
 > 多米沒有 Mac、不太看程式。這台 Windows 沒有 Swift 工具，編譯、測試、模擬器全靠 limrun（以分鐘計費，用完要關）
-> 這次的工作在子分支 `overnight-20261122-1813` 做完（從 `overnight-20261121-2038` 的 775a88c 開出來），**多米 11/22 晚選合併，已快轉合併回 `overnight-20261121-2038`**，這個資料夾現在就在這條上。子分支留著沒刪。沒推、沒打包
+> 這次的工作在子分支 `overnight-20261122-1813` 做完（從 `overnight-20261121-2038` 的 775a88c 開出來），**多米 11/22 晚選合併，已快轉合併回 `overnight-20261121-2038`**，這個資料夾現在就在這條上。子分支留著沒刪。多米 11/22 晚說「打包成 TestFlight」：分支已推（596fb52）、tag `tfs-2` 已推，但打包 run #2 被 GitHub Actions 預算擋下、沒開始編（見下面「還沒做完」第一條）
 
 ## ✅ 這次完成了什麼
 
@@ -18,6 +18,7 @@
 
 ## 🚧 還沒做完 / 待決定
 
+- **打包卡在 GitHub Actions 預算**：11/22 22:58 推 tag `tfs-2`，run #2（`45035662066`）兩秒就失敗，註記是「The job was not started because an Actions budget is preventing further use」。qieji-app 是私人 repo，macOS 機器的分鐘數照十倍扣，額度用完就被預算擋住。這是帳號的帳單設定，只有多米能改（調高預算，或等額度重置）。改好之後跑 `gh run rerun 45035662066 --repo domyweb666/qieji-app` 就好，不用重推 tag，build 號照樣是 202；跑完確認 TestFlight 收到
 - **`OVERNIGHT.md`「待確認」第 0 條已定，其餘六條還沒問多米**，重點：
   - 第 0 條已定（多米 11/22 晚）：iCloud 同步保持開著，下一次打包照樣接（買了＋開著就寫真的 iCloud，「檔案 › iCloud 雲碟 › 茄記」，跟 1.1 同一個資料夾）。第一次裝上手機前，還是建議先備份 iCloud 雲碟的「茄記」資料夾
   - 第 1 條：`App/Purchases.swift`、`Core/FullRule.swift` 送審前要給會寫 iOS 的人看
@@ -59,7 +60,7 @@
 1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（分支應該是 `overnight-20261121-2038`，最新是「合併後交接更新」那個 commit；本機比 origin 超前、沒推）
 2. 問多米待確認第 1–6 條（第 0 條 iCloud 已定：保持開著）
 3. 已合併（多米 11/22 晚，快轉）。子分支 `overnight-20261122-1813` 留著，確定不用再回頭看就可以刪（多米開口才刪）
-4. 多米開口才打包：合併後推分支，再單獨推 tag `tfs-2`（build 號＝run 編號＋200）。iCloud 照開著打包
+4. 打包：分支和 tag `tfs-2` 都推了（多米 11/22 晚開口）。等多米處理好 GitHub Actions 預算，跑 `gh run rerun 45035662066 --repo domyweb666/qieji-app`（build 202，iCloud 照開著），跑完確認 TestFlight 收到、記進這份
 5. 裝上手機後照早上摘要「建議先測」那六項問結果；手感問題照「第二次沒修好先量」
 6. 每次改完：開 limrun → `lim xcode build`／`test` → `sh tools-check.sh` → 拉回 `formatted.tgz` 蓋回來 → 刪機器、確認清單是空的
 
