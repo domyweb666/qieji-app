@@ -45,7 +45,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     /// 拿起一行排順序那一刻（1.1：拿起時收鍵盤）
     var onDragBegan: () -> Void = {}
 
-    private weak var scroll: UIScrollView?
+    private(set) weak var scroll: UIScrollView?
     private let swipePan = SwipePan()
     private let gripPan = GripPan()
     private let tap = UITapGestureRecognizer()

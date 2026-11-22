@@ -116,7 +116,8 @@ extension DirModel {
     /// 選單接在那塊磚正下方，放不下就正上方，跟磚同一邊
     private func openMenu(_ hit: Hit) {
         let rows: CGFloat = 3
-        let height = Tok.Shape.swatchDot + Tok.Space.lg * 2 + Tok.Shape.menuRow * rows + Tok.Space.xs * 2 + Tok.Space.sm * 2
+        // 選單卡多高：一排色塊（上下內距）＋粗縫＋幾個項目
+        let height = Tok.Shape.swatchDot + Tok.Space.md * 2 + Tok.Shape.menuGap + Tok.Shape.menuRow * rows
         let below = hit.corner.y + metrics.tileHeight + Tok.Space.sm
         let roof = Tok.Shape.dirPeek + Tok.Shape.hitMin
         let fits = below + height <= screen.height - safeBottom - Tok.Space.lg
@@ -144,6 +145,10 @@ extension DirModel {
         case .grid:
             if page != index {
                 page = index
+                // 叫出鍵盤還沒打字就撥頁：收鍵盤，不然它擋住頁點和最下面兩列（1.1）
+                if !searching {
+                    endKeyboard()
+                }
             }
         case .folder:
             if folderPage != index {
@@ -163,7 +168,7 @@ extension DirModel {
         return [Labels.label(note), hue, note.pinned ? Words.pinnedGroup : ""].filter { !$0.isEmpty }.joined(separator: "，")
     }
 
-    /// 拖不了的人走這裡：改磚上的字、放進／移出資料夾、刪除、往前往後移
+    /// 拖不了的人走這裡：改名字（1.1）、改磚上的字、放進／移出資料夾、刪除、往前往後移
     func voiceActs(_ entry: Seats.Entry, inFolder: Bool = false) -> [VoiceAct] {
         let id = entry.id
         if entry.folder != nil {
@@ -173,7 +178,10 @@ extension DirModel {
                 VoiceAct(name: Words.moveBack) { [weak self] in self?.moveBy(id, 1) },
             ]
         }
-        var acts = [VoiceAct(name: Words.glyphEdit) { [weak self] in self?.glyphFor = id }]
+        var acts = [
+            VoiceAct(name: Words.rename) { [weak self] in self?.renameNote(id) },
+            VoiceAct(name: Words.glyphEdit) { [weak self] in self?.glyphFor = id },
+        ]
         if inFolder {
             acts.append(VoiceAct(name: Words.takeOut) { [weak self] in self?.takeOut(id) })
         } else {

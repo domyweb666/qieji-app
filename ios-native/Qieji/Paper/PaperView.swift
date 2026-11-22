@@ -105,6 +105,7 @@ struct PaperView: View {
         }
         .onAppear {
             openIfAsked()
+            renameIfAsked()
             updateFab()
             // 上鎖的紙一打開就問一次 Face ID；取消的話停在鎖住的畫面，上面有「打開」可以再試
             if lockedNow {
@@ -124,6 +125,7 @@ struct PaperView: View {
         }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
         .onChange(of: store.plusAsk) { _ in addLine() }
+        .onChange(of: store.renameAsk) { _ in renameIfAsked() }
         .onChange(of: fabWanted) { _ in updateFab() }
         .onChange(of: composerFocused) { focused in
             if !focused, composing {
@@ -143,16 +145,26 @@ struct PaperView: View {
         }
     }
 
+    /// 清單名變成可以打字（⋯「改名字」、目錄 VoiceOver 的「改名字」）
+    private func startRename() {
+        editingID = nil
+        closeComposer(stay: true)
+        renaming = true
+    }
+
+    /// 目錄 VoiceOver 的「改名字」要的是這張：拿一次就清掉
+    private func renameIfAsked() {
+        guard store.renameID == note.id else { return }
+        store.renameID = nil
+        startRename()
+    }
+
     private func header(_ colors: Tok.NoteColors, cover: PaperHeader.CoverMode) -> some View {
         PaperHeader(
             store: store, note: note, colors: colors, renaming: $renaming,
             showDone: keyboard.up && (editingID != nil || renaming || padFocused),
             onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
-            onRename: {
-                editingID = nil
-                closeComposer(stay: true)
-                renaming = true
-            },
+            onRename: startRename,
             onPinFull: { pinChoices = $0 },
             onCover: {
                 closeComposer(stay: true)

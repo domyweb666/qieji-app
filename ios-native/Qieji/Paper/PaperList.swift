@@ -49,9 +49,16 @@ struct PaperList: View {
             .scrollDismissesKeyboard(.interactively)
             .overlay(alignment: .top) { floating }
             .clipped()
-            .onAppear { wire(proxy) }
+            .onAppear {
+                wire(proxy)
+                seek(proxy)
+            }
             .onChange(of: note.items.map(\.id)) { touch.order = $0 }
-            .onChange(of: note.id) { _ in wire(proxy) }
+            .onChange(of: note.id) { _ in
+                wire(proxy)
+                seek(proxy)
+            }
+            .onChange(of: store.seekAsk) { _ in seek(proxy) }
         }
     }
 
@@ -126,6 +133,19 @@ struct PaperList: View {
             out.append(VoiceAct(name: Words.moveDown) { store.move(item.id, to: index + 1) })
         }
         return out
+    }
+
+    /// 從搜尋點一行過來（1.1 Paper seekRow）：那行捲到畫面三分之一高、亮一下。三個螢幕內用捲的，更遠直接跳過去（一路捲過幾百行只會看到一片閃過去）
+    private func seek(_ proxy: ScrollViewProxy) {
+        guard let line = store.takeSeek(in: note) else { return }
+        let near = touch.near(line, screens: Tok.Gesture.seekNear)
+        // 換紙那一下清單還沒排好：晚一格再捲
+        DispatchQueue.main.async {
+            withAnimation(near && !calm ? Tok.Motion.seek : nil) {
+                proxy.scrollTo(line, anchor: Tok.Shape.seekAnchor)
+            }
+            touch.fresh = line
+        }
     }
 
     /// 清單的手勢接到資料上

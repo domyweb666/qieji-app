@@ -183,4 +183,29 @@ final class PaperRulesTests: XCTestCase {
         store.open(other.id)
         XCTAssertNotNil(store.book.note(blank.id))
     }
+
+    /// 搜尋點一行（1.1 openAt／takeSeek）：換到那張；只有那張紙拿得到要捲去的那行，拿一次就清掉
+    func testSearchLineIsTakenOnceByItsNote() {
+        let here = Item(text: "這一張")
+        var other = Note.blank(now: 2000)
+        other.title = "另一張"
+        let target = Item(text: "要找的那行")
+        other.items = [Item(text: "前面"), target]
+        let store = store([here], extra: [other])
+        let first = store.current
+        store.openAt(other.id, line: target.id)
+        XCTAssertEqual(store.currentID, other.id)
+        XCTAssertNil(first.flatMap { store.takeSeek(in: $0) })
+        XCTAssertEqual(store.current.flatMap { store.takeSeek(in: $0) }, target.id)
+        XCTAssertNil(store.current.flatMap { store.takeSeek(in: $0) })
+    }
+
+    /// 目錄 VoiceOver 的「改名字」：記下要改哪一張，紙那邊看到是自己才開始改
+    func testRenameRequestNamesTheNote() {
+        let store = store([Item(text: "一")])
+        let before = store.renameAsk
+        store.requestRename("abc")
+        XCTAssertEqual(store.renameID, "abc")
+        XCTAssertEqual(store.renameAsk, before + 1)
+    }
 }

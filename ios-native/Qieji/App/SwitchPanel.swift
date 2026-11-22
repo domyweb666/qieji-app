@@ -16,6 +16,7 @@ struct SwitchPanel: View {
     @State private var closing = false
     @State private var lists: (pinned: [Note], recent: [Note]) = ([], [])
     @Environment(\.accessibilityReduceMotion) private var calm
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         GeometryReader { geo in
@@ -117,7 +118,7 @@ struct SwitchPanel: View {
 
     private var separator: some View {
         Tok.Col.menuSep
-            .frame(height: Tok.Shape.hairline)
+            .frame(height: 1 / scale)
             .padding(.horizontal, Tok.Space.gutter)
             .padding(.vertical, Tok.Space.sm)
     }

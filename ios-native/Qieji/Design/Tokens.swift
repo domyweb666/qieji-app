@@ -283,6 +283,9 @@ enum Tok {
         static let minusBadge: CGFloat = 22
         static let menuWide: CGFloat = 320
         static let swatchRing: CGFloat = 2
+        static let menuGap: CGFloat = 8 // 選單卡裡組跟組之間那條粗縫（1.1 menuGap）
+        static let promptMaxW: CGFloat = 300 // 自己畫的輸入卡（改磚上的字）最寬
+        static let seekAnchor = UnitPoint(x: 0.5, y: 1.0 / 3) // 搜尋點一行：那行停在畫面三分之一高
     }
 
     // MARK: 動態
@@ -309,6 +312,22 @@ enum Tok {
         static func deleteSpring(velocity: CGFloat) -> Animation {
             .interpolatingSpring(stiffness: 815.6, damping: 57.12, initialVelocity: velocity)
         }
+
+        /// 目錄面板收起或彈回（1.1 dirPanel：感知 0.34 秒、不過頭），帶手指放手的速度
+        static func dirPanelSpring(velocity: CGFloat) -> Animation {
+            .interpolatingSpring(stiffness: 341.51, damping: 36.96, initialVelocity: velocity)
+        }
+
+        /// 帶速度的彈簧最多帶這麼快（每秒走幾個「全程」）：再快不過頭的彈簧也會衝過頭（1.1 的彈簧都不准過頭）
+        static let springSpeedMax: CGFloat = 16
+        /// 停止抖動：立刻歸正（1.1）。用一段零秒的動畫蓋掉來回轉的那個
+        static let jiggleStop = Animation.linear(duration: 0)
+        /// 搜尋點一行：紙捲到那一行（1.1 用系統的捲動動畫）
+        static let seek = Animation.easeInOut(duration: 0.3)
+        /// 輸入框打錯被擋下：卡片左右晃（1.1 reject：8 點、每段 0.05 秒，四段）
+        static let rejectStep = Animation.linear(duration: 0.05)
+        static let rejectStepSeconds: Double = 0.05
+        static let rejectDist: CGFloat = 8
 
         static let dragLift = Animation.spring(response: 0.15, dampingFraction: 1)
         static let swipeLabel = Animation.spring(response: 0.25, dampingFraction: 0.6)
@@ -385,6 +404,11 @@ enum Tok {
         static let pullActivate: CGFloat = 10
         static let pushCloseRatio: CGFloat = 0.15
         static let flickAhead: CGFloat = 140 // 放手後照慣性還會再走這麼遠就算「甩」
+        static let flick: CGFloat = 550 // 目錄往下拉：放手時往下每秒這麼多點就算甩（1.1 flick）
+        static let flickPredict: CGFloat = 4 // iOS 16 量不到手指速度：拿「放手後還會走多遠」乘這個估
+        static let editLift: CGFloat = 12 // 抖動中手指在磚上移超過這麼多才拿起（1.1）
+        static let speedWindow: Double = 0.1 // 算放手速度只看最後這麼多秒
+        static let seekNear: CGFloat = 3 // 搜尋點過來的那行在幾個螢幕內才用捲的，更遠直接跳過去（1.1 SEEK_NEAR）
     }
 
     // MARK: 時間

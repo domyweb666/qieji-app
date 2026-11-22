@@ -20,12 +20,36 @@ final class Store: ObservableObject {
     private var composePending = false
     /// 右下 ＋ 被按了一下（＋ 畫在紙外面，換紙時不跟著閃）：每按一次加一，紙自己決定開不開輸入框
     @Published var plusAsk = 0
+    /// 從搜尋點一行過來（1.1 openAt／takeSeek）：換到那張，紙捲到那一行、亮一下。紙拿一次就清掉
+    var seek: String?
+    @Published var seekAsk = 0
+    /// VoiceOver 在目錄的「改名字」（1.1 requestRename）：換到那張，清單名變成可以打字
+    var renameID: String?
+    @Published var renameAsk = 0
     /// 右下 ＋ 要不要畫（紙依自己的狀態說：鍵盤、輸入框、選單開著就不畫）
     @Published var fabShown = false
     /// 輸入框裡打到一半的字：換到別張紙時跟著原本那張走，不丟（1.1 closeNote）
     var draft = ""
 
     /// 要現在這張紙升起輸入框。紙還沒出現就先留著，出現時自己拿
+    func openAt(_ id: String, line: String) {
+        seek = line
+        open(id)
+        seekAsk += 1
+    }
+
+    /// 紙要搜尋點的那一行：是這張的才給，給了就清掉
+    func takeSeek(in note: Note) -> String? {
+        guard let line = seek, note.items.contains(where: { $0.id == line }) else { return nil }
+        seek = nil
+        return line
+    }
+
+    func requestRename(_ id: String) {
+        renameID = id
+        renameAsk += 1
+    }
+
     func requestCompose() {
         composePending = true
         composeAsk += 1

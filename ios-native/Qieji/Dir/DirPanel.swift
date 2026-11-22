@@ -8,7 +8,15 @@ struct DirHost: View {
 
     var body: some View {
         if model.shown {
-            DirPanel(store: store, model: model, onRoute: onRoute)
+            ZStack {
+                DirPanel(store: store, model: model, onRoute: onRoute)
+                // 改磚上的字：自己畫的卡片，放在釘住螢幕的那層外面，才會停在鍵盤上方那段的正中
+                if let id = model.glyphFor, let note = store.book.note(id) {
+                    DirGlyphCard(note: note) { store.setGlyph(id, $0) } close: { model.glyphFor = nil }
+                        .transition(.opacity)
+                }
+            }
+            .animation(Tok.Motion.fade, value: model.glyphFor)
         }
     }
 }
@@ -21,7 +29,8 @@ struct DirPanel: View {
     @ObservedObject var store: Store
     @ObservedObject var model: DirModel
     let onRoute: (Route) -> Void
-    @State private var glyphText = ""
+    @FocusState private var searchFocused: Bool
+    @Environment(\.displayScale) private var scale
 
     static let space = "dirPanel"
 
@@ -31,9 +40,6 @@ struct DirPanel: View {
             .allowsHitTesting(model.isOpen)
             .onChange(of: store.book) { _ in model.bookChanged() }
             .onChange(of: model.query) { _ in model.page = 0 }
-            .onChange(of: model.glyphFor) { id in
-                glyphText = id.flatMap { store.book.note($0)?.glyph } ?? ""
-            }
             .alert(deleteTitle, isPresented: flag(\.askDelete)) {
                 Button(Words.delete, role: .destructive) {
                     if let id = model.askDelete {
@@ -42,12 +48,18 @@ struct DirPanel: View {
                 }
                 Button(Words.cancel, role: .cancel) {}
             }
-            .alert(Words.glyphEdit, isPresented: flag(\.glyphFor)) {
-                TextField(Words.glyphHint, text: $glyphText)
-                Button(Words.done) { saveGlyph() }
-                Button(Words.cancel, role: .cancel) {}
-            }
             .confirmationDialog(Words.putIn, isPresented: flag(\.putInFor), titleVisibility: .visible) { folderChoices }
+            // 釘滿 5 張再釘：一步問要換掉哪一張（1.1 pin.ts），換完提示條可以復原
+            .confirmationDialog(Words.pinFullTitle(Seats.pinMax), isPresented: flag(\.pinSwapFor), titleVisibility: .visible) {
+                if let id = model.pinSwapFor {
+                    ForEach(Seats.pinned(store.book)) { other in
+                        Button(Labels.pickLabel(other)) { store.swapPin(id, out: other.id) }
+                    }
+                }
+                Button(Words.cancel, role: .cancel) {}
+            } message: {
+                Text(Words.pinSwapAsk)
+            }
     }
 
     /// 整層釘在螢幕左上角：量自己現在被放在螢幕的哪裡，再扣回去。
@@ -90,16 +102,6 @@ struct DirPanel: View {
         Words.deleteTitle(model.askDelete.flatMap { store.book.note($0) }.map { Labels.label($0) } ?? "")
     }
 
-    private func saveGlyph() {
-        guard let id = model.glyphFor else { return }
-        if let problem = Labels.glyphProblem(glyphText) {
-            Haptic.reject()
-            store.toast = Store.Toast(text: problem)
-        } else {
-            store.setGlyph(id, glyphText)
-        }
-    }
-
     @ViewBuilder private var folderChoices: some View {
         if let id = model.putInFor {
             ForEach(Seats.seatedEntries(store.book).compactMap(\.folder)) { folder in
@@ -114,13 +116,9 @@ struct DirPanel: View {
 
     private var sheet: some View {
         ZStack(alignment: .topLeading) {
-            // 面板的底：上緣圓角，從 dirPeek 往下鋪到底（點到面板空白處不會穿過去收起）
+            // 面板的底：上緣圓角，從 dirPeek 往下鋪到底（點到面板空白處不會穿過去收起）；上緣幾乎沒影子（1.1）
             RoundedRectangle(cornerRadius: Tok.Shape.radiusLg, style: .continuous)
                 .fill(Tok.Col.surface)
-                .shadow(
-                    color: Tok.Col.shadow.opacity(Tok.Shape.shadowSoft),
-                    radius: Tok.Shape.shadowRadius, x: 0, y: -Tok.Shape.shadowY
-                )
                 .padding(.top, Tok.Shape.dirPeek)
                 .padding(.bottom, -Tok.Shape.radiusLg)
                 .onTapGesture {}
@@ -135,6 +133,10 @@ struct DirPanel: View {
             }
             .padding(.top, Tok.Shape.dirPeek)
             .padding(.bottom, model.safeBottom)
+            // VoiceOver 鎖在目錄裡（不會滑到後面的紙）；兩指 Z 字＝點露出的紙（1.1 accessibilityViewIsModal、onAccessibilityEscape）
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) { model.tapOut() }
             if let entry = model.openEntry {
                 DirFolderView(model: model, entry: entry, currentID: store.currentID)
             }
@@ -167,7 +169,14 @@ struct DirPanel: View {
             .gesture(
                 DragGesture(minimumDistance: Tok.Gesture.pullActivate, coordinateSpace: .global)
                     .onChanged { model.pull($0.translation.height) }
-                    .onEnded { model.pullEnd($0.translation.height, ahead: $0.predictedEndTranslation.height - $0.translation.height) }
+                    .onEnded { value in
+                        // 放手時手指往下每秒幾點；iOS 16 量不到，拿「放手後還會走多遠」估
+                        var speed = (value.predictedEndTranslation.height - value.translation.height) * Tok.Gesture.flickPredict
+                        if #available(iOS 17.0, *) {
+                            speed = value.velocity.height
+                        }
+                        model.pullEnd(value.translation.height, velocity: speed)
+                    }
             )
             .accessibilityLabel(model.editing ? Words.doneEditing : Words.closeDir)
             .accessibilityAddTraits(.isButton)
@@ -181,13 +190,15 @@ struct DirPanel: View {
                 Image(systemName: "magnifyingglass")
                     .font(Tok.Font.body)
                     .foregroundColor(Tok.Col.textSecondary)
-                TextField(hint, text: $model.query)
+                // 提示字深紫 70%；清除鈕只在打字中出現（1.1 placeholderTextColor、clearButtonMode while-editing）
+                TextField(text: $model.query, prompt: Text(hint).foregroundColor(Tok.Col.textMuted)) { Text(hint) }
                     .font(Tok.Font.body)
                     .foregroundColor(Tok.Col.textPrimary)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
+                    .focused($searchFocused)
                     .disabled(model.editing)
-                if !model.query.isEmpty {
+                if searchFocused, !model.query.isEmpty {
                     Button { model.query = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(Tok.Font.body)
@@ -316,7 +327,7 @@ struct DirPanel: View {
             .foregroundColor(Tok.Col.textSecondary)
             .padding(.vertical, Tok.Space.md)
             .frame(minHeight: Tok.Shape.hitMin)
-            .overlay(alignment: .top) { Tok.Col.separator.frame(height: Tok.Shape.hairline) }
+            .overlay(alignment: .top) { Tok.Col.separator.frame(height: 1 / scale) }
             .contentShape(Rectangle())
         }
     }

@@ -16,6 +16,8 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
     private var armed = false // 按住到時間了，再拖一段就拿起
     private var holdDrag = false
     private var panDrag = false
+    private var panTried = false // 這次抖動中的拖已經試過拿起了
+    private var speed = FingerSpeed()
     private var watch: NSKeyValueObservation?
     private var lastPage = 0
 
@@ -122,6 +124,7 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
         switch gesture.state {
         case .began:
             holdDrag = false
+            speed.reset()
             armed = model.holdBegan(zone, at: start)
             if armed {
                 scroll?.panGestureRecognizer.isEnabled = false
@@ -132,11 +135,12 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
                 holdDrag = model.dragBegin(zone, start: start, finger: finger)
             }
             if holdDrag {
+                speed.add(finger)
                 model.dragMove(finger)
             }
         case .ended, .cancelled, .failed:
             if holdDrag {
-                model.dragEnd()
+                model.dragEnd(velocity: gesture.state == .ended ? speed.velocity : .zero)
             }
             holdDrag = false
             armed = false
@@ -149,19 +153,56 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
         guard let model else { return }
         let finger = gesture.location(in: nil)
         switch gesture.state {
-        case .began:
-            panDrag = model.dragBegin(zone, start: start, finger: finger)
-        case .changed:
+        case .began, .changed:
+            if gesture.state == .began {
+                panTried = false
+            }
+            // 抖動中手指在磚上移超過 12 點才拿起（1.1），之前還算是點
+            if !panTried, hypot(finger.x - start.x, finger.y - start.y) >= Tok.Gesture.editLift {
+                panTried = true
+                panDrag = model.dragBegin(zone, start: start, finger: finger)
+            }
             if panDrag {
                 model.dragMove(finger)
             }
         case .ended, .cancelled, .failed:
             if panDrag {
-                model.dragEnd()
+                model.dragEnd(velocity: gesture.state == .ended ? gesture.velocity(in: nil) : .zero)
             }
             panDrag = false
+            panTried = false
         default: break
         }
+    }
+}
+
+/// 放手時手指多快：記最近一小段時間的位置，拿頭尾算（按住之後拖的那種手勢，系統不給速度）
+struct FingerSpeed {
+    private var points: [CGPoint] = []
+    private var times: [CFTimeInterval] = []
+
+    mutating func reset() {
+        points.removeAll()
+        times.removeAll()
+    }
+
+    mutating func add(_ point: CGPoint) {
+        let now = CACurrentMediaTime()
+        points.append(point)
+        times.append(now)
+        while let first = times.first, now - first > Tok.Gesture.speedWindow, times.count > 2 {
+            points.removeFirst()
+            times.removeFirst()
+        }
+    }
+
+    /// 每秒幾點；手指停住超過那一小段時間才放手＝0
+    var velocity: CGPoint {
+        guard let first = points.first, let last = points.last, let begin = times.first, let end = times.last,
+              end > begin, CACurrentMediaTime() - end < Tok.Gesture.speedWindow
+        else { return .zero }
+        let span = CGFloat(end - begin)
+        return CGPoint(x: (last.x - first.x) / span, y: (last.y - first.y) / span)
     }
 }
 

@@ -8,6 +8,7 @@ struct DirTileFace: View {
     let cell: CGFloat
     var current = false
     var hideName = false
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         let side = DirMetrics(cell: cell).side
@@ -17,9 +18,12 @@ struct DirTileFace: View {
                 .font(Tok.Font.label)
                 .foregroundColor(named ? Tok.Col.textPrimary : Tok.Col.textSecondary)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                // 系統字調大時最多放大 1.5 倍（1.1 titleMaxScale）；放不下就尾巴變「…」，不縮字。
+                // 字變高時往下長進列與列的空隙，格子的位置不跟著動（拖曳的落點照格子算）
                 .dynamicTypeSize(...Tok.Font.titleMaxScale)
-                .minimumScaleFactor(0.7)
-                .frame(height: Tok.Shape.tileLabelH)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: Tok.Shape.tileLabelH, alignment: .top)
                 .padding(.horizontal, Tok.Space.xs)
                 .opacity(hideName ? 0 : 1)
         }
@@ -88,7 +92,8 @@ struct DirTileFace: View {
     private func minis(_ side: CGFloat) -> some View {
         let count = Tok.Shape.folderMinis
         let gap = Tok.Shape.folderMiniGap, pad = Tok.Shape.folderMiniPad
-        let size = ((side - pad * 2 - gap * CGFloat(count - 1)) / CGFloat(count)).rounded(.down)
+        // 扣掉選中框的寬（1.1：正在看的紙在裡面時框變粗，小方塊不能被蓋到）
+        let size = ((side - pad * 2 - gap * CGFloat(count - 1) - Tok.Shape.borderSelected * 2) / CGFloat(count)).rounded(.down)
         let notes = Array(entry.notes.prefix(count * count))
         return VStack(alignment: .leading, spacing: gap) {
             ForEach(0 ..< count, id: \.self) { row in
@@ -123,6 +128,7 @@ struct DirTileFace: View {
         }
         .frame(width: size, height: size)
         .clipShape(shape)
+        .overlay(shape.strokeBorder(colors.rule, lineWidth: 1 / scale))
     }
 }
 
@@ -144,8 +150,8 @@ struct Jiggle: ViewModifier {
                 if now {
                     start()
                 } else {
-                    // 明講「轉回 0」：新的動畫會蓋掉來回轉的那個，不然它會一直轉下去
-                    withAnimation(Tok.Motion.fade) { angle = 0 }
+                    // 明講「轉回 0」：新的動畫會蓋掉來回轉的那個，不然它會一直轉下去。零秒＝立刻歸正（1.1）
+                    withAnimation(Tok.Motion.jiggleStop) { angle = 0 }
                 }
             }
     }

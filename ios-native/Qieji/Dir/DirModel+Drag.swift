@@ -122,8 +122,8 @@ extension DirModel {
         onAim(next)
     }
 
-    /// 放手：先滑進要放的那格，滑完才改資料（資料夾開著但手指在框外就不滑）
-    func dragEnd() {
+    /// 放手：帶著放手的速度滑進要放的那格，停了才改資料（資料夾開著但手指在框外就不滑）。velocity＝手指每秒幾點
+    func dragEnd(velocity: CGPoint = .zero) {
         guard drag != nil, !landing else { return }
         edgeWork?.cancel()
         folderEdgeWork?.cancel()
@@ -154,10 +154,19 @@ extension DirModel {
         if stackSlot >= 0 {
             withAnimation(Tok.Motion.sink) { ghost.sinking = true }
         }
-        withAnimation(Tok.Motion.dragLand) {
-            ghost.shift = CGSize(width: target.x - ghost.corner.x, height: target.y - ghost.corner.y)
-        }
-        landWork = after(Tok.Motion.dragLandSeconds) { [weak self] in self?.drop() }
+        let move = CGSize(width: target.x - ghost.corner.x, height: target.y - ghost.corner.y)
+        let left = CGSize(width: move.width - ghost.shift.width, height: move.height - ghost.shift.height)
+        let distance = hypot(left.width, left.height)
+        // 手指的速度只算「朝落點」那一份
+        let toward = distance > 1 ? (velocity.x * left.width + velocity.y * left.height) / distance : 0
+        landTurn += 1
+        let turn = landTurn
+        Motions.run(Tok.Motion.landSpring(velocity: Motions.speed(toward, over: distance)), fallback: Tok.Motion.dragLandSeconds, {
+            ghost.shift = move
+        }, done: { [weak self] in
+            guard let self, landing, landTurn == turn else { return }
+            drop()
+        })
     }
 
     /// 還在滑進落點時手指又碰了：不等滑完，馬上落定，新的這一下照常收

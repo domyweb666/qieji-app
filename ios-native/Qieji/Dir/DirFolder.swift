@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 打開的資料夾（照 iPhone 的檔案夾）：後面霧掉、名字大字靠左在框上面、框裡一頁三欄三列，滿了往右一頁。
 /// 所有張畫在同一層、用位置排到各頁。點框外收起；點名字改名。
@@ -9,6 +10,7 @@ struct DirFolderView: View {
     let currentID: String?
     @Environment(\.accessibilityReduceTransparency) private var solid
     @Environment(\.accessibilityReduceMotion) private var calm
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         let metrics = model.metrics
@@ -28,6 +30,9 @@ struct DirFolderView: View {
         .frame(width: model.screen.width, height: model.screen.height)
         .opacity(model.folderHidden ? 0 : 1)
         .allowsHitTesting(!model.folderHidden)
+        // VoiceOver 鎖在打開的資料夾裡；兩指 Z 字收起（1.1 accessibilityViewIsModal、onAccessibilityEscape）
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) { model.closeFolder() }
     }
 
     private var veil: some View {
@@ -71,7 +76,7 @@ struct DirFolderView: View {
                 shape.fill(Tok.Col.folderGlassBlur)
             }
         }
-        .overlay(shape.strokeBorder(Tok.Col.folderGlassEdge, lineWidth: Tok.Shape.hairline))
+        .overlay(shape.strokeBorder(Tok.Col.folderGlassEdge, lineWidth: 1 / scale))
         .clipShape(shape)
         .background(GeometryReader { proxy in
             let frame = proxy.frame(in: .named(DirPanel.space))
@@ -155,114 +160,9 @@ struct DirFolderName: View {
                 guard focus else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.composerFocusDelay) { focused = true }
             }
-    }
-}
-
-/// 長按一塊磚：那塊浮在原位，選單接在它下面（放不下就上面）。一排顏色、改磚上的字、釘選、刪除
-struct DirMenuView: View {
-    @ObservedObject var model: DirModel
-    let menu: DirModel.Menu
-    let note: Note
-    let current: Bool
-    @State private var lifted = false
-    @Environment(\.accessibilityReduceMotion) private var calm
-
-    var body: some View {
-        let width = min(Tok.Shape.menuWide, model.screen.width - Tok.Space.lg * 2)
-        ZStack(alignment: .topLeading) {
-            Veil(solidColor: Tok.Col.menuScrim)
-                .contentShape(Rectangle())
-                .onTapGesture { model.menu = nil }
-                .accessibilityLabel(Words.closeMenu)
-                .accessibilityAddTraits(.isButton)
-            DirTileFace(entry: Seats.Entry(id: note.id, note: note, notes: [note]), cell: menu.width, current: current)
-                .scaleEffect(lifted ? Tok.Motion.menuLiftScale : 1)
-                .shadow(
-                    color: Tok.Col.shadow.opacity(Tok.Shape.shadowSoft),
-                    radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY
-                )
-                .offset(x: menu.corner.x, y: menu.corner.y)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            card
-                .frame(width: width)
-                .offset(x: menu.leading ? Tok.Space.lg : model.screen.width - Tok.Space.lg - width, y: menu.top)
-        }
-        .frame(width: model.screen.width, height: model.screen.height, alignment: .topLeading)
-        .onAppear {
-            withAnimation(calm ? nil : Tok.Motion.dragLift) { lifted = true }
-        }
-    }
-
-    private var card: some View {
-        VStack(spacing: Tok.Space.zero) {
-            HStack(spacing: Tok.Space.zero) {
-                ForEach(NoteColor.keys, id: \.self) { key in
-                    Button { model.recolor(note.id, key) } label: { swatch(key) }
-                        .accessibilityLabel(NoteColor.names[key]?.hue ?? key)
-                        .accessibilityAddTraits(note.color == key ? .isSelected : [])
-                }
-            }
-            .padding(.vertical, Tok.Space.lg)
-            .padding(.horizontal, Tok.Space.sm)
-            Tok.Col.menuSep.frame(height: Tok.Shape.hairline)
-            item(Words.glyphEdit, "character") {
-                model.menu = nil
-                model.glyphFor = note.id
-            }
-            item(note.pinned ? Words.unpin : Words.pin, note.pinned ? "pin.slash" : "pin") { model.togglePin(note.id) }
-            item(Words.delete, "trash", danger: true) { model.delete(note.id) }
-        }
-        .padding(.vertical, Tok.Space.xs)
-        .background(RoundedRectangle(cornerRadius: Tok.Shape.radiusLg, style: .continuous).fill(Tok.Col.surface))
-        .shadow(
-            color: Tok.Col.shadow.opacity(Tok.Shape.shadowStrong),
-            radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY
-        )
-    }
-
-    private func swatch(_ key: String) -> some View {
-        Circle()
-            .fill(Tok.note(key).dot)
-            .frame(width: Tok.Shape.swatchDot, height: Tok.Shape.swatchDot)
-            .overlay(Circle().strokeBorder(Tok.Col.textPrimary, lineWidth: note.color == key ? Tok.Shape.swatchRing : 0))
-            .frame(maxWidth: .infinity)
-    }
-
-    private func item(_ title: String, _ symbol: String, danger: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(title)
-                Spacer()
-                Image(systemName: symbol)
-            }
-            .font(Tok.Font.body)
-            .foregroundColor(danger ? Tok.Col.danger : Tok.Col.textPrimary)
-            .padding(.horizontal, Tok.Space.lg)
-            .frame(height: Tok.Shape.menuRow)
-            .contentShape(Rectangle())
-        }
-    }
-}
-
-/// 點一張打開（照 iOS 開 App）：一塊紙色從那塊方磚的位置放大到鋪滿，鋪滿了面板淡出，露出後面已經換好的那張紙
-struct DirLaunchView: View {
-    let launch: DirModel.Launch
-    let size: CGSize
-    let done: () -> Void
-    @State private var grown = false
-
-    var body: some View {
-        let from = launch.frame
-        RoundedRectangle(cornerRadius: grown ? Tok.Space.zero : from.width * Tok.Shape.tileRadiusRatio, style: .continuous)
-            .fill(Tok.note(launch.color).paper)
-            .frame(width: grown ? size.width : from.width, height: grown ? size.height : from.height)
-            .offset(x: grown ? 0 : from.minX, y: grown ? 0 : from.minY)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-            .onAppear {
-                withAnimation(Tok.Motion.launch) { grown = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.launchSeconds) { done() }
+            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { event in
+                guard focus, let field = event.object as? UITextField, field.text == folder.name else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
             }
     }
 }
@@ -271,6 +171,7 @@ struct DirLaunchView: View {
 struct DirSearchList: View {
     @ObservedObject var store: Store
     @ObservedObject var model: DirModel
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         let needle = Labels.trim(model.query)
@@ -278,11 +179,18 @@ struct DirSearchList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Tok.Space.zero) {
                 ForEach(hits, id: \.note.id) { hit in
-                    Button { model.pick(hit.note.id) } label: { head(hit, needle) }
-                    ForEach(Array(hit.lines.enumerated()), id: \.offset) { _, line in
-                        Button { model.pick(hit.note.id) } label: { lineRow(line, needle) }
+                    VStack(alignment: .leading, spacing: Tok.Space.zero) {
+                        Button { model.pick(hit.note.id) } label: { head(hit, needle) }
+                            .buttonStyle(PressDim())
+                            .accessibilityLabel(Words.openNoteVoice(Labels.label(hit.note)))
+                        ForEach(Array(hit.lines.enumerated()), id: \.offset) { _, line in
+                            Button { model.pick(hit.note.id, line: line.id) } label: { lineRow(line, needle) }
+                                .buttonStyle(SearchPress())
+                                .accessibilityLabel(Words.searchHitVoice(line.text, Labels.label(hit.note)))
+                        }
                     }
-                    Tok.Col.separator.frame(height: Tok.Shape.hairline)
+                    .padding(.vertical, Tok.Space.sm)
+                    Tok.Col.separator.frame(height: 1 / scale)
                 }
                 if hits.isEmpty {
                     EmptyNote(lines: [Words.searchNone(needle)])
@@ -316,9 +224,20 @@ struct DirSearchList: View {
             .strikethrough(line.done)
             .lineLimit(2)
             .multilineTextAlignment(.leading)
+            .padding(.vertical, Tok.Space.sm)
             .frame(maxWidth: .infinity, minHeight: Tok.Shape.hitMin, alignment: .leading)
             .padding(.horizontal, Tok.Space.md)
             .contentShape(Rectangle())
+    }
+
+    /// 按住一行：底色變淡紫（1.1 搜尋結果的 pressed）
+    private struct SearchPress: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label.background(
+                RoundedRectangle(cornerRadius: Tok.Shape.radiusMd, style: .continuous)
+                    .fill(configuration.isPressed ? Tok.Col.pressedFill : Color.clear)
+            )
+        }
     }
 
     /// 打中的字用茄紫粗體；行很長、打中的字在後面時，從它前面幾個字開始顯示（前面補 …）

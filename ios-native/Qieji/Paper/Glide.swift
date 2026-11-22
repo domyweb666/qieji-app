@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 
 /// 記下新的一行之後捲回最上面（1.1 toTop）：自己逐格捲 0.3 秒、先快後慢，手指一碰到紙就停；減少動態直接到頂。
@@ -41,5 +42,14 @@ final class Glide: NSObject {
     func stop() {
         link?.invalidate()
         link = nil
+    }
+}
+
+extension ListTouch {
+    /// 搜尋點過來的那一行離現在看的地方在幾個螢幕內（還沒排出來的行當作很遠，直接跳過去）
+    func near(_ id: String, screens: CGFloat) -> Bool {
+        guard let scroll, let row = frames[id] else { return false }
+        let height = scroll.bounds.height
+        return abs(row.minY - height * Tok.Shape.seekAnchor.y - scroll.contentOffset.y) < height * screens
     }
 }

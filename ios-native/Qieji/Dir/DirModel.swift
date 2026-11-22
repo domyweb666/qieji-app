@@ -37,6 +37,7 @@ final class DirModel: ObservableObject {
     struct Launch: Equatable {
         var id: String
         var color: String
+        var title: String
         var frame: CGRect
     }
 
@@ -74,6 +75,7 @@ final class DirModel: ObservableObject {
     @Published var askDelete: String?
     @Published var glyphFor: String?
     @Published var putInFor: String?
+    @Published var pinSwapFor: String? // 釘滿 5 張再釘：問要換掉哪一張
     @Published var gridFrame: CGRect = .zero // 格子區在螢幕上的位置
     var folderBox: CGRect = .zero // 打開的資料夾那個框
     var screen: CGSize = .zero
@@ -94,6 +96,7 @@ final class DirModel: ObservableObject {
     var edgeWork: DispatchWorkItem?
     var folderEdgeWork: DispatchWorkItem?
     var landWork: DispatchWorkItem? // 放手後「滑完才改資料」那一步
+    var landTurn = 0 // 第幾次放手：上一次的「滑完了」晚到，不准替這一次落定
     var stillFrom: CGSize = .zero
     var stills = 0
 
@@ -224,8 +227,8 @@ final class DirModel: ObservableObject {
         }
     }
 
-    /// 收起。fade＝用淡出（點一張從磚放大打開之後）；then＝收完才做的事
-    func close(fade: Bool = false, then: (() -> Void)? = nil) {
+    /// 收起。fade＝用淡出（點一張從磚放大打開之後）；velocity＝往下拉放手時手指每秒幾點（接著那個速度收）；then＝收完才做的事
+    func close(fade: Bool = false, velocity: CGFloat = 0, then: (() -> Void)? = nil) {
         guard shown else {
             then?()
             return
@@ -236,7 +239,9 @@ final class DirModel: ObservableObject {
         if soft {
             fading = true
         }
-        withAnimation(soft ? Tok.Motion.dirFade : Tok.Motion.dirPanel) { progress = 0 }
+        let travel = (screen.height - Tok.Shape.dirPeek) * progress
+        let slide = velocity == 0 ? Tok.Motion.dirPanel : Tok.Motion.dirPanelSpring(velocity: Motions.speed(velocity, over: travel))
+        withAnimation(soft ? Tok.Motion.dirFade : slide) { progress = 0 }
         _ = after(soft ? Tok.Motion.dirFadeSeconds : Tok.Motion.dirPanelSeconds) { [weak self] in
             guard let self, progress == 0 else { return }
             shown = false
@@ -267,13 +272,15 @@ final class DirModel: ObservableObject {
         progress = min(1, max(0, 1 - distance / height))
     }
 
-    func pullEnd(_ distance: CGFloat, ahead: CGFloat) {
+    /// 放手：拉過一成五或往下甩（每秒 550 點）就收，不然彈回全開；兩種都接著手指的速度走（1.1 settle 帶 velocity）
+    func pullEnd(_ distance: CGFloat, velocity: CGFloat) {
         guard !editing, menu == nil, drag == nil else { return }
         let height = max(1, screen.height - Tok.Shape.dirPeek)
-        if distance > height * Tok.Gesture.pushCloseRatio || ahead > Tok.Gesture.flickAhead {
-            close()
+        if distance > height * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
+            close(velocity: velocity)
         } else {
-            withAnimation(Tok.Motion.dirPanel) { progress = 1 }
+            let speed = Motions.speed(-velocity, over: height * (1 - progress))
+            withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanelSpring(velocity: speed)) { progress = 1 }
         }
     }
 
@@ -292,8 +299,8 @@ final class DirModel: ObservableObject {
 
     // MARK: 一張紙
 
-    /// 點一張：換過去。frame＝那塊方磚在螢幕上的位置（從這裡放大打開）；搬行模式＝搬進這張
-    func pick(_ id: String, from frame: CGRect? = nil) {
+    /// 點一張：換過去。frame＝那塊方磚在螢幕上的位置（從這裡放大打開）；line＝搜尋點的那一行（紙捲到那行、亮一下）；搬行模式＝搬進這張
+    func pick(_ id: String, from frame: CGRect? = nil, line: String? = nil) {
         guard let note = store.book.note(id), !note.deleted else { return }
         if let line = moveLine, movingItem != nil {
             // 那張滿了：不搬，目錄留著讓你挑別張
@@ -302,7 +309,12 @@ final class DirModel: ObservableObject {
             }
             return
         }
-        store.open(id) // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
+        // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
+        if let line {
+            store.openAt(id, line: line)
+        } else {
+            store.open(id)
+        }
         guard !calm, let frame else {
             close()
             return
@@ -310,7 +322,7 @@ final class DirModel: ObservableObject {
         menu = nil
         // 紙已經換好了：放大那一小段時間面板不再收觸控，手指碰到的是後面那張紙（不會有一段碰了沒反應）
         isOpen = false
-        launch = Launch(id: id, color: note.color, frame: frame)
+        launch = Launch(id: id, color: note.color, title: Labels.label(note), frame: frame)
     }
 
     /// 第一個空格換成資料規則要的「放哪」：空位＝那個空位；最後一張後面（這頁還放得下）＝排在最後那格後面
@@ -351,18 +363,25 @@ final class DirModel: ObservableObject {
         Haptic.tick() // 選單不關，震一下才知道有換到
     }
 
-    /// 釘選最多 pinMax 張。Expo 版釘滿會問要換掉哪一張，這裡先只提醒
+    /// 釘選跟紙的 ⋯ 同一套：釘滿 5 張再釘，問要換掉哪一張（1.1 pin.ts），換完提示條可以復原
     func togglePin(_ id: String) {
-        guard let note = store.book.note(id) else { return }
         menu = nil
-        if !note.pinned, Seats.pinned(store.book).count >= Seats.pinMax {
-            Haptic.reject()
-            store.toast = Store.Toast(text: Words.pinFull(Seats.pinMax))
+        if store.pinOrAsk(id) != nil {
+            pinSwapFor = id
             return
         }
-        store.togglePin(id)
         Haptic.tick()
-        store.toast = Store.Toast(text: note.pinned ? Words.unpinned : Words.pinned)
+    }
+
+    /// VoiceOver 的「改名字」（1.1）：目錄收起、換到那張，清單名變成可以打字
+    func renameNote(_ id: String) {
+        close { [weak self] in
+            guard let self else { return }
+            if store.currentID != id {
+                store.open(id)
+            }
+            store.requestRename(id)
+        }
     }
 
     func delete(_ id: String) {

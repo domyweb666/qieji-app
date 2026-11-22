@@ -53,6 +53,8 @@ enum Words {
     static let tipHint = "點一下關掉這個提示"
     static let doneKeyboard = "完成，收起鍵盤"
     static let glyphEdit = "改磚上的字"
+    static let glyphTitle = "磚上的字"
+    static let glyphBody = "打一個字（emoji 也可以）；清空就用名字的第一個字"
     static let glyphHint = "一個字（清空就用名字的第一個字）"
     static let clearDone = "清掉劃掉的行"
     static let deleteNote = "刪除這張"
@@ -163,6 +165,15 @@ enum Words {
 
     static func deleteTitle(_ name: String) -> String {
         "要刪除「\(name)」嗎？"
+    }
+
+    /// 搜尋結果的一行：VoiceOver 唸內容、在哪張（1.1）
+    static func searchHitVoice(_ text: String, _ note: String) -> String {
+        "\(text)，在「\(note)」"
+    }
+
+    static func openNoteVoice(_ note: String) -> String {
+        "打開「\(note)」"
     }
 
     static func searchNone(_ text: String) -> String {
