@@ -135,6 +135,25 @@ enum Words {
     }
 
     static let fullOnlyControl = "控制中心的「記一行」是完整版功能"
+    // 付費頁（1.1 full.tsx）
+    static let fullName = "茄記完整版"
+    static let close = "關閉"
+    static let unlocked = "已解鎖 ✓"
+    static let noPrice = "連不上 App Store，價格讀不到"
+    static let familyShare = "家人共享：同一個家庭群組的人不用再買"
+    static let connecting = "正在連到 App Store…"
+    static let tryAgain = "再試一次"
+    static let readingPrice = "正在讀價格…"
+    static let restorePurchase = "恢復購買"
+    static let notNow = "先不用"
+    static let unlockedToast = "已解鎖茄記完整版"
+    static func priceOnce(_ price: String) -> String {
+        "\(price)，一次付清，不是訂閱"
+    }
+
+    static func unlockWith(_ price: String) -> String {
+        "用 \(price) 解鎖"
+    }
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"
     }

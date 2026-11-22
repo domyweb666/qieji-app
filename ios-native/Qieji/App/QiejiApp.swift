@@ -15,6 +15,7 @@ enum Route: String, Identifiable {
     case switcher // 切換清單（點左上清單名）
     case trash // 最近刪除
     case settings
+    case full // 付費頁
 
     var id: String {
         rawValue
@@ -126,16 +127,23 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框。
-            // 完整版功能（1.1 片 B4）：沒買的不開輸入框。1.1 是打開付費頁，付費頁還沒搬，先用一句提示
-            if url.host == "new" {
-                route = nil
+            // 網址只准打開畫面、升起輸入框，不帶資料、解鎖不了任何東西（.vibe/安全標準.md 平台互動、授權段）。
+            // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框；完整版功能（1.1 片 B4），沒買的打開付費頁。
+            // 鎖住的小工具：qieji://full → 付費頁
+            switch url.host {
+            case "new":
                 dir.close()
                 if store.isFull {
+                    route = nil
                     store.requestCompose()
                 } else {
-                    store.toast = Store.Toast(text: Words.fullOnlyControl)
+                    route = .full
                 }
+            case "full":
+                dir.close()
+                route = .full
+            default:
+                break
             }
         }
     }
@@ -157,6 +165,12 @@ struct RootView: View {
             })
         case .trash: TrashView(store: store) { self.route = nil }
         case .settings: SettingsView { self.route = nil }
+        case .full:
+            // 系統表單：從下面升起、一次展開到全高（2026-11-14 多米真機：半高要再滑一次才看得到購買鍵）、往下拉可以關
+            FullView(shop: shop, store: store) { self.route = nil }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(Tok.Shape.radiusLg)
         }
     }
 }

@@ -184,6 +184,7 @@ enum Tok {
         static let barCheck = SwiftUI.Font.system(size: 20, weight: .semibold) // 右上 ✓、輸入框的 ✓
         static let chevron = SwiftUI.Font.system(size: 12, weight: .semibold) // 清單名膠囊裡的 ▾
         static let menuIcon = SwiftUI.Font.system(size: 18) // 選單卡每一項右邊的圖示
+        static let featIcon = SwiftUI.Font.system(size: 24) // 付費頁每一項功能前面的圖示
         static let glyphRatio: CGFloat = 0.44 // 磚上的字＝邊長 × 這個比例
         static func glyph(_ side: CGFloat) -> SwiftUI.Font {
             .system(size: side * glyphRatio, weight: .semibold)
@@ -203,6 +204,7 @@ enum Tok {
 
     enum Space {
         static let zero: CGFloat = 0
+        static let xxs: CGFloat = 2
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8
         static let md: CGFloat = 12
