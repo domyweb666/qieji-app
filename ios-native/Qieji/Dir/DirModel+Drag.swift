@@ -161,12 +161,12 @@ extension DirModel {
         let toward = distance > 1 ? (velocity.x * left.width + velocity.y * left.height) / distance : 0
         landTurn += 1
         let turn = landTurn
-        Motions.run(Tok.Motion.landSpring(velocity: Motions.speed(toward, over: distance)), fallback: Tok.Motion.dragLandSeconds, {
+        Motions.run(Tok.Motion.landSpring(velocity: Motions.speed(toward, over: distance)), fallback: Tok.Motion.dragLandSeconds) {
             ghost.shift = move
-        }, done: { [weak self] in
+        } done: { [weak self] in
             guard let self, landing, landTurn == turn else { return }
             drop()
-        })
+        }
     }
 
     /// 還在滑進落點時手指又碰了：不等滑完，馬上落定，新的這一下照常收
