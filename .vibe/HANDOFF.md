@@ -18,8 +18,8 @@
 
 ## 🚧 還沒做完 / 待決定
 
-- **`OVERNIGHT.md`「待確認」七條都還沒問多米**，重點：
-  - 第 0 條：iCloud 同步已經接上（買了＋開著就寫真的 iCloud，「檔案 › iCloud 雲碟 › 茄記」，跟 1.1 同一個資料夾）。**打包前一定先問**，建議用測試 Apple ID 或先關掉（`QiejiApp.swift` 兩處 `cloud.setAllowed(shop.full && cloud.syncOn)` 改 `false`）
+- **`OVERNIGHT.md`「待確認」第 0 條已定，其餘六條還沒問多米**，重點：
+  - 第 0 條已定（多米 11/22 晚）：iCloud 同步保持開著，下一次打包照樣接（買了＋開著就寫真的 iCloud，「檔案 › iCloud 雲碟 › 茄記」，跟 1.1 同一個資料夾）。第一次裝上手機前，還是建議先備份 iCloud 雲碟的「茄記」資料夾
   - 第 1 條：`App/Purchases.swift`、`Core/FullRule.swift` 送審前要給會寫 iOS 的人看
   - 第 2 條：2.0.0 新功能說明沒寫（`App/NewsPages.swift` 只有 1.1.0）。照規矩逐條問過真機結果才寫
   - 第 3–6 條：清除所有資料不刪 1.1 舊存檔、開源授權頁拿掉、VoiceOver 多留「改磚上的字」、空白紙多兩個保護
@@ -31,6 +31,7 @@
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
 
 - 熬夜做模式＝開子分支做、做完寫交接（多米 11/22 講明）。不碰父分支、不推、不打包
+- iCloud 同步下一版保持開著（多米 2026-11-22 晚回待確認第 0 條）。不用再問要不要關
 - 1.1 的識別碼全部沿用：小工具 kind `PaperWidget`、擴充 `org.domyweb.qieji.ExpoWidgetsTarget`、App Group `group.org.domyweb.qieji`、iCloud 容器 `iCloud.org.domyweb.qieji`（資料夾名「茄記」）、內購 `org.domyweb.qieji.full`、封面圖 `Documents/covers/<code>.jpg`。1.1 存在 AsyncStorage 的設定（買了沒、同步關掉、外觀、字級、提示看過沒、評分計數、1.0 提示）由 `Core/Prefs.swift` 第一次打開時抄一份進 UserDefaults，舊檔不改
 - 行裡 Return＝同一則換行（1.1.1 的行為；舊交接檔寫錯過）
 - 「買了沒」只信 Apple 驗過的交易、退款撤銷就鎖、問不到沿用上次（`FullRule`）。1.0 同步使用者那個提示框要等第一次問過 StoreKit 才決定跳不跳（`Purchases.asked`）
@@ -55,9 +56,9 @@
 ## ⏭️ 下一步從哪繼續
 
 1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（最新應該是「overnight 28」那個 commit）
-2. 問多米待確認七條，**第 0 條（iCloud）先問**
+2. 問多米待確認第 1–6 條（第 0 條 iCloud 已定：保持開著）
 3. 多米要合併：在 `E:\茄記\qieji-swift` 跑 `git checkout overnight-20261121-2038; git merge overnight-20261122-1813`（快轉）。不要就 `git branch -D overnight-20261122-1813`
-4. 多米開口才打包：合併後推分支，再單獨推 tag `tfs-2`（build 號＝run 編號＋200）。打包前確認 iCloud 那條的決定
+4. 多米開口才打包：合併後推分支，再單獨推 tag `tfs-2`（build 號＝run 編號＋200）。iCloud 照開著打包
 5. 裝上手機後照早上摘要「建議先測」那六項問結果；手感問題照「第二次沒修好先量」
 6. 每次改完：開 limrun → `lim xcode build`／`test` → `sh tools-check.sh` → 拉回 `formatted.tgz` 蓋回來 → 刪機器、確認清單是空的
 
