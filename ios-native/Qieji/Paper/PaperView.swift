@@ -177,7 +177,8 @@ struct PaperView: View {
     }
 }
 
-/// 紙最上面：清單名（點了換一張）、⋯、修改時間
+/// 紙最上面（照 1.1.1）：左邊清單名的小膠囊（點了切換清單）、右邊 ⋯；
+/// 下面一列左邊「多久前」、右邊完整時間，底下一條格線。名字離左邊 20，跟時間、每一行的字對齊
 struct PaperHeader: View {
     @ObservedObject var store: Store
     let note: Note
@@ -188,40 +189,60 @@ struct PaperHeader: View {
     let onGlyph: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Tok.Space.xs) {
-            HStack(alignment: .center, spacing: Tok.Space.sm) {
-                Button(action: onTitle) {
-                    HStack(spacing: Tok.Space.sm) {
-                        NoteTile(note: note, side: Tok.Shape.titleIcon)
-                        Text(Labels.label(note))
-                            .font(Tok.Font.title)
-                            .foregroundColor(Tok.Col.textPrimary)
-                            .lineLimit(1)
-                            .dynamicTypeSize(...Tok.Font.titleMaxScale)
-                        Image(systemName: "chevron.down")
-                            .font(Tok.Font.footnote.weight(.semibold))
-                            .foregroundColor(Tok.Col.textSecondary)
-                    }
-                }
-                .accessibilityHint(Words.switchTitle)
+        VStack(alignment: .leading, spacing: Tok.Space.zero) {
+            HStack(spacing: Tok.Space.sm) {
+                titlePill
                 Spacer(minLength: Tok.Space.sm)
                 Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onGlyph: onGlyph) } label: {
                     Image(systemName: "ellipsis")
-                        .font(Tok.Font.headline)
+                        .font(Tok.Font.barIcon)
                         .foregroundColor(Tok.Col.textPrimary)
                         .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
+                        .frost(Circle(), interactive: true)
                 }
                 .accessibilityLabel(Words.more)
             }
-            Text(Dates.row(note.updated))
-                .font(Tok.Font.footnote)
-                .foregroundColor(Tok.Col.textSecondary)
+            .padding(.leading, Tok.Space.lg)
+            .padding(.trailing, Tok.Space.gutter)
+            .padding(.top, Tok.Space.sm)
+            HStack(spacing: Tok.Space.sm) {
+                Text(Dates.ago(note.updated))
+                Spacer(minLength: Tok.Space.sm)
+                Text(Dates.full(note.updated))
+            }
+            .font(Tok.Font.footnote)
+            .foregroundColor(Tok.Col.textSecondary)
+            .padding(.horizontal, Tok.Space.gutter)
+            .padding(.top, Tok.Space.xs)
+            .padding(.bottom, Tok.Space.xl)
+            .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
         }
-        .padding(.leading, Tok.Space.lg)
-        .padding(.trailing, Tok.Space.xs)
-        .padding(.top, Tok.Space.sm)
-        .padding(.bottom, Tok.Space.sm)
-        .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.hairline) }
+    }
+
+    /// 清單名的小膠囊（2026-11-04 多米定案，大字那種拿掉）：茄紫細框、小方磚＋名字＋▾，寬度照內容、太長就截。沒取名用灰字
+    private var titlePill: some View {
+        let named = !Labels.trim(note.title).isEmpty
+        return Button(action: onTitle) {
+            HStack(spacing: Tok.Space.sm) {
+                NoteTile(note: note, side: Tok.Shape.titleIcon)
+                Text(Labels.label(note))
+                    .font(Tok.Font.headline)
+                    .foregroundColor(named ? Tok.Col.textPrimary : Tok.Col.textSecondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(Tok.Font.chevron)
+                    .foregroundColor(Tok.Col.textSecondary)
+            }
+            .padding(.leading, Tok.Space.sm)
+            .padding(.trailing, Tok.Space.md)
+            .frame(minHeight: Tok.Shape.hitMin)
+            .overlay(Capsule().strokeBorder(Tok.Col.accent, lineWidth: Tok.Shape.pillBorder))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressDim())
+        .dynamicTypeSize(...Tok.Font.titleMaxScale)
+        .padding(.horizontal, Tok.Space.xs)
+        .accessibilityLabel("\(Labels.label(note))，\(Words.switchTitle)")
     }
 }
 
@@ -256,14 +277,15 @@ struct PaperMenu: View {
     }
 }
 
-/// 小方磚：紙的顏色＋正中間一個字（目錄、切換清單、清單名旁邊共用）
+/// 小方磚：紙的顏色＋正中間一個字（切換清單、清單名旁邊共用）。外面一圈 1 點紙的格線色（1.1 NoteIcon），白蘿蔔才看得出邊
 struct NoteTile: View {
     let note: Note
     let side: CGFloat
 
     var body: some View {
         let colors = Tok.note(note.color)
-        RoundedRectangle(cornerRadius: side * Tok.Shape.tileRadiusRatio, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: side * Tok.Shape.tileRadiusRatio)
+        shape
             .fill(colors.dot)
             .frame(width: side, height: side)
             .overlay(
@@ -272,6 +294,7 @@ struct NoteTile: View {
                     .foregroundColor(colors.ink)
                     .minimumScaleFactor(0.5)
             )
+            .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
             .accessibilityHidden(true)
     }
 }

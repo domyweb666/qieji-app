@@ -179,6 +179,9 @@ enum Tok {
         static let footnote = SwiftUI.Font.footnote // 13
         static let label = SwiftUI.Font.caption.weight(.medium) // 12
         static let fabSymbol = SwiftUI.Font.system(size: 24, weight: .semibold)
+        static let barIcon = SwiftUI.Font.system(size: 20) // 右上 ⋯ 的圖示（1.1 Sym size 20）
+        static let barCheck = SwiftUI.Font.system(size: 20, weight: .semibold) // 右上 ✓、輸入框的 ✓
+        static let chevron = SwiftUI.Font.system(size: 12, weight: .semibold) // 清單名膠囊裡的 ▾
         static let glyphRatio: CGFloat = 0.44 // 磚上的字＝邊長 × 這個比例
         static func glyph(_ side: CGFloat) -> SwiftUI.Font {
             .system(size: side * glyphRatio, weight: .semibold)
@@ -215,6 +218,7 @@ enum Tok {
         static let radiusLg: CGFloat = 24
         static let hairline: CGFloat = 1
         static let borderSelected: CGFloat = 3
+        static let pillBorder: CGFloat = 1.5 // 清單名小膠囊的茄紫細框（borderSelected 的一半）
         static let hitMin: CGFloat = 44
         static let rowMin: CGFloat = 52
         static let menuRow: CGFloat = 48
