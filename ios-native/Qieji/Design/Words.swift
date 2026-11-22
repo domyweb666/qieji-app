@@ -38,6 +38,12 @@ enum Words {
     static let lockedToast = "已上鎖"
     static let lockedKeptCloud = "已上鎖。iCloud 雲碟裡還留著上鎖前的那一份"
     static let unlockedOff = "已解除上鎖"
+    // iCloud（1.1 _layout、store）
+    static let cloudOff = "iCloud 雲碟沒開，紙只存在這台手機"
+    static let newCloudTitle = "這個 iCloud 裡沒有你的紙"
+    static let newCloudBody = "紙都還在這台手機上。可能換了 Apple ID，或「檔案」裡的茄記資料夾被刪掉了。要把這台的紙放進現在這個 iCloud 嗎？選「先不要」的話，這次只存在手機上，下次打開會再問"
+    static let adoptCloud = "放進去"
+    static let notNowCloud = "先不要"
     static let coverPut = "放封面圖"
     static let coverSwap = "換封面圖"
     static let coverRemove = "拿掉封面圖"

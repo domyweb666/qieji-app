@@ -34,6 +34,7 @@ struct RootView: View {
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
     @ObservedObject private var shop = Purchases.shared
     @ObservedObject private var look = Look.shared
+    @ObservedObject private var cloud = CloudLink.shared
 
     /// 假資料模式、跑單元測試：不碰 App Store
     private static var offline: Bool {
@@ -111,6 +112,8 @@ struct RootView: View {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
                 store.isFull = shop.full
                 store.fullKnown = true // 知道買了沒才推小工具
+                cloud.store = store
+                cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
             }
         }
         .onChange(of: phase) { now in
@@ -118,9 +121,11 @@ struct RootView: View {
                 store.purgeTrash()
                 if !RootView.offline {
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
+                    cloud.pull() // 回到前景去 iCloud 拉一次
                 }
             } else {
                 store.flush()
+                cloud.pushSoon(now: true) // 進背景時不等，馬上傳
                 Locks.shared.forgetAll() // 上鎖的紙：離開前景就忘掉這次驗過的，回來要再驗
             }
         }
@@ -128,7 +133,17 @@ struct RootView: View {
         .onReceive(shop.$full) { full in
             if !RootView.offline {
                 store.isFull = full
+                if cloud.store != nil {
+                    cloud.setAllowed(full && cloud.syncOn)
+                }
             }
+        }
+        // iCloud S5：這個 iCloud 裡一張這台同步過的紙都沒有（換了 Apple ID、資料夾被刪）：先停下來問。第一句先答「有沒有損失」
+        .alert(Words.newCloudTitle, isPresented: Binding(get: { cloud.asking }, set: { _ in })) {
+            Button(Words.notNowCloud, role: .cancel) { cloud.decline() }
+            Button(Words.adoptCloud) { cloud.adopt() }
+        } message: {
+            Text(Words.newCloudBody)
         }
         .onOpenURL { url in
             // 網址只准打開畫面、升起輸入框，不帶資料、解鎖不了任何東西（.vibe/安全標準.md 平台互動、授權段）。

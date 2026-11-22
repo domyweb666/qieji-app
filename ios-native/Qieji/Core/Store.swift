@@ -215,9 +215,17 @@ final class Store: ObservableObject {
         _ = Seats.fixOrder(&book)
         if disk.write(book) {
             pushWidget() // 存檔成功才推給桌面小工具（1.1 多米 2026-10-31）
+            if CloudLink.shared.store === self {
+                CloudLink.shared.pushSoon() // 存檔成功才把改過的紙傳上 iCloud
+            }
         } else {
             toast = Toast(text: Words.saveFailed)
         }
+    }
+
+    /// 整份換掉（iCloud 合併、記下傳過的記號）
+    func replaceBook(_ next: Notebook) {
+        book = next
     }
 
     /// 讀完資料後呼叫一次

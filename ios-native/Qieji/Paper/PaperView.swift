@@ -196,7 +196,10 @@ struct PaperView: View {
         let id = note.id
         guard await locks.unlock(id, reason: Words.confirmReason) else { return }
         store.setLocked(id, true)
-        store.toast = Store.Toast(text: Words.lockedToast)
+        // 上鎖的紙只存在這支手機：拿掉 iCloud 上那份；拿不掉要跟使用者講
+        CloudLink.shared.dropNote(id) { gone in
+            store.toast = Store.Toast(text: gone ? Words.lockedToast : Words.lockedKeptCloud)
+        }
     }
 
     /// 選好一張照片：縮圖存起來、放上這張紙（舊的圖檔刪掉）

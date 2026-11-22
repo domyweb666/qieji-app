@@ -19,11 +19,19 @@ targets:
       - target: QiejiControls
       - target: QiejiWidgets
     # App Group：跟桌面小工具交資料（1.1 expo-widgets 同一個群組）
+    # iCloud 雲碟（1.1 react-native-cloud-storage 同一個容器，資料夾名「茄記」）：同步是完整版功能，買了而且開著才讀寫
     entitlements:
       path: Qieji/Qieji.entitlements
       properties:
         com.apple.security.application-groups:
           - group.org.domyweb.qieji
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.org.domyweb.qieji
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.org.domyweb.qieji
+        com.apple.developer.icloud-container-environment: Production
     info:
       path: Qieji/Info.plist
       properties:
@@ -41,6 +49,12 @@ targets:
           - UIInterfaceOrientationPortrait
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # 「檔案 › iCloud 雲碟」裡看得到「茄記」資料夾（網頁版的備份丟進去會被合併進來）
+        NSUbiquitousContainers:
+          iCloud.org.domyweb.qieji:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerSupportedFolderLevels: Any
+            NSUbiquitousContainerName: 茄記
         # 控制中心「記一行」按鈕開 qieji://new（Expo 版同一個 scheme）
         CFBundleURLTypes:
           - CFBundleURLSchemes:
