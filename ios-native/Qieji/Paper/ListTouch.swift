@@ -7,9 +7,12 @@ import UIKit.UIGestureRecognizerSubclass
 /// 手指先往上下動就交給系統捲動，所以捲動的手感是系統原生的。
 final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     // 畫面要跟著動的值
-    @Published var swipeID: String?
-    @Published var swipeTx: CGFloat = 0
+    @Published var swipeID: String? // 手指正在滑的那一行
     @Published var swipeArmed = false
+    @Published var slides: [String: CGFloat] = [:] // 每一行往左右移了多少（正在滑的、放手後還在滑回或滑出的）
+    @Published var dims: [String: Double] = [:] // 減少動態時劃掉暗一下、刪除淡出
+    @Published var labelScale: CGFloat = 1 // 底下「劃掉／刪除」越線那一刻放大再彈回
+    private(set) var width: CGFloat = 0
     @Published var dragID: String?
     @Published var dragDy: CGFloat = 0
     @Published var dragFrom = -1
@@ -43,7 +46,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     var onDragBegan: () -> Void = {}
 
     private weak var scroll: UIScrollView?
-    private let swipePan = UIPanGestureRecognizer()
+    private let swipePan = SwipePan()
     private let gripPan = GripPan()
     private let tap = UITapGestureRecognizer()
     private let hold = UILongPressGestureRecognizer()
@@ -95,8 +98,8 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         let point = gesture === tap ? gesture.location(in: scroll) : touchStart
         let inGrip = point.x > scroll.bounds.width - ListTouch.gripStrip
         if gesture === swipePan {
-            let speed = swipePan.velocity(in: scroll)
-            return row(at: point) != nil && abs(speed.x) > abs(speed.y) && swipeID == nil
+            // 方向在 SwipePan 裡判斷（左右動 14 點才成立、先上下動 12 點就放棄）
+            return row(at: point) != nil && swipeID == nil
         }
         if gesture === gripPan {
             // 方向在 GripPan 裡判斷（上下動 1 點就拿起、先左右動 10 點就放棄）
@@ -133,55 +136,109 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         min(Tok.Gesture.deleteMax, width * Tok.Gesture.deleteRatio)
     }
 
-    @objc private func onSwipe(_ gesture: UIPanGestureRecognizer) {
+    /// 底下「劃掉／刪除」的字多亮：越接近門檻越亮（0.35 到 1），越線就全亮（1.1 SwipeUnder）
+    func glow(_ slide: CGFloat, armed: Bool) -> Double {
+        if armed {
+            return 1
+        }
+        let line = slide > 0 ? strikeLine(width) : deleteLine(width)
+        let reach = max(1, line - Tok.Gesture.swipeActivate)
+        let progress = Double(min(1, abs(slide) / reach))
+        return Tok.Motion.swipeLabelFrom + (1 - Tok.Motion.swipeLabelFrom) * progress
+    }
+
+    @objc private func onSwipe(_ gesture: SwipePan) {
         guard let scroll else { return }
-        let width = scroll.bounds.width
+        width = scroll.bounds.width
         switch gesture.state {
         case .began:
-            swipeID = row(at: touchStart)
-            swipeTx = 0
+            guard let id = row(at: touchStart) else { return }
+            swipeID = id
             swipeArmed = false
+            labelScale = 1
+            dims[id] = nil
             Haptic.prepare()
+            follow(gesture)
         case .changed:
-            let shift = gesture.translation(in: scroll).x
-            let armed = shift > 0 ? shift >= strikeLine(width) : -shift >= deleteLine(width)
-            if armed != swipeArmed {
-                swipeArmed = armed
-                if armed {
-                    Haptic.arm()
-                }
-            }
-            swipeTx = shift
+            follow(gesture)
         case .ended, .cancelled, .failed:
-            finishSwipe(width: width, cancelled: gesture.state != .ended)
+            finishSwipe(cancelled: gesture.state != .ended, speed: gesture.speedX)
         default: break
         }
     }
 
-    private func finishSwipe(width: CGFloat, cancelled: Bool) {
+    /// 行跟著手指：手勢走了 14 點才成立，扣掉那一段，行從手指底下 0 開始跟（不先跳一格）；門檻仍照手指走的距離判
+    private func follow(_ gesture: SwipePan) {
         guard let id = swipeID else { return }
-        let shift = swipeTx
+        let shift = gesture.shiftX
+        let gap = Tok.Gesture.swipeActivate
+        slides[id] = shift > 0 ? max(0, shift - gap) : min(0, shift + gap)
+        let armed = shift > 0 ? shift > strikeLine(width) : -shift > deleteLine(width)
+        guard armed != swipeArmed else { return }
+        swipeArmed = armed
+        guard armed else { return }
+        Haptic.arm()
+        // 越線那一刻字放大，再彈回原本大小（跟震動同一刻）；減少動態只有變亮
+        if !UIAccessibility.isReduceMotionEnabled {
+            labelScale = Tok.Motion.swipeLabelArm
+            DispatchQueue.main.async { [weak self] in
+                withAnimation(Tok.Motion.swipeLabel) { self?.labelScale = 1 }
+            }
+        }
+    }
+
+    /// 放手：滑回、滑出、彈回都接著手指放開的速度（1.1 2-4 做法 3）。劃掉在放手那一刻就改資料。
+    /// 這一行放手後馬上可以滑下一行（連續劃、連續刪不會漏接）。減少動態：不滑，劃掉整行暗一下再亮回、刪除淡出
+    private func finishSwipe(cancelled: Bool, speed: CGFloat) {
+        guard let id = swipeID else { return }
+        let shift = slides[id] ?? 0
         let armed = swipeArmed && !cancelled
+        swipeID = nil
         swipeArmed = false
+        let calm = UIAccessibility.isReduceMotionEnabled
+        let toward = { (goal: CGFloat) -> CGFloat in abs(goal - shift) < 1 ? 0 : speed / (goal - shift) }
         if armed, shift < 0 {
-            // 刪除：整行滑出畫面，滑完才真的拿掉
-            withAnimation(Tok.Motion.deleteSlide) { swipeTx = -width }
-            DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.deleteSlideSeconds) { [weak self] in
-                self?.onDelete(id)
-                self?.swipeID = nil
-                self?.swipeTx = 0
+            if calm {
+                slides[id] = nil
+                Motions.run(Tok.Motion.fade, fallback: Tok.Motion.fadeSeconds) { self.dims[id] = 0 } done: { [weak self] in
+                    self?.removeLine(id)
+                }
+            } else {
+                Motions.run(Tok.Motion.deleteSpring(velocity: toward(-width)), fallback: Tok.Motion.deleteSlideSeconds) {
+                    self.slides[id] = -width
+                } done: { [weak self] in
+                    self?.removeLine(id)
+                }
             }
             return
         }
         if armed {
             onStrike(id)
         }
-        withAnimation(armed ? Tok.Motion.strikeReturn : Tok.Motion.snapBack) { swipeTx = 0 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.deleteSlideSeconds) { [weak self] in
-            if self?.swipeID == id, self?.swipeTx == 0 {
-                self?.swipeID = nil
+        if calm {
+            slides[id] = nil
+            if armed {
+                dims[id] = Tok.Motion.reducedDimFrom
+                withAnimation(Tok.Motion.fade) { dims[id] = 1 }
+            }
+            return
+        }
+        Motions.run(Tok.Motion.returnSpring(velocity: toward(0)), fallback: Tok.Motion.dragLandSeconds) {
+            slides[id] = 0
+        } done: { [weak self] in
+            if self?.slides[id] == 0 {
+                self?.slides[id] = nil
             }
         }
+    }
+
+    /// 滑出畫面（或淡出）之後真的拿掉：下面的行滑上來補位（1.1 rowShift 0.18 秒）
+    private func removeLine(_ id: String) {
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : Tok.Motion.rowShift) {
+            onDelete(id)
+        }
+        slides[id] = nil
+        dims[id] = nil
     }
 
     // MARK: 把手拖順序
@@ -470,5 +527,70 @@ final class GripPan: UIGestureRecognizer {
     override func reset() {
         super.reset()
         speedY = 0
+    }
+}
+
+/// 一行的左右滑（1.1 swipeActivate、swipeFailY）：左右動超過 14 點才成立；先上下動超過 12 點就放棄，交給捲動
+final class SwipePan: UIGestureRecognizer {
+    /// 手指從按下去到現在左右走了多少（正的往右）
+    private(set) var shiftX: CGFloat = 0
+    /// 手指放開前最後一小段的左右速度（點／秒）
+    private(set) var speedX: CGFloat = 0
+    private var start: CGPoint = .zero
+    private var lastX: CGFloat = 0
+    private var lastTime: TimeInterval = 0
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let view, touches.count == 1, let touch = touches.first else {
+            state = .failed
+            return
+        }
+        start = touch.location(in: view)
+        lastX = start.x
+        lastTime = touch.timestamp
+        shiftX = 0
+        speedX = 0
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let view, let touch = touches.first else { return }
+        let point = touch.location(in: view)
+        let span = touch.timestamp - lastTime
+        if span > 0 {
+            speedX = (point.x - lastX) / CGFloat(span)
+        }
+        lastX = point.x
+        lastTime = touch.timestamp
+        shiftX = point.x - start.x
+        switch state {
+        case .possible:
+            if abs(point.y - start.y) > Tok.Gesture.swipeFailY {
+                state = .failed
+            } else if abs(shiftX) > Tok.Gesture.swipeActivate {
+                state = .began
+            }
+        case .began, .changed:
+            state = .changed
+        default:
+            break
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        state = state == .began || state == .changed ? .ended : .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    override func reset() {
+        super.reset()
+        shiftX = 0
+        speedX = 0
     }
 }

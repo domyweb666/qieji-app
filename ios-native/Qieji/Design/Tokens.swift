@@ -277,6 +277,16 @@ enum Tok {
         static func landSpring(velocity: CGFloat) -> Animation {
             .interpolatingSpring(stiffness: 631.65, damping: 50.27, initialVelocity: velocity)
         }
+
+        /// 劃掉後滑回、沒滑夠彈回（1.1 strikeReturn／snapBack：感知 0.25 秒、不過頭），帶手指速度
+        static func returnSpring(velocity: CGFloat) -> Animation {
+            .interpolatingSpring(stiffness: 631.65, damping: 50.27, initialVelocity: velocity)
+        }
+
+        /// 刪除時滑出畫面（1.1 deleteSlide：感知 0.22 秒、不過頭），帶手指速度
+        static func deleteSpring(velocity: CGFloat) -> Animation {
+            .interpolatingSpring(stiffness: 815.6, damping: 57.12, initialVelocity: velocity)
+        }
         static let dragLift = Animation.spring(response: 0.15, dampingFraction: 1)
         static let swipeLabel = Animation.spring(response: 0.25, dampingFraction: 0.6)
         static let rowShift = Animation.easeInOut(duration: 0.18)
@@ -326,6 +336,7 @@ enum Tok {
 
     enum Gesture {
         static let swipeActivate: CGFloat = 14
+        static let swipeFailY: CGFloat = 12 // 左右滑成立之前先上下動這麼多，就交給捲動
         static let strikeMax: CGFloat = 90
         static let strikeRatio: CGFloat = 0.25
         static let deleteMax: CGFloat = 110

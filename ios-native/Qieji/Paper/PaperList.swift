@@ -50,19 +50,24 @@ struct PaperList: View {
     private func row(_ item: Item, index: Int) -> some View {
         let held = touch.dragID == item.id
         let sliding = touch.swipeID == item.id
+        let slide = touch.slides[item.id] ?? 0
+        let armed = sliding && touch.swipeArmed
         return PaperRow(
             item: item,
             editing: editingID == item.id,
             focus: editingID == item.id ? focus : nil,
             colors: colors,
-            slide: sliding ? touch.swipeTx : 0,
-            armed: sliding && touch.swipeArmed,
+            slide: slide,
+            armed: armed,
+            glow: touch.glow(slide, armed: armed),
+            labelScale: sliding ? touch.labelScale : 1,
             held: held,
             actions: actions(for: item.id),
             voice: voiceActions(item, index: index)
         )
-        // 拖著的那一行另外畫一份浮在上面（floating）；清單裡這份先藏起來、位子留著。從選單刪的行先淡出
-        .opacity(held || touch.fading.contains(item.id) ? 0 : 1)
+        // 拖著的那一行另外畫一份浮在上面（floating）；清單裡這份先藏起來、位子留著。從選單刪的行先淡出；
+        // 減少動態時劃掉整行暗一下再亮回、刪除淡出
+        .opacity(held || touch.fading.contains(item.id) ? 0 : touch.dims[item.id] ?? 1)
         .offset(y: held ? 0 : touch.giveWay(index: index))
         .animation(held || calm ? nil : Tok.Motion.dragShift, value: touch.dragTo)
         .background(GeometryReader { geo in
@@ -179,6 +184,8 @@ struct PaperRow: View {
     let colors: Tok.NoteColors
     let slide: CGFloat
     let armed: Bool
+    var glow: Double = 1
+    var labelScale: CGFloat = 1
     let held: Bool
     let actions: LineActions
     let voice: [VoiceAct]
@@ -187,7 +194,7 @@ struct PaperRow: View {
     var body: some View {
         ZStack {
             if slide != 0 {
-                SwipeUnder(slide: slide, armed: armed, done: item.done)
+                SwipeUnder(slide: slide, glow: glow, scale: labelScale, done: item.done)
             }
             // 照 1.1：字從左 20 起、離把手 8；把手 44 寬、貼右邊，六個點對齊第一行字（不是整則的正中間）；
             // 底下一條 1 點格線，一行字的高是 52＋1
@@ -242,7 +249,8 @@ struct GripDots: View {
 /// 滑動時行底下露出來的那一層：往右是暖灰＋「劃掉」，往左是紅＋「刪除」。越線那一刻字放大彈一下
 struct SwipeUnder: View {
     let slide: CGFloat
-    let armed: Bool
+    let glow: Double // 越接近門檻越亮，越線全亮
+    let scale: CGFloat // 越線那一刻放大再彈回
     let done: Bool
 
     var body: some View {
@@ -250,12 +258,12 @@ struct SwipeUnder: View {
         ZStack(alignment: right ? .leading : .trailing) {
             right ? Tok.Col.swipeStrikeBg : Tok.Col.swipeDeleteBg
             Text(right ? (done ? Words.unstrike : Words.strike) : Words.delete)
-                .font(Tok.Font.headline)
+                .font(Tok.Font.callout.weight(.semibold))
                 .foregroundColor(Tok.Col.textOnSwipe)
-                .opacity(armed ? 1 : Tok.Motion.swipeLabelFrom)
-                .scaleEffect(armed ? Tok.Motion.swipeLabelArm : 1)
-                .animation(Tok.Motion.swipeLabel, value: armed)
+                .opacity(glow)
+                .scaleEffect(scale)
                 .padding(.horizontal, Tok.Space.gutter)
         }
+        .accessibilityHidden(true)
     }
 }
