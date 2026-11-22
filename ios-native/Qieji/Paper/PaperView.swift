@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -12,6 +13,9 @@ struct PaperView: View {
     @StateObject private var touch = ListTouch()
     @StateObject private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
+    @ObservedObject private var covers = Covers.shared
+    @State private var pickingCover = false
+    @State private var coverPick: PhotosPickerItem?
     @Environment(\.scenePhase) private var phase
     @Environment(\.accessibilityReduceMotion) private var calm
     @State private var editingID: String?
@@ -28,18 +32,19 @@ struct PaperView: View {
 
     var body: some View {
         let colors = Tok.note(note.color)
+        let photo = covers.image(note)
+        let float = photo != nil && !note.isText
         VStack(spacing: Tok.Space.zero) {
-            PaperHeader(
-                store: store, note: note, colors: colors, renaming: $renaming,
-                showDone: keyboard.up && (editingID != nil || renaming || padFocused),
-                onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
-                onRename: {
-                    editingID = nil
-                    closeComposer(stay: true)
-                    renaming = true
-                },
-                onPinFull: { pinChoices = $0 }
-            )
+            if let photo, note.isText {
+                // 記事本的封面圖：固定在上面，清單名和 ⋯ 疊在圖上
+                ZStack(alignment: .top) {
+                    CoverFixed(photo: photo)
+                    header(colors, cover: .fixed)
+                }
+                TimeRow(note: note, colors: colors)
+            } else {
+                header(colors, cover: float ? .floating(touch.spy) : .none)
+            }
             Group {
                 if note.isText {
                     NotePad(store: store, note: note, focused: $padFocused, scale: size.scale)
@@ -47,7 +52,8 @@ struct PaperView: View {
                     PaperList(
                         store: store, touch: touch, note: note,
                         editingID: $editingID, focus: $focus, colors: colors,
-                        onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale
+                        onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale,
+                        head: float ? AnyView(CoverHead(note: note, colors: colors, spy: touch.spy, onTitle: onTitle)) : nil
                     )
                 }
             }
@@ -66,7 +72,17 @@ struct PaperView: View {
                 Text(Words.pinSwapAsk)
             }
         }
-        .background(colors.paper.ignoresSafeArea())
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                colors.paper.ignoresSafeArea()
+                if float, let photo {
+                    CoverBanner(photo: photo, paper: colors.paper, spy: touch.spy)
+                }
+            }
+        }
+        // 封面圖（完整版）：系統的照片選取畫面，不用跟使用者要相簿權限
+        .photosPicker(isPresented: $pickingCover, selection: $coverPick, matching: .images)
+        .onChange(of: coverPick) { item in loadCover(item) }
         // 輸入框開著時整張紙變暗（不擋觸控：點一行＝字先記下、焦點進那一行），跟鍵盤同一個時鐘
         .overlay {
             Tok.Col.scrim
@@ -103,6 +119,42 @@ struct PaperView: View {
             if now != .active, composing {
                 closeComposer(stay: true)
                 store.flush()
+            }
+        }
+    }
+
+    private func header(_ colors: Tok.NoteColors, cover: PaperHeader.CoverMode) -> some View {
+        PaperHeader(
+            store: store, note: note, colors: colors, renaming: $renaming,
+            showDone: keyboard.up && (editingID != nil || renaming || padFocused),
+            onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
+            onRename: {
+                editingID = nil
+                closeComposer(stay: true)
+                renaming = true
+            },
+            onPinFull: { pinChoices = $0 },
+            onCover: {
+                closeComposer(stay: true)
+                pickingCover = true
+            },
+            cover: cover
+        )
+    }
+
+    /// 選好一張照片：縮圖存起來、放上這張紙（舊的圖檔刪掉）
+    private func loadCover(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        coverPick = nil
+        let id = note.id
+        Task {
+            let data = try? await item.loadTransferable(type: Data.self)
+            await MainActor.run {
+                if let data, let code = Covers.shared.save(data) {
+                    store.setCover(id, code)
+                } else {
+                    store.toast = Store.Toast(text: Words.coverFailTitle)
+                }
             }
         }
     }

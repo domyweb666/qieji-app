@@ -14,18 +14,32 @@ struct PaperHeader: View {
     let onRoute: (Route) -> Void
     let onRename: () -> Void
     let onPinFull: ([Note]) -> Void
+    var onCover: () -> Void = {}
+    /// 封面圖：沒有／清單的矮橫幅（標題列的底與小膠囊隨捲動淡進來，時間列在捲動內容裡）／記事本的固定大圖（標題列疊在圖上）
+    var cover: CoverMode = .none
     @FocusState private var titleFocused: Bool
+
+    enum CoverMode {
+        case none
+        case floating(ScrollSpy)
+        case fixed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tok.Space.zero) {
             HStack(spacing: Tok.Space.sm) {
                 if renaming {
                     titleField
+                } else if case let .floating(spy) = cover {
+                    // 在最上面時不畫（名字已經用大字寫在圖下面），大字捲進標題列後面時淡進來接手
+                    SpyFade(spy: spy, start: { $0.nameEnd - Tok.Space.xl }) { titlePill }
                 } else {
                     titlePill
                 }
                 Spacer(minLength: Tok.Space.sm)
-                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull) } label: {
+                Menu {
+                    PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull, onCover: onCover)
+                } label: {
                     Image(systemName: "ellipsis")
                         .font(Tok.Font.barIcon)
                         .foregroundColor(Tok.Col.textPrimary)
@@ -42,18 +56,28 @@ struct PaperHeader: View {
             .padding(.leading, Tok.Space.lg)
             .padding(.trailing, Tok.Space.gutter)
             .padding(.top, Tok.Space.sm)
-            HStack(spacing: Tok.Space.sm) {
-                Text(Dates.ago(note.updated))
-                Spacer(minLength: Tok.Space.sm)
-                Text(Dates.full(note.updated))
+            .padding(.bottom, floating == nil ? Tok.Space.zero : Tok.Space.sm)
+            .background {
+                // 有封面圖的清單：圖收到剩一小截時，標題列的底（紙色＋格線）淡進來，之後行從它後面捲過去
+                if let spy = floating {
+                    SpyFade(spy: spy, start: { _ in Tok.Shape.coverBelowBar - Tok.Space.xl }) {
+                        colors.paper
+                            .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
+                            .ignoresSafeArea(edges: .top)
+                    }
+                }
             }
-            .font(Tok.Font.footnote)
-            .foregroundColor(Tok.Col.textSecondary)
-            .padding(.horizontal, Tok.Space.gutter)
-            .padding(.top, Tok.Space.xs)
-            .padding(.bottom, Tok.Space.xl)
-            .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
+            if case .none = cover {
+                TimeRow(note: note, colors: colors)
+            }
         }
+    }
+
+    private var floating: ScrollSpy? {
+        if case let .floating(spy) = cover {
+            return spy
+        }
+        return nil
     }
 
     /// ⋯「改名字」：名字原地變成可以打字（1.1：多行輸入框才不會切到 28 點中文的字頂；Return＝改好收起，貼上的換行換成空格）
@@ -106,6 +130,12 @@ struct PaperHeader: View {
             .padding(.leading, Tok.Space.sm)
             .padding(.trailing, Tok.Space.md)
             .frame(minHeight: Tok.Shape.hitMin)
+            .background {
+                // 記事本疊在封面圖上：膠囊補白底（多米選白底，不用玻璃）
+                if case .fixed = cover {
+                    Capsule().fill(Tok.Col.surface)
+                }
+            }
             .overlay(Capsule().strokeBorder(Tok.Col.accent, lineWidth: Tok.Shape.pillBorder))
             .contentShape(Capsule())
         }
@@ -124,10 +154,20 @@ struct PaperMenu: View {
     let onRoute: (Route) -> Void
     let onRename: () -> Void
     let onPinFull: ([Note]) -> Void
+    var onCover: () -> Void = {}
 
     var body: some View {
         colors
         Button(action: onRename) { Label(Words.rename, systemImage: "pencil") }
+        // 完整版功能沒買就不列（2026-11-14 多米：列出來點了才說要買，看了煩）；已經放好的封面照樣拿得掉
+        if store.isFull {
+            Button(action: onCover) {
+                Label(note.cover == nil ? Words.coverPut : Words.coverSwap, systemImage: "photo")
+            }
+        }
+        if note.cover != nil {
+            Button { store.clearCover(note.id) } label: { Label(Words.coverRemove, systemImage: "rectangle.slash") }
+        }
         Button {
             if let pins = store.pinOrAsk(note.id) {
                 onPinFull(pins)
@@ -212,16 +252,23 @@ struct NoteTile: View {
     var body: some View {
         let colors = Tok.note(note.color)
         let shape = RoundedRectangle(cornerRadius: side * Tok.Shape.tileRadiusRatio)
-        shape
-            .fill(colors.dot)
-            .frame(width: side, height: side)
-            .overlay(
-                Text(Labels.glyph(note))
-                    .font(Tok.Font.glyph(side))
-                    .foregroundColor(colors.ink)
-                    .minimumScaleFactor(0.5)
-            )
-            .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
+        // 有封面圖的用圖（1.1 完整版）；上鎖的紙不露圖
+        Group {
+            if let photo = Covers.shared.image(note) {
+                Image(uiImage: photo).resizable().scaledToFill()
+            } else {
+                shape.fill(colors.dot)
+                    .overlay(
+                        Text(Labels.glyph(note))
+                            .font(Tok.Font.glyph(side))
+                            .foregroundColor(colors.ink)
+                            .minimumScaleFactor(0.5)
+                    )
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
             .accessibilityHidden(true)
     }
 }

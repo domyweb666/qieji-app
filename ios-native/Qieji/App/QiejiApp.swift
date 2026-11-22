@@ -220,6 +220,20 @@ struct ToastBar: View {
 
 /// 假資料：模擬器看畫面、測手勢用
 enum Demo {
+    /// 一張漸層圖存成封面檔，回傳代號
+    static func cover() -> String? {
+        let size = CGSize(width: Covers.width / 2, height: Covers.width / 4)
+        let top = UIColor(Tok.note("purple").dot).cgColor, bottom = UIColor(Tok.note("green").dot).cgColor
+        let picture = UIGraphicsImageRenderer(size: size).image { ctx in
+            let fade = CGGradient(colorsSpace: nil, colors: [top, bottom] as CFArray, locations: nil)
+            if let fade {
+                ctx.cgContext.drawLinearGradient(fade, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+            }
+        }
+        guard let data = picture.jpegData(compressionQuality: Covers.quality) else { return nil }
+        return Covers.shared.save(data)
+    }
+
     static func book() -> Notebook {
         let now = Clock.now()
         var book = Notebook()
@@ -242,6 +256,10 @@ enum Demo {
         pad.kind = "text"
         pad.title = "記事本"
         pad.body = "這是一張記事本。\n不分行，一整頁照你的意思寫。\n\n第二段在這裡。"
+        // 封面圖：畫一張漸層當假照片（看清單的矮橫幅、磚上的照片）
+        if let code = Demo.cover() {
+            third.cover = code
+        }
         book.notes = [first, second, third, pad]
         // 目錄要看得出翻頁、資料夾：再放二十幾張各種顏色的，其中四張收在一個資料夾裡
         let names = [

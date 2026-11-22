@@ -20,6 +20,8 @@ struct PaperList: View {
     var onMenu: (String, CGFloat) -> Void = { _, _ in }
     /// 紙上的字級（完整版）
     var scale: CGFloat = 1
+    /// 捲動內容最前面那一塊（有封面圖的清單：方磚、大字名字、時間列）
+    var head: AnyView?
     @Environment(\.accessibilityReduceMotion) private var calm
 
     static let space = "paperList"
@@ -27,12 +29,16 @@ struct PaperList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: Tok.Space.zero) {
-                    ForEach(Array(note.items.enumerated()), id: \.element.id) { index, item in
-                        row(item, index: index)
-                    }
-                    if note.items.isEmpty {
-                        EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])
+                // 位置表的座標從捲動內容的頂端算（前面有封面那一塊也一樣），手勢拿到的點才對得上
+                VStack(spacing: Tok.Space.zero) {
+                    head
+                    LazyVStack(spacing: Tok.Space.zero) {
+                        ForEach(Array(note.items.enumerated()), id: \.element.id) { index, item in
+                            row(item, index: index)
+                        }
+                        if note.items.isEmpty {
+                            EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])
+                        }
                     }
                 }
                 .coordinateSpace(name: PaperList.space)

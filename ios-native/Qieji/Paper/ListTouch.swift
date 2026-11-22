@@ -66,6 +66,12 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     func attach(_ view: UIScrollView) {
         guard scroll !== view else { return }
         scroll = view
+        offsetWatch = view.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+            let spot = scroll.contentOffset.y + scroll.adjustedContentInset.top
+            if self?.spy.y != spot {
+                self?.spy.y = spot
+            }
+        }
         gripPan.strip = ListTouch.gripStrip
         swipePan.addTarget(self, action: #selector(onSwipe(_:)))
         gripPan.addTarget(self, action: #selector(onGrip(_:)))
@@ -84,6 +90,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     }
 
     private let glider = Glide()
+    /// 紙捲到哪（封面圖用）
+    let spy = ScrollSpy()
+    private var offsetWatch: NSKeyValueObservation?
 
     /// 記下新的一行之後捲回最上面（見 Glide）
     func glideTop() {

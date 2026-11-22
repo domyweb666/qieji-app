@@ -48,13 +48,22 @@ struct DirTileFace: View {
                 .frame(width: side, height: side)
         } else if let note = entry.note {
             let colors = Tok.note(note.color)
-            shape.fill(colors.dot)
-                .overlay(
-                    Text(Labels.glyph(note))
-                        .font(Tok.Font.glyph(side))
-                        .foregroundColor(colors.ink)
-                        .minimumScaleFactor(0.5)
-                )
+            // 有封面圖的紙：整塊磚用照片正中間、不放字（1.1）；上鎖的不露圖
+            Group {
+                if let photo = Covers.shared.image(note) {
+                    Image(uiImage: photo).resizable().scaledToFill()
+                } else {
+                    shape.fill(colors.dot)
+                        .overlay(
+                            Text(Labels.glyph(note))
+                                .font(Tok.Font.glyph(side))
+                                .foregroundColor(colors.ink)
+                                .minimumScaleFactor(0.5)
+                        )
+                }
+            }
+            .frame(width: side, height: side)
+            .clipShape(shape)
                 .overlay(alignment: .topTrailing) { badge("pin.fill", show: note.pinned, color: colors.ink) }
                 .overlay(alignment: .topLeading) { badge("lock.fill", show: note.locked, color: colors.ink) }
                 .overlay(shape.strokeBorder(current ? Tok.Col.accent : colors.rule, lineWidth: border))
@@ -98,15 +107,22 @@ struct DirTileFace: View {
 
     private func mini(_ note: Note, _ size: CGFloat) -> some View {
         let colors = Tok.note(note.color)
-        return RoundedRectangle(cornerRadius: size * Tok.Shape.tileRadiusRatio, style: .continuous)
-            .fill(colors.dot)
-            .overlay(
-                Text(Labels.glyph(note))
-                    .font(Tok.Font.glyph(size * Tok.Shape.folderMiniGlyph))
-                    .foregroundColor(colors.ink)
-                    .minimumScaleFactor(0.5)
-            )
-            .frame(width: size, height: size)
+        let shape = RoundedRectangle(cornerRadius: size * Tok.Shape.tileRadiusRatio, style: .continuous)
+        return Group {
+            if let photo = Covers.shared.image(note) {
+                Image(uiImage: photo).resizable().scaledToFill()
+            } else {
+                shape.fill(colors.dot)
+                    .overlay(
+                        Text(Labels.glyph(note))
+                            .font(Tok.Font.glyph(size * Tok.Shape.folderMiniGlyph))
+                            .foregroundColor(colors.ink)
+                            .minimumScaleFactor(0.5)
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(shape)
     }
 }
 

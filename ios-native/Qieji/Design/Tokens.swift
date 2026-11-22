@@ -230,6 +230,13 @@ enum Tok {
         static let borderSelected: CGFloat = 3
         static let pillBorder: CGFloat = 1.5 // 清單名小膠囊的茄紫細框（borderSelected 的一半）
         static let tipTailTurn: Double = 45 // 提示卡小尾巴（方塊轉幾度）
+        // 封面圖（1.1 丁）：清單的矮橫幅高（不含瀏海）、壓在下緣的方磚邊長、方磚壓進圖裡多少；記事本頂部的圖高
+        static let coverLow: CGFloat = 96
+        static let coverTile: CGFloat = 56
+        static let coverTileLap: CGFloat = 28
+        static let coverHigh: CGFloat = 150
+        /// 橫幅在標題列（上 8＋按鈕 44＋下 8）下面露出多少
+        static let coverBelowBar: CGFloat = max(coverTileLap, coverLow - hitMin - 16)
         static let hitMin: CGFloat = 44
         static let rowMin: CGFloat = 52
         static let menuRow: CGFloat = 48
