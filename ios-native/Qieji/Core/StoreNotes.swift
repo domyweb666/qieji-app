@@ -78,6 +78,13 @@ extension Store {
         dropIfBlank(id)
     }
 
+    /// 打清單名（每打一個字叫一次）：換行換成空格；頭尾空白不修（打到一半的空格要留著，畫面上的名字另外修）
+    func setTitle(_ id: String, _ text: String) {
+        let clean = text.replacingOccurrences(of: "\n", with: " ")
+        guard book.note(id)?.title != clean else { return }
+        editNote(id) { $0.title = clean }
+    }
+
     func rename(_ id: String, _ name: String) {
         let clean = name.replacingOccurrences(of: "\n", with: " ")
         editNote(id) { $0.title = Labels.trim(clean) }

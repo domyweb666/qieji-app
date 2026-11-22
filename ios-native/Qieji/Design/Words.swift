@@ -18,6 +18,8 @@ enum Words {
     static let more = "更多"
     static let rename = "改名字"
     static let renameHint = "這張叫什麼"
+    static let titleField = "清單名"
+    static let doneKeyboard = "完成，收起鍵盤"
     static let glyphEdit = "改磚上的字"
     static let glyphHint = "一個字（清空就用名字的第一個字）"
     static let clearDone = "清掉劃掉的行"

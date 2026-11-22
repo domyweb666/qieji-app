@@ -10,13 +10,13 @@ struct PaperView: View {
     var onMoveLine: (String) -> Void = { _ in }
 
     @StateObject private var touch = ListTouch()
+    @StateObject private var keyboard = KeyboardWatch()
     @State private var editingID: String?
     @State private var focus: FocusAsk?
     @State private var menuID: String?
     @State private var composing = false
     @State private var draft = ""
     @State private var renaming = false
-    @State private var newName = ""
     @State private var glyphing = false
     @State private var newGlyph = ""
     @FocusState private var composerFocused: Bool
@@ -25,9 +25,12 @@ struct PaperView: View {
         let colors = Tok.note(note.color)
         VStack(spacing: Tok.Space.zero) {
             PaperHeader(
-                store: store, note: note, colors: colors, onTitle: onTitle, onRoute: onRoute,
+                store: store, note: note, colors: colors, renaming: $renaming,
+                showDone: keyboard.up && (editingID != nil || renaming),
+                onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
                 onRename: {
-                    newName = note.title
+                    editingID = nil
+                    composing = false
                     renaming = true
                 },
                 onGlyph: {
@@ -44,11 +47,6 @@ struct PaperView: View {
         .overlay(alignment: .bottomTrailing) { addButton }
         .overlay(alignment: .bottom) { composer }
         .confirmationDialog("", isPresented: menuShown, titleVisibility: .hidden) { lineMenu }
-        .alert(Words.rename, isPresented: $renaming) {
-            TextField(Words.renameHint, text: $newName)
-            Button(Words.done) { store.rename(note.id, newName) }
-            Button(Words.cancel, role: .cancel) {}
-        }
         .alert(Words.glyphEdit, isPresented: $glyphing) {
             TextField(Words.glyphHint, text: $newGlyph)
             Button(Words.done) {
@@ -71,7 +69,15 @@ struct PaperView: View {
         .onChange(of: note.id) { _ in
             editingID = nil
             composing = false
+            renaming = false
         }
+    }
+
+    /// 右上 ✓：誰在打字都收起來
+    private func doneTyping() {
+        editingID = nil
+        renaming = false
+        KeyboardWatch.dismiss()
     }
 
     // MARK: 右下 ＋ 與輸入框
@@ -183,15 +189,23 @@ struct PaperHeader: View {
     @ObservedObject var store: Store
     let note: Note
     let colors: Tok.NoteColors
+    @Binding var renaming: Bool
+    var showDone = false
     let onTitle: () -> Void
+    let onDone: () -> Void
     let onRoute: (Route) -> Void
     let onRename: () -> Void
     let onGlyph: () -> Void
+    @FocusState private var titleFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tok.Space.zero) {
             HStack(spacing: Tok.Space.sm) {
-                titlePill
+                if renaming {
+                    titleField
+                } else {
+                    titlePill
+                }
                 Spacer(minLength: Tok.Space.sm)
                 Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onGlyph: onGlyph) } label: {
                     Image(systemName: "ellipsis")
@@ -201,7 +215,12 @@ struct PaperHeader: View {
                         .frost(Circle(), interactive: true)
                 }
                 .accessibilityLabel(Words.more)
+                // 打字時 ⋯ 右邊多一顆茄紫 ✓（照 iOS 提醒事項），⋯ 用鍵盤的時鐘滑過去讓位
+                if showDone {
+                    DoneButton(action: onDone).transition(.opacity)
+                }
             }
+            .animation(Tok.Motion.keyboard, value: showDone)
             .padding(.leading, Tok.Space.lg)
             .padding(.trailing, Tok.Space.gutter)
             .padding(.top, Tok.Space.sm)
@@ -217,6 +236,39 @@ struct PaperHeader: View {
             .padding(.bottom, Tok.Space.xl)
             .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
         }
+    }
+
+    /// ⋯「改名字」：名字原地變成可以打字（1.1：多行輸入框才不會切到 28 點中文的字頂；Return＝改好收起，貼上的換行換成空格）
+    private var titleField: some View {
+        TextField("", text: titleText, prompt: Text(Words.renameHint).foregroundColor(Tok.Col.textMuted), axis: .vertical)
+            .font(Tok.Font.title)
+            .foregroundColor(Tok.Col.textPrimary)
+            .submitLabel(.done)
+            .focused($titleFocused)
+            .frame(minHeight: Tok.Shape.hitMin)
+            .padding(.horizontal, Tok.Space.xs)
+            .dynamicTypeSize(...Tok.Font.titleMaxScale)
+            .accessibilityLabel(Words.titleField)
+            .onAppear { DispatchQueue.main.async { titleFocused = true } }
+            .onChange(of: titleFocused) { focused in
+                if !focused {
+                    renaming = false
+                }
+            }
+    }
+
+    private var titleText: Binding<String> {
+        Binding(get: { note.title }, set: { value in
+            guard value.contains("\n") else {
+                store.setTitle(note.id, value)
+                return
+            }
+            let typedReturn = value.hasSuffix("\n") && (value as NSString).length == (note.title as NSString).length + 1
+            store.setTitle(note.id, typedReturn ? String(value.dropLast()) : value)
+            if typedReturn {
+                titleFocused = false
+            }
+        })
     }
 
     /// 清單名的小膠囊（2026-11-04 多米定案，大字那種拿掉）：茄紫細框、小方磚＋名字＋▾，寬度照內容、太長就截。沒取名用灰字
