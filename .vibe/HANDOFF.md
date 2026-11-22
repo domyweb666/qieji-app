@@ -1,9 +1,9 @@
-# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項做完了，在子分支等多米看
+# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項做完、已合併回 overnight-20261121-2038，等打包與真機
 
 > 產出時間：2026-11-22 20:10（+08:00）。上一版（2.0.0 (201) 上 TestFlight 那時）全文在 `.vibe/handoff/archive/2026-11-22-0412.md`
 > 專案：茄記 iOS。`E:\茄記\qieji-swift` 是 SwiftUI 版，新程式在 `ios-native/`。Expo 版（1.1／1.1.1）在 `E:\茄記\qieji-1.1`，沒有動
 > 多米沒有 Mac、不太看程式。這台 Windows 沒有 Swift 工具，編譯、測試、模擬器全靠 limrun（以分鐘計費，用完要關）
-> **這次的工作全部在子分支 `overnight-20261122-1813`**（從 `overnight-20261121-2038` 的 775a88c 開出來），沒合併、沒推、沒打包
+> 這次的工作在子分支 `overnight-20261122-1813` 做完（從 `overnight-20261121-2038` 的 775a88c 開出來），**多米 11/22 晚選合併，已快轉合併回 `overnight-20261121-2038`**，這個資料夾現在就在這條上。子分支留著沒刪。沒推、沒打包
 
 ## ✅ 這次完成了什麼
 
@@ -32,6 +32,7 @@
 
 - 熬夜做模式＝開子分支做、做完寫交接（多米 11/22 講明）。不碰父分支、不推、不打包
 - iCloud 同步下一版保持開著（多米 2026-11-22 晚回待確認第 0 條）。不用再問要不要關
+- 28 項合併回 `overnight-20261121-2038`（多米 2026-11-22 晚選「合併」，快轉）。下次打包就從這條出
 - 1.1 的識別碼全部沿用：小工具 kind `PaperWidget`、擴充 `org.domyweb.qieji.ExpoWidgetsTarget`、App Group `group.org.domyweb.qieji`、iCloud 容器 `iCloud.org.domyweb.qieji`（資料夾名「茄記」）、內購 `org.domyweb.qieji.full`、封面圖 `Documents/covers/<code>.jpg`。1.1 存在 AsyncStorage 的設定（買了沒、同步關掉、外觀、字級、提示看過沒、評分計數、1.0 提示）由 `Core/Prefs.swift` 第一次打開時抄一份進 UserDefaults，舊檔不改
 - 行裡 Return＝同一則換行（1.1.1 的行為；舊交接檔寫錯過）
 - 「買了沒」只信 Apple 驗過的交易、退款撤銷就鎖、問不到沿用上次（`FullRule`）。1.0 同步使用者那個提示框要等第一次問過 StoreKit 才決定跳不跳（`Purchases.asked`）
@@ -55,9 +56,9 @@
 
 ## ⏭️ 下一步從哪繼續
 
-1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（最新應該是「overnight 28」那個 commit）
+1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（分支應該是 `overnight-20261121-2038`，最新是「合併後交接更新」那個 commit；本機比 origin 超前、沒推）
 2. 問多米待確認第 1–6 條（第 0 條 iCloud 已定：保持開著）
-3. 多米要合併：在 `E:\茄記\qieji-swift` 跑 `git checkout overnight-20261121-2038; git merge overnight-20261122-1813`（快轉）。不要就 `git branch -D overnight-20261122-1813`
+3. 已合併（多米 11/22 晚，快轉）。子分支 `overnight-20261122-1813` 留著，確定不用再回頭看就可以刪（多米開口才刪）
 4. 多米開口才打包：合併後推分支，再單獨推 tag `tfs-2`（build 號＝run 編號＋200）。iCloud 照開著打包
 5. 裝上手機後照早上摘要「建議先測」那六項問結果；手感問題照「第二次沒修好先量」
 6. 每次改完：開 limrun → `lim xcode build`／`test` → `sh tools-check.sh` → 拉回 `formatted.tgz` 蓋回來 → 刪機器、確認清單是空的
