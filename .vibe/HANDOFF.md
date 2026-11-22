@@ -1,9 +1,9 @@
-# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項已合併、已推；tfs-2 打包被 GitHub Actions 預算擋住，等多米調預算
+# Handoff: 茄記 SwiftUI 版追平 1.1.1 的 28 項已上 TestFlight（2.0.0 (203)），等多米真機
 
 > 產出時間：2026-11-22 20:10（+08:00）。上一版（2.0.0 (201) 上 TestFlight 那時）全文在 `.vibe/handoff/archive/2026-11-22-0412.md`
 > 專案：茄記 iOS。`E:\茄記\qieji-swift` 是 SwiftUI 版，新程式在 `ios-native/`。Expo 版（1.1／1.1.1）在 `E:\茄記\qieji-1.1`，沒有動
 > 多米沒有 Mac、不太看程式。這台 Windows 沒有 Swift 工具，編譯、測試、模擬器全靠 limrun（以分鐘計費，用完要關）
-> 這次的工作在子分支 `overnight-20261122-1813` 做完（從 `overnight-20261121-2038` 的 775a88c 開出來），**多米 11/22 晚選合併，已快轉合併回 `overnight-20261121-2038`**，這個資料夾現在就在這條上。子分支留著沒刪。多米 11/22 晚說「打包成 TestFlight」：分支已推（596fb52）、tag `tfs-2` 已推，但打包 run #2 被 GitHub Actions 預算擋下、沒開始編（見下面「還沒做完」第一條）
+> 這次的工作在子分支 `overnight-20261122-1813` 做完（從 `overnight-20261121-2038` 的 775a88c 開出來），**多米 11/22 晚選合併，已快轉合併回 `overnight-20261121-2038`**，這個資料夾現在就在這條上。子分支留著沒刪。多米 11/22 晚說「打包成 TestFlight」：**2.0.0 (203) 11/23 00:14 上傳成功**（tag `tfs-3`，run #3 `45041357144`，全綠約 14 分半）。中間兩次沒成：tfs-2 第一次被 GitHub Actions 預算擋下（多米把 repo 改成公開解決），重跑那次卡在 iCloud 時機測試（已修，見「關鍵決策」）
 
 ## ✅ 這次完成了什麼
 
@@ -18,7 +18,7 @@
 
 ## 🚧 還沒做完 / 待決定
 
-- **打包卡在 GitHub Actions 預算**：11/22 22:58 推 tag `tfs-2`，run #2（`45035662066`）兩秒就失敗，註記是「The job was not started because an Actions budget is preventing further use」。qieji-app 是私人 repo，macOS 機器的分鐘數照十倍扣，額度用完就被預算擋住。這是帳號的帳單設定，只有多米能改（調高預算，或等額度重置）。改好之後跑 `gh run rerun 45035662066 --repo domyweb666/qieji-app` 就好，不用重推 tag，build 號照樣是 202；跑完確認 TestFlight 收到
+- **2.0.0 (203) 在 TestFlight，手機還沒裝**：Apple 處理完才會出現在 TestFlight。裝了會蓋掉手機上的 1.1，iCloud 同步開著。下一個 tag `tfs-4`（build 號＝run 編號＋200）
 - **`OVERNIGHT.md`「待確認」第 0 條已定，其餘六條還沒問多米**，重點：
   - 第 0 條已定（多米 11/22 晚）：iCloud 同步保持開著，下一次打包照樣接（買了＋開著就寫真的 iCloud，「檔案 › iCloud 雲碟 › 茄記」，跟 1.1 同一個資料夾）。第一次裝上手機前，還是建議先備份 iCloud 雲碟的「茄記」資料夾
   - 第 1 條：`App/Purchases.swift`、`Core/FullRule.swift` 送審前要給會寫 iOS 的人看
@@ -27,13 +27,15 @@
 - **購買沒真的買過**：StoreKit 測試商店的整合測試在 limrun 卡住（`product.purchase()` 等不到畫面），改成要 `QIEJI_STOREKIT_TESTS=1` 才跑。送審前要沙盒帳號真機買一次、恢復一次
 - **模擬器驗不到、要真機的**：所有手感（滑動、拖曳、甩、放手速度、抖動）、Face ID 系統框、桌面小工具長相與「更新後那塊還在不在」、真的 iCloud、VoiceOver、評分系統框、存檔失敗與讀不出來的提示框、1.0 同步使用者提示、搜尋點過去那行亮一下
 - **跟 1.1 還不一樣、這晚沒排進的**：資料夾框液態玻璃、目錄「＋」「完成」玻璃鈕、資料夾後面霧的濃淡、抖動中撥頁用系統分頁、「新的一張」不等目錄收完就升輸入框、目錄升起途中就收觸控、搬行模式搜出來的磚不能長按、搜尋點一行在模擬器停在畫面中間附近（1.1 是三分之一高）
-- **TestFlight 上的 2.0.0 (201) 是上一晚的版本**，不含這 28 項。12/1 打 1.1.1 時要看收不收得進去（2.0.0 已經傳過）
+- TestFlight 上最新是 2.0.0 (203)，含這 28 項（201 是上一晚的版本）。12/1 打 1.1.1 時要看收不收得進去（2.0.0 已經傳過）
 
 ## 📌 關鍵決策（這次定下來的，下次別再爭論）
 
 - 熬夜做模式＝開子分支做、做完寫交接（多米 11/22 講明）。不碰父分支、不推、不打包
 - iCloud 同步下一版保持開著（多米 2026-11-22 晚回待確認第 0 條）。不用再問要不要關
 - 28 項合併回 `overnight-20261121-2038`（多米 2026-11-22 晚選「合併」，快轉）。下次打包就從這條出
+- repo `domyweb666/qieji-app` 多米 11/22 晚自己改成公開（私人 repo 的 macOS 機器額度用完、被預算擋）。公開前後掃過 GitHub 上整段歷史：沒有私鑰、密碼、token；`.vibe/放secret照做指南.md` 只有團隊代號和金鑰 ID。之後 Actions 的打包紀錄任何人都看得到
+- `QiejiTests/CloudLinkTests.swift` 的等待改成 async（`await waitUntil`）：GitHub 的 Xcode 26.6／iOS 26.5 上，XCTest 的 `wait(for:)` 等的時候，CloudLink 回主執行緒的事一直沒跑，兩個測試逾時；limrun 的 26.4、27.1 都過。以後要等主執行緒的測試都用 async 寫法
 - 1.1 的識別碼全部沿用：小工具 kind `PaperWidget`、擴充 `org.domyweb.qieji.ExpoWidgetsTarget`、App Group `group.org.domyweb.qieji`、iCloud 容器 `iCloud.org.domyweb.qieji`（資料夾名「茄記」）、內購 `org.domyweb.qieji.full`、封面圖 `Documents/covers/<code>.jpg`。1.1 存在 AsyncStorage 的設定（買了沒、同步關掉、外觀、字級、提示看過沒、評分計數、1.0 提示）由 `Core/Prefs.swift` 第一次打開時抄一份進 UserDefaults，舊檔不改
 - 行裡 Return＝同一則換行（1.1.1 的行為；舊交接檔寫錯過）
 - 「買了沒」只信 Apple 驗過的交易、退款撤銷就鎖、問不到沿用上次（`FullRule`）。1.0 同步使用者那個提示框要等第一次問過 StoreKit 才決定跳不跳（`Purchases.asked`）
@@ -57,10 +59,10 @@
 
 ## ⏭️ 下一步從哪繼續
 
-1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（分支應該是 `overnight-20261121-2038`，最新是「合併後交接更新」那個 commit；本機比 origin 超前、沒推）
+1. 讀這份和 `OVERNIGHT.md` 的早上摘要。`git -C E:\茄記\qieji-swift log --oneline -5`、`git status` 確認沒有別的 session 動過（分支應該是 `overnight-20261121-2038`，最新是「2.0.0 (203) 上 TestFlight」的交接更新 commit；打包用的 fecf940 已推，這個交接 commit 只在本機）
 2. 問多米待確認第 1–6 條（第 0 條 iCloud 已定：保持開著）
 3. 已合併（多米 11/22 晚，快轉）。子分支 `overnight-20261122-1813` 留著，確定不用再回頭看就可以刪（多米開口才刪）
-4. 打包：分支和 tag `tfs-2` 都推了（多米 11/22 晚開口）。等多米處理好 GitHub Actions 預算，跑 `gh run rerun 45035662066 --repo domyweb666/qieji-app`（build 202，iCloud 照開著），跑完確認 TestFlight 收到、記進這份
+4. 2.0.0 (203) 已上 TestFlight（tfs-3）。下次多米開口才打包：推分支，再單獨推 `tfs-4`
 5. 裝上手機後照早上摘要「建議先測」那六項問結果；手感問題照「第二次沒修好先量」
 6. 每次改完：開 limrun → `lim xcode build`／`test` → `sh tools-check.sh` → 拉回 `formatted.tgz` 蓋回來 → 刪機器、確認清單是空的
 
