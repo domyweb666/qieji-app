@@ -15,8 +15,9 @@ struct PaperList: View {
     let note: Note
     @Binding var editingID: String?
     @Binding var focus: FocusAsk?
-    @Binding var menuID: String?
     let colors: Tok.NoteColors
+    /// 按住一行：id 和那一行在螢幕上的底邊
+    var onMenu: (String, CGFloat) -> Void = { _, _ in }
     @Environment(\.accessibilityReduceMotion) private var calm
 
     static let space = "paperList"
@@ -60,8 +61,8 @@ struct PaperList: View {
             actions: actions(for: item.id),
             voice: voiceActions(item, index: index)
         )
-        // 拖著的那一行另外畫一份浮在上面（floating）；清單裡這份先藏起來、位子留著
-        .opacity(held ? 0 : 1)
+        // 拖著的那一行另外畫一份浮在上面（floating）；清單裡這份先藏起來、位子留著。從選單刪的行先淡出
+        .opacity(held || touch.fading.contains(item.id) ? 0 : 1)
         .offset(y: held ? 0 : touch.giveWay(index: index))
         .animation(held || calm ? nil : Tok.Motion.dragShift, value: touch.dragTo)
         .background(GeometryReader { geo in
@@ -114,7 +115,7 @@ struct PaperList: View {
             focus = FocusAsk(token: Tick.next(), point: point)
         }
         touch.onTapBlank = { editingID = nil }
-        touch.onLongPress = { menuID = $0 }
+        touch.onLongPress = { onMenu($0, $1) }
     }
 
     private func actions(for id: String) -> LineActions {

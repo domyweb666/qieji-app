@@ -93,6 +93,7 @@ enum Tok {
         static let folderGlass = Raw.cream50.color(0.92, 0.9)
         static let folderGlassEdge = Raw.white.color(0.7, 0.12)
         static let menuScrim = Raw.black.color(0.28, 0.4)
+        static let menuVeil = Raw.black.color(0.06, 0.18) // 長按選單後面：霧掉之後只壓一點點黑（1.1 ALPHA.menuVeil）
         static let shadow = Tok.solid(Raw.shadowInk)
     }
 
@@ -182,6 +183,7 @@ enum Tok {
         static let barIcon = SwiftUI.Font.system(size: 20) // 右上 ⋯ 的圖示（1.1 Sym size 20）
         static let barCheck = SwiftUI.Font.system(size: 20, weight: .semibold) // 右上 ✓、輸入框的 ✓
         static let chevron = SwiftUI.Font.system(size: 12, weight: .semibold) // 清單名膠囊裡的 ▾
+        static let menuIcon = SwiftUI.Font.system(size: 18) // 選單卡每一項右邊的圖示
         static let glyphRatio: CGFloat = 0.44 // 磚上的字＝邊長 × 這個比例
         static func glyph(_ side: CGFloat) -> SwiftUI.Font {
             .system(size: side * glyphRatio, weight: .semibold)
@@ -222,6 +224,7 @@ enum Tok {
         static let hitMin: CGFloat = 44
         static let rowMin: CGFloat = 52
         static let menuRow: CGFloat = 48
+        static let menuW: CGFloat = 260 // 長按一行的選單卡寬
         static let fab: CGFloat = 52 // barH：右下 ＋ 的直徑
         static let gripDot: CGFloat = 3
         static let gripDotGap: CGFloat = 4
@@ -273,6 +276,11 @@ enum Tok {
         static let swipeLabel = Animation.spring(response: 0.25, dampingFraction: 0.6)
         static let rowShift = Animation.easeInOut(duration: 0.18)
         static let fade = Animation.easeInOut(duration: 0.15)
+        // 選單卡（1.1 menuPop 170／120、menuBackdrop 160／140）：從靠錨點那一角放大彈出、縮回去
+        static let menuPopIn = Animation.easeOut(duration: 0.17)
+        static let menuPopOut = Animation.easeIn(duration: 0.12)
+        static let menuPopFrom: CGFloat = 0.01
+        static let menuBackdrop = Animation.easeInOut(duration: 0.15)
         static let sheet = Animation.spring(response: 0.34, dampingFraction: 1)
         static let keyboard = Animation.timingCurve(0.17, 0.59, 0.4, 0.77, duration: 0.25)
         static let freshGlowFade = Animation.easeOut(duration: 0.6)
@@ -283,6 +291,7 @@ enum Tok {
         static let pressDim: Double = 0.6
         static let reducedDimFrom: Double = 0.4
         static let deleteSlideSeconds: Double = 0.22
+        static let fadeSeconds: Double = 0.15
         static let composerFocusDelay: Double = 0.3
         // 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
         static let tileShift = Animation.interpolatingSpring(mass: 1, stiffness: 484, damping: 37)

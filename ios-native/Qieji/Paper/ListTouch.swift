@@ -15,6 +15,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     @Published var dragTo = -1
     @Published var dragHeight: CGFloat = 0
     @Published var floatY: CGFloat = 0 // 拖著的那一行浮在清單上面的位置（從清單頂算）
+    @Published var fading: Set<String> = [] // 從選單刪的行：先淡出，淡完才真的拿掉
 
     /// 清單交進來的
     var order: [String] = []
@@ -34,7 +35,8 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     var onTap: (String, CGPoint) -> Void = { _, _ in }
     var onTapBlank: () -> Void = {}
     var onMove: (String, Int) -> Void = { _, _ in }
-    var onLongPress: (String) -> Void = { _ in }
+    /// 按住一行：那一行的 id 和它在螢幕上的底邊（視窗座標，選單卡接在下面）
+    var onLongPress: (String, CGFloat) -> Void = { _, _ in }
 
     private weak var scroll: UIScrollView?
     private let swipePan = UIPanGestureRecognizer()
@@ -340,9 +342,10 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func onHeld(_ gesture: UILongPressGestureRecognizer) {
-        guard gesture.state == .began, let id = row(at: touchStart) else { return }
+        guard gesture.state == .began, let scroll, let id = row(at: touchStart), let frame = frames[id] else { return }
         Haptic.menu()
-        onLongPress(id)
+        // 位置表是捲動內容的座標；換成視窗座標（捲動區自己的座標就是內容座標）
+        onLongPress(id, scroll.convert(CGPoint(x: 0, y: frame.maxY), to: nil).y)
     }
 }
 

@@ -13,7 +13,7 @@ struct PaperView: View {
     @StateObject private var keyboard = KeyboardWatch()
     @State private var editingID: String?
     @State private var focus: FocusAsk?
-    @State private var menuID: String?
+    @State private var rowMenu: RowMenuAsk?
     @State private var composing = false
     @State private var draft = ""
     @State private var renaming = false
@@ -36,7 +36,8 @@ struct PaperView: View {
             )
             PaperList(
                 store: store, touch: touch, note: note,
-                editingID: $editingID, focus: $focus, menuID: $menuID, colors: colors
+                editingID: $editingID, focus: $focus, colors: colors,
+                onMenu: { openRowMenu($0, bottom: $1) }
             )
             // 釘滿 5 張再釘：一步問要換掉哪一張（1.1 pin.ts），換完提示條可以復原
             .confirmationDialog(Words.pinFullTitle(Seats.pinMax), isPresented: pinAsking, titleVisibility: .visible) {
@@ -51,7 +52,11 @@ struct PaperView: View {
         .background(colors.paper.ignoresSafeArea())
         .overlay(alignment: .bottomTrailing) { addButton }
         .overlay(alignment: .bottom) { composer }
-        .confirmationDialog("", isPresented: menuShown, titleVisibility: .hidden) { lineMenu }
+        .overlay {
+            if let ask = rowMenu {
+                RowMenu(items: rowItems(ask.id), rowBottom: ask.bottom, close: closeRowMenu)
+            }
+        }
         .onAppear { openIfAsked() }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
         .onChange(of: composerFocused) { focused in
@@ -97,7 +102,7 @@ struct PaperView: View {
     }
 
     @ViewBuilder private var addButton: some View {
-        if !composing, editingID == nil, touch.dragID == nil {
+        if !composing, editingID == nil, touch.dragID == nil, rowMenu == nil {
             Button {
                 Haptic.add()
                 composing = true
@@ -163,25 +168,50 @@ struct PaperView: View {
 
     // MARK: 按住一行的選單
 
-    private var menuShown: Binding<Bool> {
-        Binding(get: { menuID != nil }, set: {
-            if !$0 {
-                menuID = nil
-            }
-        })
+    /// 按住一行：先收鍵盤，選單卡接在那一行下面（1.1 openRowMenu）
+    private func openRowMenu(_ id: String, bottom: CGFloat) {
+        editingID = nil
+        KeyboardWatch.dismiss()
+        withAnimation(Tok.Motion.menuPopIn) { rowMenu = RowMenuAsk(id: id, bottom: bottom) }
     }
 
-    @ViewBuilder private var lineMenu: some View {
-        if let id = menuID, let item = note.items.first(where: { $0.id == id }) {
-            Button(item.done ? Words.unstrike : Words.strike) { store.toggle(id) }
-            Button(Words.copy) { UIPasteboard.general.string = item.text }
-            if !Labels.trim(item.text).isEmpty {
-                Button(Words.moveTo) { onMoveLine(id) }
-            }
-            Button(Words.deleteLine, role: .destructive) { store.binLine(id) }
-            Button(Words.cancel, role: .cancel) {}
+    private func closeRowMenu() {
+        withAnimation(Tok.Motion.menuPopOut) { rowMenu = nil }
+    }
+
+    /// 項目照 1.1 rowActs：劃掉／恢復、搬到…、複製、刪除；空行只剩刪除
+    private func rowItems(_ id: String) -> [MenuItem] {
+        guard let item = note.items.first(where: { $0.id == id }) else { return [] }
+        let remove = MenuItem(label: Words.delete, icon: "trash", destructive: true) { fadeThenBin(id) }
+        guard !Labels.trim(item.text).isEmpty else { return [remove] }
+        return [
+            MenuItem(label: item.done ? Words.unstrike : Words.strike, icon: item.done ? "arrow.uturn.backward" : "strikethrough") {
+                store.toggle(id)
+                Haptic.tick()
+            },
+            MenuItem(label: Words.moveTo, icon: "arrow.turn.up.right") { onMoveLine(id) },
+            MenuItem(label: Words.copy, icon: "doc.on.doc") {
+                UIPasteboard.general.string = item.text
+                store.toast = Store.Toast(text: Words.copied)
+            },
+            remove,
+        ]
+    }
+
+    /// 從選單刪一行：先淡出（0.15 秒），淡完才拿掉
+    private func fadeThenBin(_ id: String) {
+        withAnimation(Tok.Motion.fade) { _ = touch.fading.insert(id) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
+            store.binLine(id)
+            touch.fading.remove(id)
         }
     }
+}
+
+/// 按住了哪一行、那一行在螢幕上的底邊
+struct RowMenuAsk: Equatable {
+    let id: String
+    let bottom: CGFloat
 }
 
 /// 紙最上面（照 1.1.1）：左邊清單名的小膠囊（點了切換清單）、右邊 ⋯；
