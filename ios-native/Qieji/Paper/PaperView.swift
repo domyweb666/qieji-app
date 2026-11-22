@@ -14,6 +14,9 @@ struct PaperView: View {
     @StateObject private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
     @ObservedObject private var covers = Covers.shared
+    @ObservedObject private var locks = Locks.shared
+    @State private var lockAsk = false
+    @State private var cantLock = false
     @State private var pickingCover = false
     @State private var coverPick: PhotosPickerItem?
     @Environment(\.scenePhase) private var phase
@@ -32,7 +35,7 @@ struct PaperView: View {
 
     var body: some View {
         let colors = Tok.note(note.color)
-        let photo = covers.image(note)
+        let photo = covers.image(note, evenLocked: !lockedNow)
         let float = photo != nil && !note.isText
         VStack(spacing: Tok.Space.zero) {
             if let photo, note.isText {
@@ -46,7 +49,9 @@ struct PaperView: View {
                 header(colors, cover: float ? .floating(touch.spy) : .none)
             }
             Group {
-                if note.isText {
+                if lockedNow {
+                    LockedBody { Task { await locks.unlock(note.id, reason: Words.unlockReason) } }
+                } else if note.isText {
                     NotePad(store: store, note: note, focused: $padFocused, scale: size.scale)
                 } else {
                     PaperList(
@@ -101,6 +106,21 @@ struct PaperView: View {
         .onAppear {
             openIfAsked()
             updateFab()
+            // 上鎖的紙一打開就問一次 Face ID；取消的話停在鎖住的畫面，上面有「打開」可以再試
+            if lockedNow {
+                Task { await locks.unlock(note.id, reason: Words.unlockReason) }
+            }
+        }
+        .alert(Words.lockAskTitle, isPresented: $lockAsk) {
+            Button(Words.cancel, role: .cancel) {}
+            Button(Words.lockOn) { Task { await lockNow() } }
+        } message: {
+            Text(Words.lockAskBody)
+        }
+        .alert(Words.cantLockTitle, isPresented: $cantLock) {
+            Button(Words.gotIt, role: .cancel) {}
+        } message: {
+            Text(Words.cantLockBody)
         }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
         .onChange(of: store.plusAsk) { _ in addLine() }
@@ -138,8 +158,45 @@ struct PaperView: View {
                 closeComposer(stay: true)
                 pickingCover = true
             },
+            onLock: toggleLock,
+            lockedNow: lockedNow,
             cover: cover
         )
+    }
+
+    /// 上鎖、還沒驗過（這次打開 app 驗過就不算）
+    private var lockedNow: Bool {
+        note.locked && !locks.isOpen(note.id)
+    }
+
+    /// ⋯「上鎖／解除上鎖」：解除要先驗、不看買了沒；上鎖要完整版、手機要能驗，先問一次
+    private func toggleLock() {
+        closeComposer(stay: true)
+        editingID = nil
+        let id = note.id
+        if note.locked {
+            Task {
+                if await locks.unlock(id, reason: Words.lockOff) {
+                    store.setLocked(id, false)
+                    store.toast = Store.Toast(text: Words.unlockedOff)
+                }
+            }
+            return
+        }
+        guard store.isFull else { return }
+        if locks.canLock() {
+            lockAsk = true
+        } else {
+            cantLock = true
+        }
+    }
+
+    /// 確定上鎖：先驗一次（確定之後打得開），再鎖
+    private func lockNow() async {
+        let id = note.id
+        guard await locks.unlock(id, reason: Words.confirmReason) else { return }
+        store.setLocked(id, true)
+        store.toast = Store.Toast(text: Words.lockedToast)
     }
 
     /// 選好一張照片：縮圖存起來、放上這張紙（舊的圖檔刪掉）
@@ -179,7 +236,7 @@ struct PaperView: View {
 
     /// ＋ 要不要畫：鍵盤升起、輸入框開著、長按選單開著、記事本都不畫
     private var fabWanted: Bool {
-        !keyboard.up && !composing && rowMenu == nil && !note.isText
+        !keyboard.up && !composing && rowMenu == nil && !note.isText && !lockedNow
     }
 
     private func updateFab() {
@@ -200,7 +257,7 @@ struct PaperView: View {
     }
 
     private func openComposer() {
-        guard !composing, !note.isText else { return }
+        guard !composing, !note.isText, !lockedNow else { return }
         editingID = nil
         draft = ""
         store.draft = ""

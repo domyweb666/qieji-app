@@ -28,6 +28,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
+        # 個別上鎖（完整版）：打開上鎖的清單要過 Face ID（1.1 app.json 同一句）
+        NSFaceIDUsageDescription: 用 Face ID 打開你上鎖的清單
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UILaunchScreen:

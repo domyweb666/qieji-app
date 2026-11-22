@@ -15,6 +15,9 @@ struct PaperHeader: View {
     let onRename: () -> Void
     let onPinFull: ([Note]) -> Void
     var onCover: () -> Void = {}
+    var onLock: () -> Void = {}
+    /// 上鎖、還沒驗過：⋯ 裡拿不到內容的項目都不列
+    var lockedNow = false
     /// 封面圖：沒有／清單的矮橫幅（標題列的底與小膠囊隨捲動淡進來，時間列在捲動內容裡）／記事本的固定大圖（標題列疊在圖上）
     var cover: CoverMode = .none
     @FocusState private var titleFocused: Bool
@@ -38,7 +41,10 @@ struct PaperHeader: View {
                 }
                 Spacer(minLength: Tok.Space.sm)
                 Menu {
-                    PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull, onCover: onCover)
+                    PaperMenu(
+                        store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull,
+                        onCover: onCover, onLock: onLock, lockedNow: lockedNow
+                    )
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(Tok.Font.barIcon)
@@ -155,18 +161,25 @@ struct PaperMenu: View {
     let onRename: () -> Void
     let onPinFull: ([Note]) -> Void
     var onCover: () -> Void = {}
+    var onLock: () -> Void = {}
+    var lockedNow = false
 
     var body: some View {
         colors
         Button(action: onRename) { Label(Words.rename, systemImage: "pencil") }
-        // 完整版功能沒買就不列（2026-11-14 多米：列出來點了才說要買，看了煩）；已經放好的封面照樣拿得掉
-        if store.isFull {
+        // 完整版功能沒買就不列（2026-11-14 多米：列出來點了才說要買，看了煩）；已經放好的封面、上了的鎖照樣拿得掉
+        if store.isFull, !lockedNow {
             Button(action: onCover) {
                 Label(note.cover == nil ? Words.coverPut : Words.coverSwap, systemImage: "photo")
             }
         }
-        if note.cover != nil {
+        if note.cover != nil, !lockedNow {
             Button { store.clearCover(note.id) } label: { Label(Words.coverRemove, systemImage: "rectangle.slash") }
+        }
+        if note.locked || store.isFull {
+            Button(action: onLock) {
+                Label(note.locked ? Words.lockOff : Words.lockOn, systemImage: note.locked ? "lock.open" : "lock")
+            }
         }
         Button {
             if let pins = store.pinOrAsk(note.id) {
@@ -175,12 +188,14 @@ struct PaperMenu: View {
         } label: {
             Label(note.pinned ? Words.unpin : Words.pin, systemImage: note.pinned ? "pin.slash" : "pin")
         }
-        ShareLink(item: shareText) { Label(Words.share, systemImage: "square.and.arrow.up") }
-        Button {
-            UIPasteboard.general.string = shareText
-            store.toast = Store.Toast(text: Words.copied)
-        } label: { Label(Words.copyAll, systemImage: "doc.on.doc") }
-        if listGroup {
+        if !lockedNow {
+            ShareLink(item: shareText) { Label(Words.share, systemImage: "square.and.arrow.up") }
+            Button {
+                UIPasteboard.general.string = shareText
+                store.toast = Store.Toast(text: Words.copied)
+            } label: { Label(Words.copyAll, systemImage: "doc.on.doc") }
+        }
+        if listGroup, !lockedNow {
             Section {
                 if note.items.count >= 2 {
                     Button { store.reverseLines(note.id) } label: { Label(Words.reverse, systemImage: "arrow.up.arrow.down") }

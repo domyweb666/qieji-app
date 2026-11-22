@@ -187,39 +187,3 @@ struct SettingsView: View {
         return "\(short) (\(build))"
     }
 }
-
-/// 上鎖的紙：Face ID 解鎖還沒搬到這一版，內容先不顯示（名字看得到，可以換到別張）
-struct LockedPaper: View {
-    let note: Note
-    let onTitle: () -> Void
-
-    var body: some View {
-        VStack(spacing: Tok.Space.lg) {
-            Button(action: onTitle) {
-                HStack(spacing: Tok.Space.sm) {
-                    NoteTile(note: note, side: Tok.Shape.titleIcon)
-                    Text(Labels.label(note))
-                        .font(Tok.Font.title)
-                        .foregroundColor(Tok.Col.textPrimary)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(Tok.Font.footnote.weight(.semibold))
-                        .foregroundColor(Tok.Col.textSecondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer()
-            Image(systemName: "lock.fill")
-                .font(Tok.Font.title)
-                .foregroundColor(Tok.Col.textSecondary)
-            Text(Words.lockedNote)
-                .font(Tok.Font.callout)
-                .foregroundColor(Tok.Col.textMuted)
-                .multilineTextAlignment(.center)
-            Spacer()
-            Spacer()
-        }
-        .padding(Tok.Space.lg)
-        .background(Tok.note(note.color).paper.ignoresSafeArea())
-    }
-}

@@ -70,16 +70,12 @@ struct RootView: View {
             // 換紙時底下墊的是上一張的顏色（1.1 2026-11-04）：新的那張淡入時不會先露出奶油底、看起來閃一下
             Tok.note(underKey).paper.ignoresSafeArea()
             if let note = store.current {
-                if note.locked {
-                    LockedPaper(note: note) { route = .switcher }
-                } else {
-                    PaperView(
-                        store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 },
-                        onMoveLine: { dir.open(move: $0) }
-                    )
-                    .id(note.id)
-                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
-                }
+                PaperView(
+                    store: store, note: note, onTitle: { route = .switcher }, onRoute: { route = $0 },
+                    onMoveLine: { dir.open(move: $0) }
+                )
+                .id(note.id)
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
         }
         // 換一張紙：只有新的那張淡入（1.1 S2）。第一次打開 app 那張不淡，交給啟動畫面
@@ -99,7 +95,7 @@ struct RootView: View {
         }
         // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
         .overlay(alignment: .bottomTrailing) {
-            PlusButton(shown: store.fabShown && store.current?.locked != true) { store.plusAsk += 1 }
+            PlusButton(shown: store.fabShown) { store.plusAsk += 1 }
         }
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
         .overlay { DirHost(store: store, model: dir) { route = $0 } }
@@ -123,6 +119,7 @@ struct RootView: View {
                 }
             } else {
                 store.flush()
+                Locks.shared.forgetAll() // 上鎖的紙：離開前景就忘掉這次驗過的，回來要再驗
             }
         }
         // 完整版買了沒：只聽 StoreKit（假資料模式固定當買了，見 makeStore）

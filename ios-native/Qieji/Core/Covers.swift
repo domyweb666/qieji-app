@@ -46,8 +46,8 @@ final class Covers: ObservableObject {
     }
 
     /// 畫得出來的封面圖；沒有封面、檔案不在這支手機上（還沒從 iCloud 下來）、上鎖的紙都回 nil，畫面就照沒有封面畫
-    func image(_ note: Note) -> UIImage? {
-        guard !note.locked, let code = note.cover, has(code) else { return nil }
+    func image(_ note: Note, evenLocked: Bool = false) -> UIImage? {
+        guard !note.locked || evenLocked, let code = note.cover, has(code) else { return nil }
         if let hit = cache.object(forKey: code as NSString) {
             return hit
         }
@@ -109,6 +109,16 @@ final class Covers: ObservableObject {
 }
 
 extension Store {
+    /// 上鎖／解除上鎖（只算這支手機的事，不上傳）。上鎖時當成沒傳過：解除上鎖之後會重新傳上去
+    func setLocked(_ id: String, _ on: Bool) {
+        editNote(id) { note in
+            note.locked = on
+            if on {
+                note.syncedHash = nil
+            }
+        }
+    }
+
     /// 放上／換掉封面圖（舊的那張圖檔刪掉）
     func setCover(_ id: String, _ code: String) {
         let old = book.note(id)?.cover
