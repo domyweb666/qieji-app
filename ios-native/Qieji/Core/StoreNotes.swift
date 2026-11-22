@@ -20,7 +20,8 @@ extension Store {
         )
         adopt(found.book, last: found.last)
         if found.unreadable {
-            toast = Toast(text: Words.unreadable)
+            // 原本那份已經另存（不會被蓋掉）：先講沒有損失，再講紙會從哪裡回來
+            notice = Notice(title: Words.unreadableTitle, body: Words.unreadableBody)
         }
         purgeTrash()
         flush()

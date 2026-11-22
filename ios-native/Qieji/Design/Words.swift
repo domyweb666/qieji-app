@@ -121,6 +121,13 @@ enum Words {
     static let emptyPaperTip = "點右下角的 ＋ 記一行"
     static let lockedNote = "這張上鎖了。這一版還不能解鎖，內容先不顯示。"
     static let saveFailed = "存檔沒成功，等一下會再試"
+    static let saveFailTitle = "字還在，但沒存進手機"
+    static let saveFailBody = "空間可能不夠。先別關 app，清出空間後再改一下就會重存"
+    static let unreadableTitle = "手機裡原本的紙讀不出來"
+    static let unreadableBody = "原本那份已經另存起來，沒有被蓋掉。開著 iCloud 的話，紙會從 iCloud 回來"
+    static let fullNoticeTitle = "iCloud 同步改成完整版功能"
+    static let fullNoticeBody = "手機上的紙都還在，iCloud 雲碟裡的也都還在。買了完整版之後會接著同步。"
+    static let seeFull = "看看完整版"
     static let unreadable = "原本的資料讀不出來，已經另外留一份，沒有刪掉"
     static let moved = "從舊版搬過來了"
     // 目錄面板

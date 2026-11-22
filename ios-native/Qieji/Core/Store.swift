@@ -6,6 +6,14 @@ final class Store: ObservableObject {
     @Published private(set) var book: Notebook
     @Published private(set) var currentID: String?
     @Published var toast: Toast?
+    /// 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像提示條會自己消失（1.1 06-首次體驗 ❓7）
+    @Published var notice: Notice?
+    private var saveFailed = false
+
+    struct Notice: Equatable {
+        let title: String
+        let body: String
+    }
     /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
     @Published var composeAsk = 0
     private var composePending = false
@@ -137,10 +145,16 @@ final class Store: ObservableObject {
     }
 
     func toggle(_ itemID: String) {
+        var struck = false
         editCurrent { note in
             guard let idx = note.items.firstIndex(where: { $0.id == itemID }),
                   !note.items[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             note.items[idx].done.toggle()
+            struck = note.items[idx].done
+        }
+        // 評分提示只數「劃掉」，恢復不算（1.1 片 C2）
+        if struck, disk != nil {
+            ReviewAsk.struck()
         }
     }
 
@@ -214,12 +228,16 @@ final class Store: ObservableObject {
         Sync.stampMods(&book, now: Clock.now())
         _ = Seats.fixOrder(&book)
         if disk.write(book) {
+            saveFailed = false
             pushWidget() // 存檔成功才推給桌面小工具（1.1 多米 2026-10-31）
             if CloudLink.shared.store === self {
                 CloudLink.shared.pushSoon() // 存檔成功才把改過的紙傳上 iCloud
             }
-        } else {
-            toast = Toast(text: Words.saveFailed)
+        } else if !saveFailed {
+            // 存不進去時字還在記憶體裡，下次有改動或進背景會再存一次；但這時把 app 關掉就會不見，要講清楚。
+            // 打字中每 0.25 秒會再存一次：失敗只報一次，成功存回去之後再失敗才再報
+            saveFailed = true
+            notice = Notice(title: Words.saveFailTitle, body: Words.saveFailBody)
         }
     }
 
@@ -231,8 +249,9 @@ final class Store: ObservableObject {
     /// 讀完資料後呼叫一次
     func adopt(_ book: Notebook, last: String?) {
         self.book = book
+        // 上次那張；不在了就是最近改過的那張（1.1 根畫面同一條規則）
         currentID = last.flatMap { id in book.note(id).flatMap { $0.deleted ? nil : id } }
-            ?? book.notes.first { !$0.deleted }?.id
+            ?? book.notes.filter { !$0.deleted }.max { $0.updated < $1.updated }?.id
         loaded = true
     }
 }

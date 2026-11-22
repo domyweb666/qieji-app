@@ -26,6 +26,8 @@ final class Purchases: ObservableObject {
     @Published private(set) var price: String? // App Store 傳回的在地價格，不寫死
     @Published private(set) var priceFailed = false
     @Published private(set) var busy = false // 正在買或正在恢復：那兩顆先不能再點
+    /// 打開之後第一次問過 StoreKit 了（問不到也算問過）：1.0 同步過的人那個提示框要等這個，才知道是不是「確定沒買」（1.1 iap.ts whenAsked）
+    @Published private(set) var asked = false
 
     private let prefs: Prefs
     private var started = false
@@ -54,6 +56,7 @@ final class Purchases: ObservableObject {
                 }
             }
             await refresh()
+            asked = true
         }
     }
 

@@ -39,6 +39,7 @@ struct RootView: View {
     @State private var path: [Page] = [] // 推進來的頁
     @State private var switching = false // 切換清單開著
     @State private var newsCard: News.Entry? // 更新後第一次打開跳一次的新功能卡片
+    @State private var fullNotice = false // 1.0 開過同步的人：iCloud 同步改成完整版功能
     @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
     @State private var shownID: String?
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
@@ -115,8 +116,34 @@ struct RootView: View {
                 store.fullKnown = true // 知道買了沒才推小工具
                 cloud.store = store
                 cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
-                newsCard = News.take(firstRun: Prefs.shared.firstRun) // 新功能卡片：更新後第一次打開跳一次
+                ReviewAsk.opened() // 評分提示要數「在幾個不同的日子打開過」
             }
+        }
+        .onChange(of: shop.asked) { asked in
+            // 問過 Apple 買了沒才決定：1.0 同步過、確定沒買的人跳「iCloud 同步改成完整版功能」。
+            // 新功能卡片（更新後第一次打開跳一次）照樣記成看過，但上面那個這次有跳就不跳，一次只跳一個（1.1 _layout）
+            guard asked, !RootView.offline else { return }
+            let entry = News.take(firstRun: Prefs.shared.firstRun)
+            if FullNotice.check(book: store.book, full: shop.full) {
+                fullNotice = true
+            } else {
+                newsCard = entry
+            }
+        }
+        .alert(Words.fullNoticeTitle, isPresented: $fullNotice) {
+            Button(Words.gotIt, role: .cancel) {}
+            Button(Words.seeFull) { sheet = .full }
+        } message: {
+            Text(Words.fullNoticeBody)
+        }
+        .alert(store.notice?.title ?? "", isPresented: Binding(get: { store.notice != nil }, set: {
+            if !$0 {
+                store.notice = nil
+            }
+        })) {
+            Button(Words.gotIt) { store.notice = nil }
+        } message: {
+            Text(store.notice?.body ?? "")
         }
         .alert(newsCard.map { Words.newsTitle($0.version) } ?? "", isPresented: Binding(get: { newsCard != nil }, set: {
             if !$0 {
@@ -132,6 +159,7 @@ struct RootView: View {
                 store.purgeTrash()
                 if !RootView.offline {
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
+                    ReviewAsk.opened()
                     cloud.pull() // 回到前景去 iCloud 拉一次
                 }
             } else {
