@@ -17,8 +17,7 @@ struct PaperView: View {
     @State private var composing = false
     @State private var draft = ""
     @State private var renaming = false
-    @State private var glyphing = false
-    @State private var newGlyph = ""
+    @State private var pinChoices: [Note] = [] // 釘滿時問要換掉哪一張（有值＝問著）
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -33,32 +32,26 @@ struct PaperView: View {
                     composing = false
                     renaming = true
                 },
-                onGlyph: {
-                    newGlyph = note.glyph ?? ""
-                    glyphing = true
-                }
+                onPinFull: { pinChoices = $0 }
             )
             PaperList(
                 store: store, touch: touch, note: note,
                 editingID: $editingID, focus: $focus, menuID: $menuID, colors: colors
             )
+            // 釘滿 5 張再釘：一步問要換掉哪一張（1.1 pin.ts），換完提示條可以復原
+            .confirmationDialog(Words.pinFullTitle(Seats.pinMax), isPresented: pinAsking, titleVisibility: .visible) {
+                ForEach(pinChoices) { other in
+                    Button(Labels.pickLabel(other)) { store.swapPin(note.id, out: other.id) }
+                }
+                Button(Words.cancel, role: .cancel) {}
+            } message: {
+                Text(Words.pinSwapAsk)
+            }
         }
         .background(colors.paper.ignoresSafeArea())
         .overlay(alignment: .bottomTrailing) { addButton }
         .overlay(alignment: .bottom) { composer }
         .confirmationDialog("", isPresented: menuShown, titleVisibility: .hidden) { lineMenu }
-        .alert(Words.glyphEdit, isPresented: $glyphing) {
-            TextField(Words.glyphHint, text: $newGlyph)
-            Button(Words.done) {
-                if let problem = Labels.glyphProblem(newGlyph) {
-                    Haptic.reject()
-                    store.toast = Store.Toast(text: problem)
-                } else {
-                    store.setGlyph(note.id, newGlyph)
-                }
-            }
-            Button(Words.cancel, role: .cancel) {}
-        }
         .onAppear { openIfAsked() }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
         .onChange(of: composerFocused) { focused in
@@ -71,6 +64,14 @@ struct PaperView: View {
             composing = false
             renaming = false
         }
+    }
+
+    private var pinAsking: Binding<Bool> {
+        Binding(get: { !pinChoices.isEmpty }, set: {
+            if !$0 {
+                pinChoices = []
+            }
+        })
     }
 
     /// 右上 ✓：誰在打字都收起來
@@ -195,7 +196,7 @@ struct PaperHeader: View {
     let onDone: () -> Void
     let onRoute: (Route) -> Void
     let onRename: () -> Void
-    let onGlyph: () -> Void
+    let onPinFull: ([Note]) -> Void
     @FocusState private var titleFocused: Bool
 
     var body: some View {
@@ -207,7 +208,7 @@ struct PaperHeader: View {
                     titlePill
                 }
                 Spacer(minLength: Tok.Space.sm)
-                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onGlyph: onGlyph) } label: {
+                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull) } label: {
                     Image(systemName: "ellipsis")
                         .font(Tok.Font.barIcon)
                         .foregroundColor(Tok.Col.textPrimary)
@@ -298,34 +299,91 @@ struct PaperHeader: View {
     }
 }
 
-/// ⋯ 選單：顏色、改名字、釘選、清掉劃掉的行、刪除這張、最近刪除、設定
+/// ⋯ 選單（照 1.1.1）：最上面一排九色（iOS 17 起是色點，16 是子選單）；改名字、釘選、分享、複製全文、
+/// 「清單」那組（上下順序反轉、全部恢復、清掉劃掉的行）、設定、刪除這張
 struct PaperMenu: View {
     @ObservedObject var store: Store
     let note: Note
     let onRoute: (Route) -> Void
     let onRename: () -> Void
-    let onGlyph: () -> Void
+    let onPinFull: ([Note]) -> Void
 
     var body: some View {
-        Picker(Words.colorTitle, selection: Binding(get: { note.color }, set: { store.setColor(note.id, $0) })) {
-            ForEach(NoteColor.keys, id: \.self) { key in
-                Text(NoteColor.names[key].map { "\($0.name)（\($0.hue)）" } ?? key).tag(key)
-            }
-        }
-        .pickerStyle(.menu)
+        colors
         Button(action: onRename) { Label(Words.rename, systemImage: "pencil") }
-        Button(action: onGlyph) { Label(Words.glyphEdit, systemImage: "character") }
-        Button { store.togglePin(note.id) } label: {
+        Button {
+            if let pins = store.pinOrAsk(note.id) {
+                onPinFull(pins)
+            }
+        } label: {
             Label(note.pinned ? Words.unpin : Words.pin, systemImage: note.pinned ? "pin.slash" : "pin")
         }
-        if note.items.contains(where: \.done) {
-            Button { store.clearDone(note.id) } label: { Label(Words.clearDone, systemImage: "checkmark.circle") }
+        ShareLink(item: shareText) { Label(Words.share, systemImage: "square.and.arrow.up") }
+        Button {
+            UIPasteboard.general.string = shareText
+            store.toast = Store.Toast(text: Words.copied)
+        } label: { Label(Words.copyAll, systemImage: "doc.on.doc") }
+        if listGroup {
+            Section {
+                if note.items.count >= 2 {
+                    Button { store.reverseLines(note.id) } label: { Label(Words.reverse, systemImage: "arrow.up.arrow.down") }
+                }
+                if anyDone {
+                    Button { store.unstrikeAll(note.id) } label: { Label(Words.unstrikeAll, systemImage: "arrow.uturn.backward") }
+                    Button { store.clearDone(note.id) } label: { Label(Words.clearDone, systemImage: "eraser") }
+                }
+            }
         }
-        Divider()
-        Button { onRoute(.trash) } label: { Label(Words.trash, systemImage: "trash") }
         Button { onRoute(.settings) } label: { Label(Words.settings, systemImage: "gearshape") }
-        Divider()
-        Button(role: .destructive) { store.trashNote(note.id) } label: { Label(Words.deleteNote, systemImage: "trash") }
+        Button(role: .destructive) { store.trashNote(note.id, reopen: true) } label: { Label(Words.deleteNote, systemImage: "trash") }
+    }
+
+    private var anyDone: Bool {
+        note.items.contains(where: \.done)
+    }
+
+    private var listGroup: Bool {
+        !note.isText && (note.items.count >= 2 || anyDone)
+    }
+
+    /// 分享、複製全文：名字空一行，再來每行編號
+    private var shareText: String {
+        (note.title.isEmpty ? "" : note.title + "\n\n") + Labels.plain(note)
+    }
+
+    private var colorBinding: Binding<String> {
+        Binding(get: { note.color }, set: { key in
+            guard key != note.color else { return }
+            store.setColor(note.id, key)
+            Haptic.tick() // 選單不關，震一下才知道有換到
+        })
+    }
+
+    @ViewBuilder private var colors: some View {
+        if #available(iOS 17.0, *) {
+            Picker(Words.colorTitle, selection: colorBinding) {
+                ForEach(NoteColor.keys, id: \.self) { key in
+                    Label(ColorName.voice(key), systemImage: "circle.fill")
+                        .tint(Tok.note(key).dot)
+                        .tag(key)
+                }
+            }
+            .pickerStyle(.palette)
+        } else {
+            Picker(Words.colorTitle, selection: colorBinding) {
+                ForEach(NoteColor.keys, id: \.self) { key in
+                    Text(ColorName.voice(key)).tag(key)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+    }
+}
+
+/// 顏色的名字（VoiceOver、選單用）：「紫色（茄子）」，跟 1.1 Swatches 一樣
+enum ColorName {
+    static func voice(_ key: String) -> String {
+        NoteColor.names[key].map { "\($0.hue)（\($0.name)）" } ?? key
     }
 }
 

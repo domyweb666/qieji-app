@@ -34,23 +34,28 @@ extension Store {
         ensureCurrent()
     }
 
-    /// 現在這張不見了（被刪、被同步拿掉）就換到目錄第一張；一張都沒有就開一張新的
+    /// 現在這張不見了（被刪、被同步拿掉）就換到最近改過的那張；一張都沒有就開一張新的（1.1 根畫面同一條規則）
     func ensureCurrent() {
         if let note = current, !note.deleted {
             return
         }
-        if let first = Seats.seatedNotes(book).first {
-            open(first.id)
+        openLatest()
+    }
+
+    /// 換到最近改過的那張；一張都沒有就開一張新的（不升輸入框）
+    func openLatest() {
+        if let latest = book.notes.filter({ !$0.deleted }).max(by: { $0.updated < $1.updated }) {
+            open(latest.id)
         } else {
-            newNote()
+            newNote(compose: false)
         }
     }
 
     // MARK: 一張紙
 
-    /// 開新的一張（預設玉米黃），放進目錄第一個空位，沒有空位就排最後。回傳新紙的 id
+    /// 開新的一張（預設玉米黃），放進目錄第一個空位，沒有空位就排最後。compose＝打開後直接升起輸入框。回傳新紙的 id
     @discardableResult
-    func newNote(color: String = "yellow") -> String {
+    func newNote(color: String = "yellow", compose: Bool = true) -> String {
         let now = Clock.now()
         let note = Note.blank(color: color, now: now)
         edit { book in
@@ -58,7 +63,9 @@ extension Store {
             Seats.seatFirstHole(&book, noteID: note.id, now: now)
         }
         open(note.id)
-        requestCompose()
+        if compose {
+            requestCompose()
+        }
         return note.id
     }
 
@@ -99,6 +106,42 @@ extension Store {
         editNote(id, touch: false) { $0.pinned.toggle() }
     }
 
+    /// 釘選／取消釘選（1.1 pin.ts，紙的 ⋯ 和目錄長按共用）：取消直接取消；沒滿直接釘；
+    /// 釘滿（5 張）不動，回傳現在釘著的那幾張，讓畫面問要換掉哪一張
+    func pinOrAsk(_ id: String) -> [Note]? {
+        guard let note = book.note(id) else { return nil }
+        if note.pinned {
+            editNote(id) { $0.pinned = false }
+            toast = Toast(text: Words.unpinned)
+            return nil
+        }
+        let pins = Seats.pinned(book)
+        if pins.count < Seats.pinMax {
+            editNote(id) { $0.pinned = true }
+            toast = Toast(text: Words.pinned)
+            return nil
+        }
+        return pins
+    }
+
+    /// 釘滿時換掉一張（1.1 swapPin）：換掉的那張不動修改時間，目錄裡位置不跳；可以復原
+    func swapPin(_ id: String, out: String) {
+        let name = book.note(out).map(Labels.pickLabel) ?? ""
+        edit { book in
+            guard let new = book.index(id), let old = book.index(out) else { return }
+            book.notes[old].pinned = false
+            book.notes[new].pinned = true
+            book.notes[new].updated = Clock.now()
+        }
+        toast = Toast(text: Words.swappedPin(name)) { [weak self] in
+            self?.edit { book in
+                guard let new = book.index(id), let old = book.index(out) else { return }
+                book.notes[old].pinned = true
+                book.notes[new].pinned = false
+            }
+        }
+    }
+
     /// 清掉劃掉的行：進這張紙的最近刪除，幾秒內可以復原
     func clearDone(_ id: String) {
         guard let note = book.note(id) else { return }
@@ -107,29 +150,64 @@ extension Store {
         editNote(id) { gone = Lines.binDone(&$0, now: Clock.now()) }
         guard !gone.isEmpty else { return }
         let ids = Set(gone.map(\.id))
-        toast = Toast(text: Words.cleared) { [weak self] in
+        toast = Toast(text: Words.cleared(gone.count)) { [weak self] in
             self?.editNote(id) { _ = Lines.unbinDone(&$0, before: before, ids: ids) }
         }
     }
 
-    /// 刪除這張：進最近刪除，目錄原本那格留空位（還原時站回去）
-    func trashNote(_ id: String) {
+    /// ⋯「上下順序反轉」
+    func reverseLines(_ id: String) {
+        editNote(id) { $0.items.reverse() }
+    }
+
+    /// ⋯「全部恢復」：劃掉的行全部恢復
+    func unstrikeAll(_ id: String) {
+        editNote(id) { note in
+            for idx in note.items.indices {
+                note.items[idx].done = false
+            }
+        }
+    }
+
+    /// 刪除這張（1.1 del、目錄的「−」）：進最近刪除、目錄那格留空位、順便取消釘選、空行拿掉；整張空白就直接拿掉、不提示。
+    /// 刪的是現在這張就換到最近改過的那張。reopen＝復原時回到這張（從紙的 ⋯ 刪的）
+    func trashNote(_ id: String, reopen: Bool = false) {
+        guard let note = book.note(id), !note.deleted else { return }
+        let wasPinned = note.pinned
         let now = Clock.now()
         edit { book in
             guard let idx = book.index(id) else { return }
             Seats.leaveHole(&book, noteID: id, now: now)
             Trash.markDeleted(&book.notes[idx], now: now)
+            book.notes[idx].pinned = false
+            book.notes[idx].items.removeAll { Labels.trim($0.text).isEmpty }
+            let gone = book.notes[idx]
+            if Labels.isEmpty(gone), gone.bin.isEmpty, gone.cover == nil {
+                Sync.dropNotes(&book, now: now) { $0.id == id }
+            }
         }
-        ensureCurrent()
-        toast = Toast(text: Words.noteDeleted) { [weak self] in self?.restoreNote(id) }
+        if currentID == id {
+            openLatest()
+        }
+        guard book.note(id) != nil else { return }
+        toast = Toast(text: Words.movedToTrash) { [weak self] in
+            self?.restoreNote(id, repin: wasPinned, reopen: reopen)
+        }
     }
 
-    func restoreNote(_ id: String) {
+    /// 從最近刪除還原：站回目錄原本那格。repin＝刪之前是釘選的就釘回去（這幾秒內又釘滿了就不擠掉別張）
+    func restoreNote(_ id: String, repin: Bool = false, reopen: Bool = false) {
         let now = Clock.now()
         edit { book in
             guard let idx = book.index(id) else { return }
             Trash.markRestored(&book.notes[idx])
+            if repin, Seats.pinned(book).count < Seats.pinMax {
+                book.notes[idx].pinned = true
+            }
             Seats.fillHole(&book, noteID: id, now: now)
+        }
+        if reopen {
+            open(id)
         }
     }
 

@@ -86,6 +86,91 @@ final class PaperRulesTests: XCTestCase {
         XCTAssertEqual(store.currentID, other.id)
     }
 
+    // MARK: ⋯ 選單（第 4 項）
+
+    private func notes(_ count: Int, pinned: Int = 0) -> [Note] {
+        (0 ..< count).map { idx in
+            var note = Note.blank(now: Double(1000 + idx))
+            note.title = "第\(idx)張"
+            note.items = [Item(text: "內容")]
+            note.pinned = idx < pinned
+            return note
+        }
+    }
+
+    private func storeOf(_ list: [Note]) -> Store {
+        var book = Notebook()
+        book.notes = list
+        return Store(book: book)
+    }
+
+    func testPinUntilFullThenAsk() {
+        let list = notes(7, pinned: 5)
+        let store = storeOf(list)
+        XCTAssertNil(store.pinOrAsk(list[0].id)) // 取消釘選
+        XCTAssertEqual(store.book.note(list[0].id)?.pinned, false)
+        XCTAssertEqual(store.toast?.text, Words.unpinned)
+        XCTAssertNil(store.pinOrAsk(list[5].id)) // 剛好空出一格
+        XCTAssertEqual(store.book.note(list[5].id)?.pinned, true)
+        let ask = store.pinOrAsk(list[6].id) // 又滿了：不動，回傳五張讓畫面問
+        XCTAssertEqual(ask?.count, Seats.pinMax)
+        XCTAssertEqual(store.book.note(list[6].id)?.pinned, false)
+    }
+
+    func testSwapPinAndUndo() {
+        let list = notes(6, pinned: 5)
+        let store = storeOf(list)
+        store.swapPin(list[5].id, out: list[2].id)
+        XCTAssertEqual(store.book.note(list[5].id)?.pinned, true)
+        XCTAssertEqual(store.book.note(list[2].id)?.pinned, false)
+        XCTAssertEqual(store.toast?.text, Words.swappedPin("第2張"))
+        store.toast?.undo?()
+        XCTAssertEqual(store.book.note(list[5].id)?.pinned, false)
+        XCTAssertEqual(store.book.note(list[2].id)?.pinned, true)
+    }
+
+    func testDeleteThisNoteGoesToLatestAndUndoReturns() {
+        var list = notes(3, pinned: 1)
+        list[1].updated = 9000 // 最近改過的
+        let store = storeOf(list)
+        store.open(list[0].id)
+        store.trashNote(list[0].id, reopen: true)
+        XCTAssertEqual(store.book.note(list[0].id)?.deleted, true)
+        XCTAssertEqual(store.book.note(list[0].id)?.pinned, false)
+        XCTAssertEqual(store.currentID, list[1].id)
+        XCTAssertEqual(store.toast?.text, Words.movedToTrash)
+        store.toast?.undo?()
+        XCTAssertEqual(store.book.note(list[0].id)?.deleted, false)
+        XCTAssertEqual(store.book.note(list[0].id)?.pinned, true)
+        XCTAssertEqual(store.currentID, list[0].id)
+    }
+
+    func testDeletingBlankNoteDropsItWithoutToast() {
+        var list = notes(2)
+        list[0].title = ""
+        list[0].items = [Item(text: " ")]
+        let store = storeOf(list)
+        store.open(list[0].id)
+        store.trashNote(list[0].id, reopen: true)
+        XCTAssertNil(store.book.note(list[0].id))
+        XCTAssertNil(store.toast)
+        XCTAssertEqual(store.currentID, list[1].id)
+    }
+
+    func testReverseUnstrikeAndClearDone() {
+        let store = store([Item(text: "一", done: true), Item(text: "二"), Item(text: "三", done: true)])
+        let id = store.currentID ?? ""
+        store.reverseLines(id)
+        XCTAssertEqual(texts(store), ["三", "二", "一"])
+        store.clearDone(id)
+        XCTAssertEqual(texts(store), ["二"])
+        XCTAssertEqual(store.toast?.text, Words.cleared(2))
+        store.toast?.undo?()
+        XCTAssertEqual(texts(store), ["三", "二", "一"])
+        store.unstrikeAll(id)
+        XCTAssertEqual(store.current?.items.filter(\.done).count, 0)
+    }
+
     func testLeavingBlankNoteWithTrashedLinesKeepsIt() {
         var blank = Note.blank(now: 3000)
         blank.bin = [Item(text: "刪掉的")]

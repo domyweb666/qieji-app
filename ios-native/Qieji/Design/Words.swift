@@ -44,8 +44,24 @@ enum Words {
     static let cancel = "取消"
     static let undo = "復原"
     static let lineDeleted = "刪掉一行"
-    static let noteDeleted = "這張進了最近刪除"
-    static let cleared = "清掉劃掉的行了"
+    static let movedToTrash = "已移到最近刪除"
+    static func cleared(_ count: Int) -> String {
+        "已把 \(count) 行移到最近刪除"
+    }
+
+    static let share = "分享"
+    static let copyAll = "複製全文"
+    static let copied = "已複製"
+    static let reverse = "上下順序反轉"
+    static let unstrikeAll = "全部恢復"
+    static let pinSwapAsk = "要換掉哪一張？"
+    static func pinFullTitle(_ max: Int) -> String {
+        "已釘滿 \(max) 張"
+    }
+
+    static func swappedPin(_ name: String) -> String {
+        "已釘選，「\(name)」已取消釘選"
+    }
     static let version = "版本"
     static let colorTitle = "顏色"
     static let directory = "目錄"
