@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /// 清單的手勢全部掛在捲動區上，一組就管整張紙（不是每一行各掛一組）：
 /// 左右滑＝劃掉／刪除、右邊把手上下拖＝排順序、點一下＝改那一行、按住＝選單。
@@ -38,13 +39,17 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     /// 按住一行：那一行的 id 和它在螢幕上的底邊（視窗座標，選單卡接在下面）
     var onLongPress: (String, CGFloat) -> Void = { _, _ in }
 
+    /// 拿起一行排順序那一刻（1.1：拿起時收鍵盤）
+    var onDragBegan: () -> Void = {}
+
     private weak var scroll: UIScrollView?
     private let swipePan = UIPanGestureRecognizer()
-    private let gripPan = UIPanGestureRecognizer()
+    private let gripPan = GripPan()
     private let tap = UITapGestureRecognizer()
     private let hold = UILongPressGestureRecognizer()
     private var dragScrollStart: CGFloat = 0
     private var landing = false
+    private var landTicket = 0 // 每次放手加一：落定的計時器拿著舊號碼就不做事（中途已經被 landNow 收掉）
     private var autoLink: CADisplayLink?
     private var autoSpeed: CGFloat = 0 // 點／秒，正的往下捲
     private var dragTouchY: CGFloat = 0 // 手指在捲動區裡的位置（跟著捲動內容走的座標）
@@ -52,12 +57,13 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     private var heldTop: CGFloat = 0 // 拖著的那一行原本的頂端（捲動內容的座標）
     private var touchStart: CGPoint = .zero // 手指按下去的地方（捲動內容的座標）
 
-    /// 把手那一條有多寬（從右邊算）
-    static let gripStrip = Tok.Shape.hitMin + Tok.Space.xs * 3
+    /// 把手那一條有多寬（從右邊算，1.1 gripCol＝44）
+    static let gripStrip = Tok.Shape.hitMin
 
     func attach(_ view: UIScrollView) {
         guard scroll !== view else { return }
         scroll = view
+        gripPan.strip = ListTouch.gripStrip
         swipePan.addTarget(self, action: #selector(onSwipe(_:)))
         gripPan.addTarget(self, action: #selector(onGrip(_:)))
         tap.addTarget(self, action: #selector(onTapped(_:)))
@@ -83,7 +89,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     // MARK: 誰可以開始
 
     func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard let scroll, dragID == nil, !landing else { return false }
+        // 還在滑進落點時手指又碰了：馬上落定，這一下照常收
+        landNow()
+        guard let scroll, dragID == nil else { return false }
         let point = gesture === tap ? gesture.location(in: scroll) : touchStart
         let inGrip = point.x > scroll.bounds.width - ListTouch.gripStrip
         if gesture === swipePan {
@@ -91,8 +99,8 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             return row(at: point) != nil && abs(speed.x) > abs(speed.y) && swipeID == nil
         }
         if gesture === gripPan {
-            let speed = gripPan.velocity(in: scroll)
-            return inGrip && row(at: point) != nil && abs(speed.y) >= abs(speed.x)
+            // 方向在 GripPan 裡判斷（上下動 1 點就拿起、先左右動 10 點就放棄）
+            return inGrip && row(at: point) != nil
         }
         if gesture === hold {
             return row(at: point) != nil && !inGrip
@@ -178,7 +186,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     // MARK: 把手拖順序
 
-    @objc private func onGrip(_ gesture: UIPanGestureRecognizer) {
+    @objc private func onGrip(_ gesture: GripPan) {
         guard let scroll else { return }
         switch gesture.state {
         case .began:
@@ -195,6 +203,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             dragID = id
             Haptic.prepare()
             Haptic.lift()
+            onDragBegan()
             followFinger()
         case .changed:
             guard dragID != nil else { return }
@@ -203,7 +212,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             steerAutoScroll()
         case .ended, .cancelled, .failed:
             stopAutoScroll()
-            land()
+            land(speed: gesture.state == .ended ? gesture.speedY : 0)
         default: break
         }
     }
@@ -228,7 +237,9 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
             return
         }
         let edge = Tok.Gesture.dragAutoEdge
-        let top = dragTouchY, bottom = scroll.bounds.height - scroll.adjustedContentInset.bottom - dragTouchY
+        // 下緣從右下 ＋ 的上方算起（1.1 listBot：扣掉浮在紙上的 ＋ 那一截）
+        let floor = scroll.bounds.height - scroll.adjustedContentInset.bottom - Tok.Shape.fab - Tok.Space.sm * 2
+        let top = dragTouchY, bottom = floor - dragTouchY
         if top < edge {
             autoSpeed = -Tok.Gesture.dragAutoSpeed * min(1, (edge - top) / edge)
         } else if bottom < edge {
@@ -281,33 +292,52 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         return min(slot, max(0, order.count - 1))
     }
 
-    /// 放手：先滑進落點，滑完才真的換資料（資料一換，版面就是落點那個樣子，不會閃）
-    private func land() {
-        guard let id = dragID else { return }
-        let from = dragFrom, target = dragTo
+    /// 放手：帶著手指放開的速度滑進落點（1.1 dragLand 接速度），滑完才真的換資料（資料一換，版面就是落點那個樣子，不會閃）。
+    /// speed＝手指放開時上下的速度（點／秒）
+    private func land(speed: CGFloat) {
+        guard dragID != nil else { return }
         landing = true
+        landTicket += 1
+        let ticket = landTicket
         Haptic.land()
-        let rest = landingOffset(from: from, target: target)
+        let rest = landingOffset(from: dragFrom, target: dragTo)
         let offset = scroll?.contentOffset.y ?? 0
-        withAnimation(Tok.Motion.dragLand) {
+        let distance = rest - dragDy
+        let spring = Tok.Motion.landSpring(velocity: abs(distance) < 1 ? 0 : speed / distance)
+        Motions.run(spring, fallback: Tok.Motion.dragLandSeconds) {
             dragDy = rest
             floatY = heldTop + rest - offset
+        } done: { [weak self] in
+            guard let self, landTicket == ticket else { return }
+            finishLanding()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.deleteSlideSeconds) { [weak self] in
-            guard let self else { return }
-            var quiet = Transaction()
-            quiet.disablesAnimations = true
-            withTransaction(quiet) {
-                if target != from {
-                    self.onMove(id, target)
-                }
-                self.dragID = nil
-                self.dragDy = 0
-                self.dragFrom = -1
-                self.dragTo = -1
-            }
+    }
+
+    /// 還在滑進落點時手指又碰了：不等滑完，馬上落定
+    private func landNow() {
+        guard landing else { return }
+        landTicket += 1
+        finishLanding()
+    }
+
+    private func finishLanding() {
+        guard let id = dragID else {
             landing = false
+            return
         }
+        let from = dragFrom, target = dragTo
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) {
+            if target != from {
+                onMove(id, target)
+            }
+            dragID = nil
+            dragDy = 0
+            dragFrom = -1
+            dragTo = -1
+        }
+        landing = false
     }
 
     private func landingOffset(from: Int, target: Int) -> CGFloat {
@@ -331,14 +361,12 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
 
     // MARK: 點、按住
 
+    /// 點一下：改那一行（點在把手上也一樣，1.1 把手只收拖曳）。游標落在點的位置
     @objc private func onTapped(_ gesture: UITapGestureRecognizer) {
         guard let scroll, gesture.state == .ended else { return }
         let point = gesture.location(in: scroll)
         guard let id = row(at: point), let frame = frames[id] else { onTapBlank(); return }
-        if point.x > scroll.bounds.width - ListTouch.gripStrip {
-            return
-        }
-        onTap(id, CGPoint(x: point.x - frame.minX - Tok.Space.lg, y: point.y - frame.minY))
+        onTap(id, CGPoint(x: point.x - frame.minX - Tok.Space.gutter, y: point.y - frame.minY))
     }
 
     @objc private func onHeld(_ gesture: UILongPressGestureRecognizer) {
@@ -376,5 +404,71 @@ struct ScrollHook: UIViewRepresentable {
                 next = view.superview
             }
         }
+    }
+}
+
+/// 把手的拖曳（1.1 dragActivate、dragFailX）：手指在右邊把手那一條，上下動 1 點就拿起；先左右動 10 點就放棄，讓給整行的滑動。
+/// 系統的拖曳要走約 10 點才開始，拿起那一下行會跳一段，所以自己數
+final class GripPan: UIGestureRecognizer {
+    /// 把手那一條多寬（從右邊算）：從這條外面開始的觸控一開始就放棄，不擋系統捲動
+    var strip: CGFloat = 0
+    /// 手指放開前最後一小段的上下速度（點／秒）
+    private(set) var speedY: CGFloat = 0
+    private var start: CGPoint = .zero
+    private var lastY: CGFloat = 0
+    private var lastTime: TimeInterval = 0
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let view, touches.count == 1, let touch = touches.first,
+              touch.location(in: view).x > view.bounds.width - strip
+        else {
+            state = .failed
+            return
+        }
+        start = touch.location(in: view)
+        lastY = start.y
+        lastTime = touch.timestamp
+        speedY = 0
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let view, let touch = touches.first else { return }
+        let point = touch.location(in: view)
+        let span = touch.timestamp - lastTime
+        if span > 0 {
+            speedY = (point.y - lastY) / CGFloat(span)
+        }
+        lastY = point.y
+        lastTime = touch.timestamp
+        switch state {
+        case .possible:
+            let sideways = abs(point.x - start.x), upDown = abs(point.y - start.y)
+            if sideways >= Tok.Gesture.dragFailX, sideways > upDown {
+                state = .failed
+            } else if upDown >= Tok.Gesture.dragActivate {
+                state = .began
+            }
+        case .began, .changed:
+            state = .changed
+        default:
+            break
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        state = state == .began || state == .changed ? .ended : .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    override func reset() {
+        super.reset()
+        speedY = 0
     }
 }

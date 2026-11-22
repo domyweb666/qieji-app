@@ -94,7 +94,8 @@ struct LineText: UIViewRepresentable {
         view.selectedTextRange = view.textRange(from: spot, to: spot)
     }
 
-    /// 內文 17 點、行高 26（跟著系統字級一起放大）；劃掉的行加刪除線、變淡
+    /// 內文 17 點、行高 26（跟著系統字級一起放大）；劃掉的行加刪除線、變淡。
+    /// 字貼著每一行的底部（不置中）：1.1 的輸入框就是這樣，一般文字也往下移了 2.86 點對齊它，看起來字比格子中線低一點
     static func attributes(done: Bool, ink: UIColor, strikeInk: UIColor) -> [NSAttributedString.Key: Any] {
         let font = Tok.Font.lineUI
         let lineHeight = (font.pointSize * Tok.Font.lineHeightRatio).rounded()
@@ -105,7 +106,6 @@ struct LineText: UIViewRepresentable {
             .font: font,
             .paragraphStyle: para,
             .foregroundColor: done ? strikeInk : ink,
-            .baselineOffset: (lineHeight - font.lineHeight) / 2,
         ]
         if done {
             attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue

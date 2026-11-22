@@ -102,7 +102,7 @@ struct PaperView: View {
     }
 
     @ViewBuilder private var addButton: some View {
-        if !composing, editingID == nil, touch.dragID == nil, rowMenu == nil {
+        if !composing, editingID == nil, rowMenu == nil {
             Button {
                 Haptic.add()
                 composing = true

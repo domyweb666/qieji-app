@@ -272,6 +272,11 @@ enum Tok {
         static let snapBack = Animation.spring(response: 0.25, dampingFraction: 1)
         static let dragShift = Animation.spring(response: 0.2, dampingFraction: 1)
         static let dragLand = Animation.spring(response: 0.25, dampingFraction: 1)
+        /// 放手滑進落點：跟 dragLand 同一個彈簧（感知 0.25 秒、不過頭），換成勁度與阻尼才帶得進手指的速度。
+        /// velocity＝手指速度 ÷ 還要走的距離（每秒走幾個「全程」）
+        static func landSpring(velocity: CGFloat) -> Animation {
+            .interpolatingSpring(stiffness: 631.65, damping: 50.27, initialVelocity: velocity)
+        }
         static let dragLift = Animation.spring(response: 0.15, dampingFraction: 1)
         static let swipeLabel = Animation.spring(response: 0.25, dampingFraction: 0.6)
         static let rowShift = Animation.easeInOut(duration: 0.18)
@@ -326,6 +331,7 @@ enum Tok {
         static let deleteMax: CGFloat = 110
         static let deleteRatio: CGFloat = 0.3
         static let dragActivate: CGFloat = 1
+        static let dragFailX: CGFloat = 10 // 把手上先左右動這麼多就不算拿起，讓給整行的滑動（比 swipeActivate 小）
         static let dragAutoEdge: CGFloat = 64
         static let dragAutoSpeed: CGFloat = 900
         static let longPress: Double = 0.5

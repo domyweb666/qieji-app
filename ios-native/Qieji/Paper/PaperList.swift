@@ -74,10 +74,14 @@ struct PaperList: View {
     /// 拖著排順序的那一行：浮在清單上面跟著手指。不放在清單裡，紙自己捲得再遠它都在
     @ViewBuilder private var floating: some View {
         if let id = touch.dragID, let item = note.items.first(where: { $0.id == id }) {
-            PaperRow(
-                item: item, editing: false, focus: nil, colors: colors, slide: 0, armed: false, held: true,
-                actions: LineActions(), voice: []
-            )
+            // 拿起那一刻 0.15 秒浮起來（放大一點＋陰影，1.1 dragLift），不是一出現就是浮著的
+            Lifting { up in
+                PaperRow(
+                    item: item, editing: false, focus: nil, colors: colors, slide: 0, armed: false, held: up,
+                    actions: LineActions(), voice: []
+                )
+            }
+            .id(id)
             .offset(y: touch.floatY)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -116,6 +120,11 @@ struct PaperList: View {
         }
         touch.onTapBlank = { editingID = nil }
         touch.onLongPress = { onMenu($0, $1) }
+        // 拿起一行排順序：收鍵盤（1.1）
+        touch.onDragBegan = {
+            editingID = nil
+            KeyboardWatch.dismiss()
+        }
     }
 
     private func actions(for id: String) -> LineActions {
@@ -134,6 +143,16 @@ struct PaperList: View {
                 return true
             }
         )
+    }
+}
+
+/// 出現那一刻把 up 從 false 動畫到 true（拿起的行浮起來用）
+struct Lifting<Content: View>: View {
+    @ViewBuilder let content: (Bool) -> Content
+    @State private var up = false
+
+    var body: some View {
+        content(up).onAppear { withAnimation(Tok.Motion.dragLift) { up = true } }
     }
 }
 
@@ -170,25 +189,29 @@ struct PaperRow: View {
             if slide != 0 {
                 SwipeUnder(slide: slide, armed: armed, done: item.done)
             }
-            HStack(spacing: Tok.Space.zero) {
-                LineText(
-                    text: item.text, done: item.done, editing: editing, focus: focus,
-                    ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice
-                )
-                .padding(.leading, Tok.Space.lg)
-                GripDots()
-                    .frame(width: Tok.Shape.hitMin)
-                    .padding(.horizontal, Tok.Space.xs)
-                    .accessibilityHidden(true)
+            // 照 1.1：字從左 20 起、離把手 8；把手 44 寬、貼右邊，六個點對齊第一行字（不是整則的正中間）；
+            // 底下一條 1 點格線，一行字的高是 52＋1
+            VStack(spacing: Tok.Space.zero) {
+                HStack(alignment: .top, spacing: Tok.Space.zero) {
+                    LineText(
+                        text: item.text, done: item.done, editing: editing, focus: focus,
+                        ink: UIColor(Tok.Col.textPrimary), strikeInk: UIColor(Tok.Col.textStrike), actions: actions, voice: voice
+                    )
+                    .padding(.leading, Tok.Space.gutter)
+                    .padding(.trailing, Tok.Space.sm)
+                    GripDots()
+                        .frame(width: Tok.Shape.hitMin, height: Tok.Shape.rowMin)
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: Tok.Shape.rowMin, alignment: .top)
+                colors.rule.frame(height: Tok.Shape.borderCard)
             }
-            .frame(minHeight: Tok.Shape.rowMin)
             .background(ZStack {
                 colors.paper
                 if editing {
                     Tok.Col.rowEditingFill
                 }
             })
-            .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.hairline) }
             .offset(x: slide)
             .scaleEffect(held && !calm ? Tok.Motion.dragLiftScale : 1)
             .shadow(
