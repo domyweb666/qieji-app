@@ -101,10 +101,15 @@ struct PaperList: View {
 
     /// VoiceOver 用不了滑動和拖曳：從動作選單（上下滑）劃掉、刪除、移動
     private func voiceActions(_ item: Item, index: Int) -> [VoiceAct] {
-        var out = [
-            VoiceAct(name: item.done ? Words.unstrike : Words.strike) { store.toggle(item.id) },
-            VoiceAct(name: Words.deleteLine) { store.binLine(item.id) },
-        ]
+        // 空行沒有「劃掉」（1.1 一樣）；從這裡劃掉也震一下
+        var out: [VoiceAct] = []
+        if !Labels.trim(item.text).isEmpty {
+            out.append(VoiceAct(name: item.done ? Words.unstrike : Words.strike) {
+                store.toggle(item.id)
+                Haptic.tick()
+            })
+        }
+        out.append(VoiceAct(name: Words.deleteLine) { store.binLine(item.id) })
         if index > 0 {
             out.append(VoiceAct(name: Words.moveUp) { store.move(item.id, to: index - 1) })
         }

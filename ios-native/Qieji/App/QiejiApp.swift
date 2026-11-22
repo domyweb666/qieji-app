@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct QiejiApp: App {
@@ -27,6 +28,9 @@ struct RootView: View {
     @State private var dir: DirModel
     @State private var route: Route?
     @State private var wantDir = false // 切換清單收完之後要打開目錄
+    @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
+    @State private var shownID: String?
+    @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
 
     init() {
         let made = RootView.makeStore()
@@ -53,7 +57,8 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            Tok.Col.page.ignoresSafeArea()
+            // 換紙時底下墊的是上一張的顏色（1.1 2026-11-04）：新的那張淡入時不會先露出奶油底、看起來閃一下
+            Tok.note(underKey).paper.ignoresSafeArea()
             if let note = store.current {
                 if note.locked {
                     LockedPaper(note: note) { route = .switcher }
@@ -63,12 +68,25 @@ struct RootView: View {
                         onMoveLine: { dir.open(move: $0) }
                     )
                     .id(note.id)
-                    .transition(.opacity)
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
                 }
             }
         }
-        // 換一張紙：舊的淡出、新的淡入（只寫 transition 不接動畫的話是直接跳）
-        .animation(Tok.Motion.fade, value: store.currentID)
+        // 換一張紙：只有新的那張淡入（1.1 S2）。第一次打開 app 那張不淡，交給啟動畫面
+        .animation(booted ? Tok.Motion.fade : nil, value: store.currentID)
+        .onChange(of: store.currentID) { id in
+            DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
+                shownID = id
+                underKey = store.current?.color ?? underKey
+                booted = true
+            }
+        }
+        .onChange(of: store.current?.color) { key in
+            // 同一張換了顏色：底色跟著換（換紙時由上面那段等新的淡入完才換）
+            if store.currentID == shownID, let key {
+                underKey = key
+            }
+        }
         // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
         .overlay(alignment: .bottomTrailing) {
             PlusButton(shown: store.fabShown && store.current?.locked != true) { store.plusAsk += 1 }
@@ -121,16 +139,18 @@ struct RootView: View {
     }
 }
 
-/// 畫面底下的一條提示（刪掉一行、清掉劃掉的行…），幾秒後自己收，可以按復原
+/// 畫面底下的一條提示（刪掉一行、清掉劃掉的行…），幾秒後自己收，可以按復原。
+/// 照 1.1：系統材質的膠囊（iOS 26 液態玻璃）、長的字會換行、出現時 VoiceOver 唸出來
 struct ToastBar: View {
     @ObservedObject var store: Store
 
     var body: some View {
         if let toast = store.toast {
-            HStack(spacing: Tok.Space.md) {
+            HStack(spacing: Tok.Space.lg) {
                 Text(toast.text)
                     .font(Tok.Font.callout)
                     .foregroundColor(Tok.Col.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let undo = toast.undo {
                     Button(Words.undo) {
                         undo()
@@ -141,14 +161,12 @@ struct ToastBar: View {
                 }
             }
             .padding(.horizontal, Tok.Space.lg)
-            .frame(minHeight: Tok.Shape.hitMin)
-            .background(Capsule().fill(Tok.Col.surface))
-            .shadow(
-                color: Tok.Col.shadow.opacity(Tok.Shape.shadowSoft),
-                radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY
-            )
-            .padding(.bottom, Tok.Space.xxl + Tok.Shape.fab)
+            .padding(.vertical, Tok.Space.md)
+            .frost(Capsule())
+            .padding(.horizontal, Tok.Space.gutter)
+            .padding(.bottom, Tok.Shape.fab + Tok.Space.xl)
             .transition(.opacity)
+            .onAppear { UIAccessibility.post(notification: .announcement, argument: toast.text) }
             .task(id: toast.id) {
                 try? await Task.sleep(nanoseconds: UInt64(Tok.Timing.toastStay * 1_000_000_000))
                 if store.toast?.id == toast.id {

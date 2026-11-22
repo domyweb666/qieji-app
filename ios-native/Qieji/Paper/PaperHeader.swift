@@ -32,7 +32,7 @@ struct PaperHeader: View {
                         .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
                         .frost(Circle(), interactive: true)
                 }
-                .accessibilityLabel(Words.more)
+                .accessibilityLabel(Words.menu)
                 // 打字時 ⋯ 右邊多一顆茄紫 ✓（照 iOS 提醒事項），⋯ 用鍵盤的時鐘滑過去讓位
                 if showDone {
                     DoneButton(action: onDone).transition(.opacity)

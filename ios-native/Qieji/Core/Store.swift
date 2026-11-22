@@ -138,7 +138,7 @@ final class Store: ObservableObject {
         }
         let noteID = note.id
         editCurrent { _ = Lines.bin(&$0, itemID, now: Clock.now()) }
-        toast = Toast(text: Words.lineDeleted) { [weak self] in
+        toast = Toast(text: Words.movedToTrash) { [weak self] in
             self?.edit { book in
                 guard let idx = book.index(noteID) else { return }
                 _ = Lines.unbin(&book.notes[idx], itemID, at: at)
