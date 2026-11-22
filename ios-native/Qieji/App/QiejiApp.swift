@@ -109,6 +109,8 @@ struct RootView: View {
             look.load()
             if !RootView.offline {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
+                store.isFull = shop.full
+                store.fullKnown = true // 知道買了沒才推小工具
             }
         }
         .onChange(of: phase) { now in

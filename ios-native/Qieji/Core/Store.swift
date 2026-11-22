@@ -29,7 +29,21 @@ final class Store: ObservableObject {
     }
 
     /// 買了完整版沒。內購還沒搬來（StoreKit 2 待做），現在只有假資料模式是 true；判斷不出來一律當沒買（安全標準授權段）
-    var isFull = false
+    var isFull = false {
+        didSet {
+            if isFull != oldValue {
+                pushWidget()
+            }
+        }
+    }
+
+    /// 已經知道買了沒（讀到手機上次記的結果）：在這之前不推小工具
+    var fullKnown = false {
+        didSet { pushWidget() }
+    }
+
+    var widgetSent: Data?
+    var widgetWork: DispatchWorkItem?
 
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（舊存檔沒能先備份）
@@ -81,6 +95,7 @@ final class Store: ObservableObject {
         let leaving = currentID
         currentID = id
         disk?.rememberLast(id)
+        pushWidgetSoon()
         if let leaving, leaving != id {
             keepDraft(in: leaving)
             tidy(leaving)
@@ -198,7 +213,9 @@ final class Store: ObservableObject {
         guard let disk, loaded, !frozen else { return }
         Sync.stampMods(&book, now: Clock.now())
         _ = Seats.fixOrder(&book)
-        if !disk.write(book) {
+        if disk.write(book) {
+            pushWidget() // 存檔成功才推給桌面小工具（1.1 多米 2026-10-31）
+        } else {
             toast = Toast(text: Words.saveFailed)
         }
     }

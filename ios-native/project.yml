@@ -17,6 +17,13 @@ targets:
       - Shared # 控制中心按鈕的動作：app 與擴充都要編進去
     dependencies:
       - target: QiejiControls
+      - target: QiejiWidgets
+    # App Group：跟桌面小工具交資料（1.1 expo-widgets 同一個群組）
+    entitlements:
+      path: Qieji/Qieji.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.org.domyweb.qieji
     info:
       path: Qieji/Info.plist
       properties:
@@ -68,6 +75,38 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.controls
+        # 版本號要跟 app 一樣，不然上傳會被擋
+        MARKETING_VERSION: "2.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.10"
+
+  # 桌面／鎖定畫面小工具（1.1 expo-widgets 換成 WidgetKit）。Bundle ID、kind 跟 1.1 一樣，使用者放好的那塊更新後照樣在。
+  # 最低 iOS 照 1.1 的擴充（16.4）；iOS 17 起用系統的小工具底色
+  QiejiWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.4"
+    sources:
+      - QiejiWidgets
+      - path: Shared/WidgetShare.swift
+      - path: Qieji/Design/Tokens.swift
+    entitlements:
+      path: QiejiWidgets/QiejiWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.org.domyweb.qieji
+    info:
+      path: QiejiWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: 茄記
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.ExpoWidgetsTarget
         # 版本號要跟 app 一樣，不然上傳會被擋
         MARKETING_VERSION: "2.0.0"
         CURRENT_PROJECT_VERSION: "1"
