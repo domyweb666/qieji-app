@@ -30,6 +30,8 @@ struct SwitchPanel: View {
                     .offset(y: calm ? 0 : (shown ? drag : max(height, geo.size.height)))
                     .opacity(calm && !shown ? 0 : 1)
             }
+            // 面板貼到螢幕最底（Home 條那一段也是面板），底部的空間在面板裡面自己留（geo 還是量得到 Home 條多高）
+            .ignoresSafeArea(edges: .bottom)
         }
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape) { dismiss() }

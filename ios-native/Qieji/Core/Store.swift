@@ -14,6 +14,7 @@ final class Store: ObservableObject {
         let title: String
         let body: String
     }
+
     /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
     @Published var composeAsk = 0
     private var composePending = false

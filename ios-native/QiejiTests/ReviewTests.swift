@@ -42,7 +42,7 @@ final class ReviewTests: XCTestCase {
     func testOpenDaysCountOncePerDayAndKeepTheLatestFour() {
         var stats = Review.Stats(first: now, days: [], strikes: 0, asked: nil)
         XCTAssertTrue(Review.markOpen(&stats, now: now))
-        XCTAssertFalse(Review.markOpen(&stats, now: now + 60_000)) // 同一天再打開不算
+        XCTAssertFalse(Review.markOpen(&stats, now: now + 60000)) // 同一天再打開不算
         for offset in 1 ... 5 {
             XCTAssertTrue(Review.markOpen(&stats, now: now + Double(offset) * day))
         }
