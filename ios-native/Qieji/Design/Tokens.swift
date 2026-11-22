@@ -287,6 +287,7 @@ enum Tok {
         static func deleteSpring(velocity: CGFloat) -> Animation {
             .interpolatingSpring(stiffness: 815.6, damping: 57.12, initialVelocity: velocity)
         }
+
         static let dragLift = Animation.spring(response: 0.15, dampingFraction: 1)
         static let swipeLabel = Animation.spring(response: 0.25, dampingFraction: 0.6)
         static let rowShift = Animation.easeInOut(duration: 0.18)

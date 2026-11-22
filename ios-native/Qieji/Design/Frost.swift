@@ -11,7 +11,6 @@ struct Frost<S: Shape>: ViewModifier {
     var thick = false
     @Environment(\.accessibilityReduceTransparency) private var solid
 
-    @ViewBuilder
     func body(content: Content) -> some View {
         if solid {
             content

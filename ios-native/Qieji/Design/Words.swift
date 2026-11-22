@@ -62,6 +62,7 @@ enum Words {
     static func swappedPin(_ name: String) -> String {
         "已釘選，「\(name)」已取消釘選"
     }
+
     static let version = "版本"
     static let colorTitle = "顏色"
     static let directory = "目錄"
