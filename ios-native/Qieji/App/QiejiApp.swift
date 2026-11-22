@@ -26,6 +26,8 @@ enum Route: String, Identifiable {
 enum Page: Hashable {
     case trash
     case settings
+    case news
+    case family
 }
 
 /// 根畫面：紙是家。打開就是上次那張紙，其他畫面都從紙上面升起來。
@@ -36,6 +38,7 @@ struct RootView: View {
     @State private var sheet: Route? // 從下面升起的表單：只有付費頁
     @State private var path: [Page] = [] // 推進來的頁
     @State private var switching = false // 切換清單開著
+    @State private var newsCard: News.Entry? // 更新後第一次打開跳一次的新功能卡片
     @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
     @State private var shownID: String?
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
@@ -81,7 +84,13 @@ struct RootView: View {
                 .navigationDestination(for: Page.self) { page in
                     switch page {
                     case .trash: TrashPage(store: store)
-                    case .settings: SettingsView { path.removeAll() }
+                    case .settings:
+                        SettingsPage(
+                            store: store, shop: shop, cloud: cloud, look: look, size: TextSize.shared,
+                            onFull: { sheet = .full }, onPage: { path.append($0) }
+                        )
+                    case .news: NewsPage()
+                    case .family: FamilyPage()
                     }
                 }
         }
@@ -106,7 +115,17 @@ struct RootView: View {
                 store.fullKnown = true // 知道買了沒才推小工具
                 cloud.store = store
                 cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
+                newsCard = News.take(firstRun: Prefs.shared.firstRun) // 新功能卡片：更新後第一次打開跳一次
             }
+        }
+        .alert(newsCard.map { Words.newsTitle($0.version) } ?? "", isPresented: Binding(get: { newsCard != nil }, set: {
+            if !$0 {
+                newsCard = nil
+            }
+        })) {
+            Button(Words.ok) { newsCard = nil }
+        } message: {
+            Text(newsCard.map { $0.points.map { "・\($0)" }.joined(separator: "\n") } ?? "")
         }
         .onChange(of: phase) { now in
             if now == .active {

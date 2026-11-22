@@ -96,6 +96,22 @@ extension Store {
         editNote(id) { $0.title = clean }
     }
 
+    /// 清除所有資料（1.1 片 F2，多米 2026-11-14 定：只清這支手機）：紙、最近刪除、目錄排列、資料夾全部拿掉，回到剛裝好的樣子（一張教學紙）。
+    /// 整份換成新的，不立墓碑：墓碑會在之後重新打開同步時傳上去，把 iCloud 和別台的紙也刪掉。iCloud 雲碟裡的檔案這裡完全不碰。
+    /// 呼叫的人要先把 iCloud 同步關掉。回傳有沒有清乾淨、存成功
+    func wipe() -> Bool {
+        guard loaded, let disk, !frozen, disk.wipe() else { return false }
+        var fresh = Notebook()
+        let first = Tutorial.note(now: Clock.now())
+        fresh.notes = [first]
+        Seats.fixOrder(&fresh)
+        draft = ""
+        toast = nil
+        replaceBook(fresh)
+        open(first.id)
+        return disk.write(fresh)
+    }
+
     /// 記事本的內文（每打一個字叫一次）
     func setBody(_ id: String, _ text: String) {
         guard book.note(id)?.body != text else { return }

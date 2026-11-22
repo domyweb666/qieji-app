@@ -264,6 +264,7 @@ enum Tok {
         static let shadowSoft: Double = 0.14
         static let shadowStrong: Double = 0.24
         static let aboutLogo: CGFloat = 64
+        static let socialIcon: CGFloat = 26 // 設定頁最下面網站／FB／IG 小圖示
         // 目錄面板（數值照 Expo 版 tokens.ts 的 shape）
         static let borderCard: CGFloat = 1
         static let tileLabelH: CGFloat = 16

@@ -58,14 +58,18 @@ final class Disk {
 
     // MARK: 讀
 
+    /// 清除所有資料之後記著：不准再從 1.1 的舊存檔搬回來（舊檔只讀不改，還留在 app 裡）
+    static let wipedKey = "qieji.native.wiped"
+
     func load(now: Double = Clock.now()) -> Loaded {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let raw = try? String(contentsOf: stateFile, encoding: .utf8) {
             let mine = loadNative(raw)
             // 補搬：上次打開時沒讀到舊版存檔（剛好讀不到、或舊檔後來才出現），所以手上只有一張沒動過的教學紙；
-            // 這次讀得到了就照樣搬。手上已經有使用者自己的東西就不搬（不拿舊的蓋新的）
+            // 這次讀得到了就照樣搬。手上已經有使用者自己的東西就不搬（不拿舊的蓋新的）；清除過所有資料也不搬
             let onlyTutorial = !mine.unreadable && mine.book.notes.allSatisfy(Tutorial.isUntouched)
-            if onlyTutorial, !FileManager.default.fileExists(atPath: expoCopy.path), let found = legacy() {
+            let wiped = defaults.bool(forKey: Disk.wipedKey)
+            if onlyTutorial, !wiped, !FileManager.default.fileExists(atPath: expoCopy.path), let found = legacy() {
                 return loadLegacy(found.raw, old: found.old)
             }
             return mine
@@ -137,6 +141,24 @@ final class Disk {
             Disk.log.error("write failed: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    /// 清除所有資料（只清這支手機）：另存的那幾份（從 1.1 搬過來的原文、讀不出來的那份）拿掉，最近開過的清掉，記下「清過了」
+    func wipe() -> Bool {
+        var clean = true
+        for file in [expoCopy, rescueFile] where FileManager.default.fileExists(atPath: file.path) {
+            do {
+                try FileManager.default.removeItem(at: file)
+            } catch {
+                Disk.log.error("wipe: backup not removed: \(error.localizedDescription, privacy: .public)")
+                clean = false
+            }
+        }
+        defaults.removeObject(forKey: LegacyStore.recentKey)
+        defaults.removeObject(forKey: LegacyStore.lastKey)
+        defaults.set(true, forKey: Disk.wipedKey)
+        written = nil
+        return clean
     }
 
     func rememberLast(_ id: String?) {

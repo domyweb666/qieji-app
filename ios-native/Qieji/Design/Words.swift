@@ -179,6 +179,66 @@ enum Words {
     }
 
     static let fullOnlyControl = "控制中心的「記一行」是完整版功能"
+    // 設定頁（1.1 settings.tsx）
+    static let look = "外觀"
+    static let textSize = "紙上的字級"
+    static let groupGeneral = "一般"
+    static let groupData = "資料"
+    static let groupBuy = "購買"
+    static let groupSupport = "支援"
+    static let groupAbout = "關於"
+    static let cloudSync = "iCloud 同步"
+    static let cloudSyncLocked = "iCloud 同步，完整版功能"
+    static let wipeRow = "清除所有資料"
+    static let wipeAskTitle = "要清除所有資料嗎？"
+    static let goOn = "繼續"
+    static let wipeSureTitle = "真的要刪除這支手機上的所有資料？"
+    static let wipeAll = "刪除所有資料"
+    static let wipeCloudOn = "iCloud 同步會先關掉。iCloud 雲碟和其他裝置上的清單不會被動到，之後重新打開同步就會回來。"
+    static let wipeCloudOff = "iCloud 同步現在關著，iCloud 雲碟裡原本的檔案不會被動到。"
+    static let wipeNoCloud = "你沒有 iCloud 同步，刪掉之後找不回來。"
+    static let wiped = "已清除這支手機上的資料"
+    static let wipeFailTitle = "沒有清成功"
+    static let wipeFailBody = "資料沒有被動到一半：再試一次，或把茄記滑掉重開"
+    static let copyMail = "複製信箱"
+    static let mailCopied = "已複製信箱"
+    static let feedback = "意見回饋"
+    static let rateUs = "在 App Store 給我們評分"
+    static let shareApp = "分享給朋友"
+    static let news = "新功能"
+    static let ok = "好"
+    static func newsTitle(_ version: String) -> String {
+        "茄記 \(version) 的新功能"
+    }
+
+    static let family = "蔬菜家族的其他 app"
+    static let getApp = "取得"
+    static let privacy = "隱私權政策"
+    static let madeBy = "Made by DOMYWEB"
+    static let site = "DOMYWEB 網站"
+    static let diagCopied = "已複製版本資訊"
+    static let diagHint = "長按複製版本資訊"
+    static let syncFootLocked = "完整版功能。換手機、刪掉重裝，紙都會回來。"
+    static let syncFootOff = "同步關著，紙只存在這支手機。iCloud 雲碟裡原本的檔案都還在。"
+    static let syncFootNoDrive = "iCloud 雲碟沒開，紙只存在這支手機。到「設定 › 你的名字 › iCloud › iCloud 雲碟」打開。"
+    static let syncFootOn = "同步開著。打開茄記時會自己同步。"
+    static let cantOpen = "打不開"
+    static let tryLater = "等一下再試一次"
+    static let cantMail = "開不了郵件"
+    static let restoredPurchase = "已恢復你的購買"
+    static let noPurchaseTitle = "沒有找到購買紀錄"
+    static let noPurchaseBody = "這個 Apple 帳號沒有買過茄記完整版。用別的 Apple 帳號買的話，先到 App Store 換成那個帳號再試"
+    static let unverifiedTitle = "Apple 傳回的購買記錄驗不過"
+    static let unverifiedBody = "先當作沒買。等一下再按一次「恢復購買」"
+    static let offlineTitle = "連不上 App Store"
+    static func wipeAskBody(_ cloud: String) -> String {
+        "這支手機上所有清單和最近刪除都會刪除，無法復原。\(cloud)"
+    }
+
+    static func mailTo(_ mail: String) -> String {
+        "寫到這個信箱就可以：\(mail)"
+    }
+
     // 付費頁（1.1 full.tsx）
     static let fullName = "茄記完整版"
     static let close = "關閉"
