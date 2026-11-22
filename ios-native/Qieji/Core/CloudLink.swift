@@ -145,7 +145,7 @@ final class CloudLink: ObservableObject {
         let drive = drive
         queue.async { [weak self] in
             let result = CloudSync(drive: drive).push(&copy, goneSent: &sent)
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 busy = false
                 goneSent = sent

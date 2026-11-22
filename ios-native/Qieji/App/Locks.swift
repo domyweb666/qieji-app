@@ -28,7 +28,7 @@ final class Locks: ObservableObject {
         let context = LAContext()
         context.localizedCancelTitle = Words.cancel
         if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) {
-            guard (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) == true else {
+            guard await (try? context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) == true else {
                 return false
             }
         }
