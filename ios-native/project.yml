@@ -76,9 +76,15 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - QiejiTests
+      - path: QiejiTests
+        excludes:
+          - "*.storekit"
+      # StoreKit 的測試商店設定檔（購買測試用，不連 App Store）：當資源帶進測試包
+      - path: QiejiTests/Full.storekit
+        buildPhase: resources
     dependencies:
       - target: Qieji
+      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.QiejiTests

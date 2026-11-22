@@ -31,6 +31,14 @@ struct RootView: View {
     @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
     @State private var shownID: String?
     @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
+    @ObservedObject private var shop = Purchases.shared
+
+    /// 假資料模式、跑單元測試：不碰 App Store
+    private static var offline: Bool {
+        let info = ProcessInfo.processInfo
+        return info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1"
+            || info.environment["XCTestConfigurationFilePath"] != nil
+    }
 
     init() {
         let made = RootView.makeStore()
@@ -95,12 +103,26 @@ struct RootView: View {
         .overlay { DirHost(store: store, model: dir) { route = $0 } }
         .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
         .sheet(item: $route, onDismiss: openDirIfAsked) { sheet($0) }
-        .onAppear { store.boot() }
+        .onAppear {
+            store.boot()
+            if !RootView.offline {
+                shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
+            }
+        }
         .onChange(of: phase) { now in
             if now == .active {
                 store.purgeTrash()
+                if !RootView.offline {
+                    Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
+                }
             } else {
                 store.flush()
+            }
+        }
+        // 完整版買了沒：只聽 StoreKit（假資料模式固定當買了，見 makeStore）
+        .onReceive(shop.$full) { full in
+            if !RootView.offline {
+                store.isFull = full
             }
         }
         .onOpenURL { url in
