@@ -9,6 +9,12 @@ final class Store: ObservableObject {
     /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
     @Published var composeAsk = 0
     private var composePending = false
+    /// 右下 ＋ 被按了一下（＋ 畫在紙外面，換紙時不跟著閃）：每按一次加一，紙自己決定開不開輸入框
+    @Published var plusAsk = 0
+    /// 右下 ＋ 要不要畫（紙依自己的狀態說：鍵盤、輸入框、選單開著就不畫）
+    @Published var fabShown = false
+    /// 輸入框裡打到一半的字：換到別張紙時跟著原本那張走，不丟（1.1 closeNote）
+    var draft = ""
 
     /// 要現在這張紙升起輸入框。紙還沒出現就先留著，出現時自己拿
     func requestCompose() {
@@ -76,18 +82,33 @@ final class Store: ObservableObject {
         currentID = id
         disk?.rememberLast(id)
         if let leaving, leaving != id {
+            keepDraft(in: leaving)
             tidy(leaving)
         }
     }
 
+    /// 拿走輸入框裡的字（拿了就清空）
+    func takeDraft() -> String {
+        let text = draft
+        draft = ""
+        return text
+    }
+
+    /// 輸入框裡打到一半的字記成那張紙最上面一行（換紙、切到別的 app 時用；滿了也照記，字不能丟）
+    func keepDraft(in id: String) {
+        let clean = Labels.trim(takeDraft())
+        guard !clean.isEmpty, book.note(id) != nil else { return }
+        editNote(id) { $0.items.insert(Item(text: clean), at: 0) }
+    }
+
     // MARK: 紙上的行
 
-    /// 右下 ＋ 記一行：放在最上面。回傳新行的 id；滿了回 nil
+    /// 右下 ＋ 記一行：放在最上面。回傳新行的 id；沒字回 nil。
+    /// 收起輸入框時打的字照記，滿 1000 行也不丟（1.1 closeComposer）；滿了不准再開輸入框，在按 ＋ 那一刻擋
     @discardableResult
     func addTop(_ text: String) -> String? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, let note = current else { return nil }
-        guard Lines.room(note) > 0 else { toast = Toast(text: Words.full(Lines.max)); return nil }
+        guard !clean.isEmpty, current != nil else { return nil }
         let item = Item(text: clean)
         editCurrent { $0.items.insert(item, at: 0) }
         return item.id

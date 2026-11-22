@@ -19,6 +19,7 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     @Published var dragHeight: CGFloat = 0
     @Published var floatY: CGFloat = 0 // 拖著的那一行浮在清單上面的位置（從清單頂算）
     @Published var fading: Set<String> = [] // 從選單刪的行：先淡出，淡完才真的拿掉
+    @Published var fresh: String? // 輸入框剛記下的那一行：亮一下再淡掉
 
     /// 清單交進來的
     var order: [String] = []
@@ -82,10 +83,28 @@ final class ListTouch: NSObject, ObservableObject, UIGestureRecognizerDelegate {
         view.panGestureRecognizer.require(toFail: gripPan)
     }
 
-    /// 記下新的一行之後捲回最上面
-    func scrollToTop() {
-        guard let scroll else { return }
-        scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: true)
+    private let glider = Glide()
+
+    /// 記下新的一行之後捲回最上面（見 Glide）
+    func glideTop() {
+        if let scroll {
+            glider.toTop(scroll)
+        }
+    }
+
+    /// 在最上面加一行但畫面原地不動（1.1 anchorNext）：已經捲下去了，就往下補捲新行那麼高
+    func keepStill(_ change: () -> Void) {
+        guard let scroll else {
+            change()
+            return
+        }
+        let offset = scroll.contentOffset.y, before = scroll.contentSize.height
+        change()
+        guard offset > Tok.Shape.rowMin else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let scroll = self?.scroll else { return }
+            scroll.contentOffset.y = offset + (scroll.contentSize.height - before)
+        }
     }
 
     // MARK: 誰可以開始

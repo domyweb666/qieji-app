@@ -1,0 +1,227 @@
+import SwiftUI
+import UIKit
+
+/// 紙最上面（照 1.1.1）：左邊清單名的小膠囊（點了切換清單）、右邊 ⋯；
+/// 下面一列左邊「多久前」、右邊完整時間，底下一條格線。名字離左邊 20，跟時間、每一行的字對齊
+struct PaperHeader: View {
+    @ObservedObject var store: Store
+    let note: Note
+    let colors: Tok.NoteColors
+    @Binding var renaming: Bool
+    var showDone = false
+    let onTitle: () -> Void
+    let onDone: () -> Void
+    let onRoute: (Route) -> Void
+    let onRename: () -> Void
+    let onPinFull: ([Note]) -> Void
+    @FocusState private var titleFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tok.Space.zero) {
+            HStack(spacing: Tok.Space.sm) {
+                if renaming {
+                    titleField
+                } else {
+                    titlePill
+                }
+                Spacer(minLength: Tok.Space.sm)
+                Menu { PaperMenu(store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull) } label: {
+                    Image(systemName: "ellipsis")
+                        .font(Tok.Font.barIcon)
+                        .foregroundColor(Tok.Col.textPrimary)
+                        .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
+                        .frost(Circle(), interactive: true)
+                }
+                .accessibilityLabel(Words.more)
+                // 打字時 ⋯ 右邊多一顆茄紫 ✓（照 iOS 提醒事項），⋯ 用鍵盤的時鐘滑過去讓位
+                if showDone {
+                    DoneButton(action: onDone).transition(.opacity)
+                }
+            }
+            .animation(Tok.Motion.keyboard, value: showDone)
+            .padding(.leading, Tok.Space.lg)
+            .padding(.trailing, Tok.Space.gutter)
+            .padding(.top, Tok.Space.sm)
+            HStack(spacing: Tok.Space.sm) {
+                Text(Dates.ago(note.updated))
+                Spacer(minLength: Tok.Space.sm)
+                Text(Dates.full(note.updated))
+            }
+            .font(Tok.Font.footnote)
+            .foregroundColor(Tok.Col.textSecondary)
+            .padding(.horizontal, Tok.Space.gutter)
+            .padding(.top, Tok.Space.xs)
+            .padding(.bottom, Tok.Space.xl)
+            .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
+        }
+    }
+
+    /// ⋯「改名字」：名字原地變成可以打字（1.1：多行輸入框才不會切到 28 點中文的字頂；Return＝改好收起，貼上的換行換成空格）
+    private var titleField: some View {
+        TextField("", text: titleText, prompt: Text(Words.renameHint).foregroundColor(Tok.Col.textMuted), axis: .vertical)
+            .font(Tok.Font.title)
+            .foregroundColor(Tok.Col.textPrimary)
+            .submitLabel(.done)
+            .focused($titleFocused)
+            .frame(minHeight: Tok.Shape.hitMin)
+            .padding(.horizontal, Tok.Space.xs)
+            .dynamicTypeSize(...Tok.Font.titleMaxScale)
+            .accessibilityLabel(Words.titleField)
+            .onAppear { DispatchQueue.main.async { titleFocused = true } }
+            .onChange(of: titleFocused) { focused in
+                if !focused {
+                    renaming = false
+                }
+            }
+    }
+
+    private var titleText: Binding<String> {
+        Binding(get: { note.title }, set: { value in
+            guard value.contains("\n") else {
+                store.setTitle(note.id, value)
+                return
+            }
+            let typedReturn = value.hasSuffix("\n") && (value as NSString).length == (note.title as NSString).length + 1
+            store.setTitle(note.id, typedReturn ? String(value.dropLast()) : value)
+            if typedReturn {
+                titleFocused = false
+            }
+        })
+    }
+
+    /// 清單名的小膠囊（2026-11-04 多米定案，大字那種拿掉）：茄紫細框、小方磚＋名字＋▾，寬度照內容、太長就截。沒取名用灰字
+    private var titlePill: some View {
+        let named = !Labels.trim(note.title).isEmpty
+        return Button(action: onTitle) {
+            HStack(spacing: Tok.Space.sm) {
+                NoteTile(note: note, side: Tok.Shape.titleIcon)
+                Text(Labels.label(note))
+                    .font(Tok.Font.headline)
+                    .foregroundColor(named ? Tok.Col.textPrimary : Tok.Col.textSecondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(Tok.Font.chevron)
+                    .foregroundColor(Tok.Col.textSecondary)
+            }
+            .padding(.leading, Tok.Space.sm)
+            .padding(.trailing, Tok.Space.md)
+            .frame(minHeight: Tok.Shape.hitMin)
+            .overlay(Capsule().strokeBorder(Tok.Col.accent, lineWidth: Tok.Shape.pillBorder))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressDim())
+        .dynamicTypeSize(...Tok.Font.titleMaxScale)
+        .padding(.horizontal, Tok.Space.xs)
+        .accessibilityLabel("\(Labels.label(note))，\(Words.switchTitle)")
+    }
+}
+
+/// ⋯ 選單（照 1.1.1）：最上面一排九色（iOS 17 起是色點，16 是子選單）；改名字、釘選、分享、複製全文、
+/// 「清單」那組（上下順序反轉、全部恢復、清掉劃掉的行）、設定、刪除這張
+struct PaperMenu: View {
+    @ObservedObject var store: Store
+    let note: Note
+    let onRoute: (Route) -> Void
+    let onRename: () -> Void
+    let onPinFull: ([Note]) -> Void
+
+    var body: some View {
+        colors
+        Button(action: onRename) { Label(Words.rename, systemImage: "pencil") }
+        Button {
+            if let pins = store.pinOrAsk(note.id) {
+                onPinFull(pins)
+            }
+        } label: {
+            Label(note.pinned ? Words.unpin : Words.pin, systemImage: note.pinned ? "pin.slash" : "pin")
+        }
+        ShareLink(item: shareText) { Label(Words.share, systemImage: "square.and.arrow.up") }
+        Button {
+            UIPasteboard.general.string = shareText
+            store.toast = Store.Toast(text: Words.copied)
+        } label: { Label(Words.copyAll, systemImage: "doc.on.doc") }
+        if listGroup {
+            Section {
+                if note.items.count >= 2 {
+                    Button { store.reverseLines(note.id) } label: { Label(Words.reverse, systemImage: "arrow.up.arrow.down") }
+                }
+                if anyDone {
+                    Button { store.unstrikeAll(note.id) } label: { Label(Words.unstrikeAll, systemImage: "arrow.uturn.backward") }
+                    Button { store.clearDone(note.id) } label: { Label(Words.clearDone, systemImage: "eraser") }
+                }
+            }
+        }
+        Button { onRoute(.settings) } label: { Label(Words.settings, systemImage: "gearshape") }
+        Button(role: .destructive) { store.trashNote(note.id, reopen: true) } label: { Label(Words.deleteNote, systemImage: "trash") }
+    }
+
+    private var anyDone: Bool {
+        note.items.contains(where: \.done)
+    }
+
+    private var listGroup: Bool {
+        !note.isText && (note.items.count >= 2 || anyDone)
+    }
+
+    /// 分享、複製全文：名字空一行，再來每行編號
+    private var shareText: String {
+        (note.title.isEmpty ? "" : note.title + "\n\n") + Labels.plain(note)
+    }
+
+    private var colorBinding: Binding<String> {
+        Binding(get: { note.color }, set: { key in
+            guard key != note.color else { return }
+            store.setColor(note.id, key)
+            Haptic.tick() // 選單不關，震一下才知道有換到
+        })
+    }
+
+    @ViewBuilder private var colors: some View {
+        if #available(iOS 17.0, *) {
+            Picker(Words.colorTitle, selection: colorBinding) {
+                ForEach(NoteColor.keys, id: \.self) { key in
+                    Label(ColorName.voice(key), systemImage: "circle.fill")
+                        .tint(Tok.note(key).dot)
+                        .tag(key)
+                }
+            }
+            .pickerStyle(.palette)
+        } else {
+            Picker(Words.colorTitle, selection: colorBinding) {
+                ForEach(NoteColor.keys, id: \.self) { key in
+                    Text(ColorName.voice(key)).tag(key)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+    }
+}
+
+/// 顏色的名字（VoiceOver、選單用）：「紫色（茄子）」，跟 1.1 Swatches 一樣
+enum ColorName {
+    static func voice(_ key: String) -> String {
+        NoteColor.names[key].map { "\($0.hue)（\($0.name)）" } ?? key
+    }
+}
+
+/// 小方磚：紙的顏色＋正中間一個字（切換清單、清單名旁邊共用）。外面一圈 1 點紙的格線色（1.1 NoteIcon），白蘿蔔才看得出邊
+struct NoteTile: View {
+    let note: Note
+    let side: CGFloat
+
+    var body: some View {
+        let colors = Tok.note(note.color)
+        let shape = RoundedRectangle(cornerRadius: side * Tok.Shape.tileRadiusRatio)
+        shape
+            .fill(colors.dot)
+            .frame(width: side, height: side)
+            .overlay(
+                Text(Labels.glyph(note))
+                    .font(Tok.Font.glyph(side))
+                    .foregroundColor(colors.ink)
+                    .minimumScaleFactor(0.5)
+            )
+            .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
+            .accessibilityHidden(true)
+    }
+}

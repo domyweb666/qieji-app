@@ -14,6 +14,10 @@ extension Store {
         }
         frozen = found.frozen
         disk.seedRecent(found.recent, last: found.last)
+        Prefs.shared.start(
+            old: found.source == .legacy ? found.legacy : nil, fresh: found.source == .fresh,
+            bundleID: Bundle.main.bundleIdentifier ?? "org.domyweb.qieji"
+        )
         adopt(found.book, last: found.last)
         if found.unreadable {
             toast = Toast(text: Words.unreadable)

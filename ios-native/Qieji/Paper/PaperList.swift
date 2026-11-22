@@ -61,6 +61,12 @@ struct PaperList: View {
             armed: armed,
             glow: touch.glow(slide, armed: armed),
             labelScale: sliding ? touch.labelScale : 1,
+            fresh: touch.fresh == item.id,
+            onFreshDone: {
+                if touch.fresh == item.id {
+                    touch.fresh = nil
+                }
+            },
             held: held,
             actions: actions(for: item.id),
             voice: voiceActions(item, index: index)
@@ -123,7 +129,11 @@ struct PaperList: View {
             editingID = id
             focus = FocusAsk(token: Tick.next(), point: point)
         }
-        touch.onTapBlank = { editingID = nil }
+        // 點空白處：收鍵盤（打字中的行收起；輸入框開著就記下來再收）
+        touch.onTapBlank = {
+            editingID = nil
+            KeyboardWatch.dismiss()
+        }
         touch.onLongPress = { onMenu($0, $1) }
         // 拿起一行排順序：收鍵盤（1.1）
         touch.onDragBegan = {
@@ -186,6 +196,8 @@ struct PaperRow: View {
     let armed: Bool
     var glow: Double = 1
     var labelScale: CGFloat = 1
+    var fresh = false
+    var onFreshDone: () -> Void = {}
     let held: Bool
     let actions: LineActions
     let voice: [VoiceAct]
@@ -217,6 +229,9 @@ struct PaperRow: View {
                 colors.paper
                 if editing {
                     Tok.Col.rowEditingFill
+                }
+                if fresh {
+                    FreshGlow(done: onFreshDone)
                 }
             })
             .offset(x: slide)

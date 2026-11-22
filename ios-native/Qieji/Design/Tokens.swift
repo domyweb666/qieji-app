@@ -221,6 +221,7 @@ enum Tok {
         static let hairline: CGFloat = 1
         static let borderSelected: CGFloat = 3
         static let pillBorder: CGFloat = 1.5 // 清單名小膠囊的茄紫細框（borderSelected 的一半）
+        static let tipTailTurn: Double = 45 // 提示卡小尾巴（方塊轉幾度）
         static let hitMin: CGFloat = 44
         static let rowMin: CGFloat = 52
         static let menuRow: CGFloat = 48
@@ -301,6 +302,8 @@ enum Tok {
         static let keyboard = Animation.timingCurve(0.17, 0.59, 0.4, 0.77, duration: 0.25)
         static let freshGlowFade = Animation.easeOut(duration: 0.6)
         static let freshGlowDelay: Double = 0.3
+        static let freshGlowSeconds: Double = 0.6
+        static let toTopSeconds: Double = 0.3 // 記下新的一則捲回最上面（1.1 toTop，跟 freshGlowDelay 對齊）
         static let dragLiftScale: CGFloat = 1.02
         static let swipeLabelFrom: Double = 0.35
         static let swipeLabelArm: CGFloat = 1.15

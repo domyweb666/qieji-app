@@ -69,6 +69,10 @@ struct RootView: View {
         }
         // 換一張紙：舊的淡出、新的淡入（只寫 transition 不接動畫的話是直接跳）
         .animation(Tok.Motion.fade, value: store.currentID)
+        // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
+        .overlay(alignment: .bottomTrailing) {
+            PlusButton(shown: store.fabShown && store.current?.locked != true) { store.plusAsk += 1 }
+        }
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
         .overlay { DirHost(store: store, model: dir) { route = $0 } }
         .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
