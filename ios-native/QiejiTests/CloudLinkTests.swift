@@ -29,17 +29,20 @@ final class CloudLinkTests: XCTestCase {
         return (store, link)
     }
 
-    private func wait(_ what: String, timeout: Double = 8, _ done: @escaping () -> Bool) {
-        let gate = expectation(description: what)
-        func poll() {
-            if done() {
-                gate.fulfill()
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: poll)
+    /// 等到 done() 成立，最多 timeout 秒。用 async 的等法：測試在主執行緒上讓出來，
+    /// CloudLink 從背景回主執行緒的事（合併、等 2 秒再傳）才輪得到。
+    /// 2026-11-22 GitHub 的 Xcode 26.6／iOS 26.5 上，原本用 XCTest 的 wait(for:) 等，這幾件事一直沒跑、三次都等到逾時
+    /// （limrun 的 Xcode 26.4、27.1 都過）。推測是那一版的 wait(for:) 等的時候不處理主執行緒排的事，所以改成不靠它
+    @MainActor
+    private func waitUntil(_ what: String, timeout: Double = 8, _ done: () -> Bool) async {
+        let end = Date().addingTimeInterval(timeout)
+        while !done() {
+            if Date() > end {
+                XCTFail("等不到：\(what)")
+                return
             }
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        poll()
-        wait(for: [gate], timeout: timeout)
     }
 
     func testNotAllowedTouchesNothing() {
@@ -53,25 +56,27 @@ final class CloudLinkTests: XCTestCase {
         XCTAssertTrue(files.isEmpty)
     }
 
-    func testNoteTravelsFromOnePhoneToAnother() {
+    @MainActor
+    func testNoteTravelsFromOnePhoneToAnother() async {
         var note = Note.blank(now: 1000)
         note.title = "從 A 來的"
         note.items = [Item(text: "牛奶")]
         let (storeA, linkA) = phone([note])
         linkA.setAllowed(true) // 先拉（空的）才准傳，傳的時候等 2 秒
-        wait("A 傳上去") { storeA.book.note(note.id)?.syncedHash != nil }
+        await waitUntil("A 傳上去") { storeA.book.note(note.id)?.syncedHash != nil }
 
         var other = Note.blank(now: 2000)
         other.title = "B 自己的"
         other.items = [Item(text: "豆腐")]
         let (storeB, linkB) = phone([other])
         linkB.setAllowed(true)
-        wait("B 拉下來") { storeB.book.note(note.id) != nil }
+        await waitUntil("B 拉下來") { storeB.book.note(note.id) != nil }
         XCTAssertEqual(storeB.book.note(note.id)?.items.map(\.text), ["牛奶"])
         XCTAssertNotNil(storeB.book.note(other.id))
     }
 
-    func testLockedNoteStaysOnThePhone() {
+    @MainActor
+    func testLockedNoteStaysOnThePhone() async {
         var open = Note.blank(now: 1000)
         open.title = "公開"
         open.items = [Item(text: "a")]
@@ -81,7 +86,7 @@ final class CloudLinkTests: XCTestCase {
         secret.items = [Item(text: "b")]
         let (storeA, linkA) = phone([open, secret])
         linkA.setAllowed(true)
-        wait("公開那張傳上去") { storeA.book.note(open.id)?.syncedHash != nil }
+        await waitUntil("公開那張傳上去") { storeA.book.note(open.id)?.syncedHash != nil }
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
         XCTAssertTrue(files.contains("\(open.id).json"))
         XCTAssertFalse(files.contains("\(secret.id).json"))
