@@ -197,7 +197,11 @@ enum Demo {
         var third = Note.blank(color: "green", now: now - 2000)
         third.title = "買菜"
         third.items = [Item(text: "青蔥"), Item(text: "豆腐")]
-        book.notes = [first, second, third]
+        var pad = Note.blank(color: "blue", now: now - 1500)
+        pad.kind = "text"
+        pad.title = "記事本"
+        pad.body = "這是一張記事本。\n不分行，一整頁照你的意思寫。\n\n第二段在這裡。"
+        book.notes = [first, second, third, pad]
         // 目錄要看得出翻頁、資料夾：再放二十幾張各種顏色的，其中四張收在一個資料夾裡
         let names = [
             "想讀的書", "影片點子", "這週要交", "睡前", "京都行程", "課程大綱", "會議", "講稿", "要催的", "報帳",

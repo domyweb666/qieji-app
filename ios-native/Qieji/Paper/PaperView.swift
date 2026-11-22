@@ -23,13 +23,14 @@ struct PaperView: View {
     @State private var renaming = false
     @State private var pinChoices: [Note] = [] // 釘滿時問要換掉哪一張（有值＝問著）
     @FocusState private var composerFocused: Bool
+    @FocusState private var padFocused: Bool
 
     var body: some View {
         let colors = Tok.note(note.color)
         VStack(spacing: Tok.Space.zero) {
             PaperHeader(
                 store: store, note: note, colors: colors, renaming: $renaming,
-                showDone: keyboard.up && (editingID != nil || renaming),
+                showDone: keyboard.up && (editingID != nil || renaming || padFocused),
                 onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
                 onRename: {
                     editingID = nil
@@ -38,11 +39,17 @@ struct PaperView: View {
                 },
                 onPinFull: { pinChoices = $0 }
             )
-            PaperList(
-                store: store, touch: touch, note: note,
-                editingID: $editingID, focus: $focus, colors: colors,
-                onMenu: { openRowMenu($0, bottom: $1) }
-            )
+            Group {
+                if note.isText {
+                    NotePad(store: store, note: note, focused: $padFocused)
+                } else {
+                    PaperList(
+                        store: store, touch: touch, note: note,
+                        editingID: $editingID, focus: $focus, colors: colors,
+                        onMenu: { openRowMenu($0, bottom: $1) }
+                    )
+                }
+            }
             .background(GeometryReader { geo in
                 Color.clear
                     .onAppear { listHeight = geo.size.height }
@@ -111,6 +118,7 @@ struct PaperView: View {
     private func doneTyping() {
         editingID = nil
         renaming = false
+        padFocused = false
         KeyboardWatch.dismiss()
     }
 
@@ -153,7 +161,9 @@ struct PaperView: View {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.composerFocusDelay) {
-            if Lines.room(note) > 0 {
+            if note.isText {
+                padFocused = true // 剛開的新記事本：一打開游標就在裡面
+            } else if Lines.room(note) > 0 {
                 openComposer()
             }
         }

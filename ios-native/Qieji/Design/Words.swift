@@ -21,6 +21,8 @@ enum Words {
     static let renameHint = "這張叫什麼"
     static let titleField = "清單名"
     static let composerField = "輸入框"
+    static let padField = "記事本內文"
+    static let padHint = "想到什麼就寫"
     static let returnTip = "Return 現在是換行，按 ✓ 記下來"
     static let tipHint = "點一下關掉這個提示"
     static let doneKeyboard = "完成，收起鍵盤"

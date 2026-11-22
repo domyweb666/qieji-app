@@ -195,6 +195,7 @@ enum Tok {
         }
 
         static let lineHeightRatio: CGFloat = 26.0 / 17.0 // 內文 17 點、行高 26
+        static let padLineGap: CGFloat = 5.7 // 記事本：17 點字的行距補到行高 26（26 − 17 × 1.1934）
         static let titleMaxScale: DynamicTypeSize = .xxxLarge
     }
 

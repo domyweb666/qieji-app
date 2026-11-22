@@ -96,6 +96,27 @@ extension Store {
         editNote(id) { $0.title = clean }
     }
 
+    /// 記事本的內文（每打一個字叫一次）
+    func setBody(_ id: String, _ text: String) {
+        guard book.note(id)?.body != text else { return }
+        editNote(id) { $0.body = text }
+    }
+
+    /// 開新的記事本（完整版）：玉米黃、放進目錄第一個空位，打開後游標直接在裡面
+    @discardableResult
+    func newPad() -> String {
+        let now = Clock.now()
+        var note = Note.blank(color: "yellow", now: now)
+        note.kind = "text"
+        edit { book in
+            book.notes.append(note)
+            Seats.seatFirstHole(&book, noteID: note.id, now: now)
+        }
+        open(note.id)
+        requestCompose()
+        return note.id
+    }
+
     func rename(_ id: String, _ name: String) {
         let clean = name.replacingOccurrences(of: "\n", with: " ")
         editNote(id) { $0.title = Labels.trim(clean) }
