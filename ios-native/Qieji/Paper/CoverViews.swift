@@ -27,7 +27,7 @@ struct CoverBanner: View {
 
     var body: some View {
         GeometryReader { geo in
-            let top = geo.safeAreaInsets.top
+            let top = Screen.topInset
             let pull = max(0, -spy.y)
             Image(uiImage: photo)
                 .resizable()
@@ -130,5 +130,14 @@ struct TimeRow: View {
         .padding(.top, Tok.Space.xs)
         .padding(.bottom, Tok.Space.xl)
         .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
+    }
+}
+
+/// 瀏海（狀態列）有多高：鋪到螢幕最頂的那一層讀不到自己的安全區，直接問視窗
+enum Screen {
+    static var topInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets.top ?? 0
     }
 }

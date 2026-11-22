@@ -64,10 +64,10 @@ struct DirTileFace: View {
             }
             .frame(width: side, height: side)
             .clipShape(shape)
-                .overlay(alignment: .topTrailing) { badge("pin.fill", show: note.pinned, color: colors.ink) }
-                .overlay(alignment: .topLeading) { badge("lock.fill", show: note.locked, color: colors.ink) }
-                .overlay(shape.strokeBorder(current ? Tok.Col.accent : colors.rule, lineWidth: border))
-                .frame(width: side, height: side)
+            .overlay(alignment: .topTrailing) { badge("pin.fill", show: note.pinned, color: colors.ink) }
+            .overlay(alignment: .topLeading) { badge("lock.fill", show: note.locked, color: colors.ink) }
+            .overlay(shape.strokeBorder(current ? Tok.Col.accent : colors.rule, lineWidth: border))
+            .frame(width: side, height: side)
         }
     }
 

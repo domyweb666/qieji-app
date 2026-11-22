@@ -32,7 +32,7 @@ struct PaperHeader: View {
                     titleField
                 } else if case let .floating(spy) = cover {
                     // 在最上面時不畫（名字已經用大字寫在圖下面），大字捲進標題列後面時淡進來接手
-                    SpyFade(spy: spy, start: { $0.nameEnd - Tok.Space.xl }) { titlePill }
+                    SpyFade(spy: spy, start: { $0.nameEnd - Tok.Space.xl }, content: { titlePill })
                 } else {
                     titlePill
                 }
@@ -60,11 +60,11 @@ struct PaperHeader: View {
             .background {
                 // 有封面圖的清單：圖收到剩一小截時，標題列的底（紙色＋格線）淡進來，之後行從它後面捲過去
                 if let spy = floating {
-                    SpyFade(spy: spy, start: { _ in Tok.Shape.coverBelowBar - Tok.Space.xl }) {
+                    SpyFade(spy: spy, start: { _ in Tok.Shape.coverBelowBar - Tok.Space.xl }, content: {
                         colors.paper
                             .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
                             .ignoresSafeArea(edges: .top)
-                    }
+                    })
                 }
             }
             if case .none = cover {
@@ -269,6 +269,6 @@ struct NoteTile: View {
         .frame(width: side, height: side)
         .clipShape(shape)
         .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
-            .accessibilityHidden(true)
+        .accessibilityHidden(true)
     }
 }

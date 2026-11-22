@@ -43,12 +43,12 @@ final class Purchases: ObservableObject {
         started = true
         full = prefs.string(LegacyStore.fullKey) == "1"
         updates = Task { [weak self] in
-            for await result in Transaction.updates {
+            for await result in StoreKit.Transaction.updates {
                 await self?.settle(result)
             }
         }
         Task {
-            for await result in Transaction.unfinished {
+            for await result in StoreKit.Transaction.unfinished {
                 if case let .verified(deal) = result {
                     await deal.finish()
                 }
@@ -60,7 +60,7 @@ final class Purchases: ObservableObject {
     /// 重新問一次買了沒
     func refresh() async {
         var owned = false, unverified = false
-        for await result in Transaction.currentEntitlements {
+        for await result in StoreKit.Transaction.currentEntitlements {
             switch result {
             case let .verified(deal) where deal.productID == FullRule.productID:
                 if deal.revocationDate == nil {
@@ -83,7 +83,7 @@ final class Purchases: ObservableObject {
         }
     }
 
-    private func settle(_ result: VerificationResult<Transaction>) async {
+    private func settle(_ result: VerificationResult<StoreKit.Transaction>) async {
         if case let .verified(deal) = result {
             await deal.finish()
         }

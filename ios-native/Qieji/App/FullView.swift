@@ -10,15 +10,21 @@ struct FullView: View {
     let close: () -> Void
     @State private var message = ""
 
-    private static let feats: [(icon: String, name: String, sub: String)] = [
-        ("icloud", "iCloud 同步", "換手機、刪掉重裝，紙都會回來"),
-        ("square.grid.2x2", "主畫面和鎖定畫面小工具", "不用打開 app，也看得到上次那張紙"),
-        ("square.and.pencil", "控制中心「記一行」", "在任何畫面按一下，就能開始記"),
-        ("photo", "封面圖", "紙的頂部放一張圖，目錄的磚也換成它"),
-        ("lock", "個別上鎖", "挑幾張鎖起來，打開要 Face ID"),
-        ("doc.text", "記事本", "不分行，一整頁照你的意思寫"),
-        ("textformat.size", "紙上的字級", "小、標準、大、特大"),
-        ("plus.circle", "之後新增的完整版功能", "也都包含，不用再付"),
+    private struct Feat {
+        let icon: String
+        let name: String
+        let sub: String
+    }
+
+    private static let feats = [
+        Feat(icon: "icloud", name: "iCloud 同步", sub: "換手機、刪掉重裝，紙都會回來"),
+        Feat(icon: "square.grid.2x2", name: "主畫面和鎖定畫面小工具", sub: "不用打開 app，也看得到上次那張紙"),
+        Feat(icon: "square.and.pencil", name: "控制中心「記一行」", sub: "在任何畫面按一下，就能開始記"),
+        Feat(icon: "photo", name: "封面圖", sub: "紙的頂部放一張圖，目錄的磚也換成它"),
+        Feat(icon: "lock", name: "個別上鎖", sub: "挑幾張鎖起來，打開要 Face ID"),
+        Feat(icon: "doc.text", name: "記事本", sub: "不分行，一整頁照你的意思寫"),
+        Feat(icon: "textformat.size", name: "紙上的字級", sub: "小、標準、大、特大"),
+        Feat(icon: "plus.circle", name: "之後新增的完整版功能", sub: "也都包含，不用再付"),
     ]
 
     var body: some View {

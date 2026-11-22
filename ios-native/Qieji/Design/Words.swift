@@ -159,6 +159,7 @@ enum Words {
     static func unlockWith(_ price: String) -> String {
         "用 \(price) 解鎖"
     }
+
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"
     }

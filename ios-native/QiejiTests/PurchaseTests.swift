@@ -22,7 +22,16 @@ final class PurchaseTests: XCTestCase {
         XCTAssertFalse(FullRule.confirmed(.unreachable))
     }
 
+    /// 用 StoreKit 測試商店真的買一次、退款一次。limrun 的測試環境裡 product.purchase() 會一直等（2026-11-22 卡過一次），
+    /// 所以預設不跑；在有畫面的 Xcode 裡加環境變數 QIEJI_STOREKIT_TESTS=1 才跑
+    private func needsStore() throws {
+        if ProcessInfo.processInfo.environment["QIEJI_STOREKIT_TESTS"] != "1" {
+            throw XCTSkip("購買整合測試要在 Xcode 開 QIEJI_STOREKIT_TESTS=1 才跑")
+        }
+    }
+
     func testBuyThenRefundLocksAgain() async throws {
+        try needsStore()
         let url = try XCTUnwrap(Bundle(for: PurchaseTests.self).url(forResource: "Full", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: url)
         session.resetToDefaultState()
@@ -48,6 +57,7 @@ final class PurchaseTests: XCTestCase {
     }
 
     func testRestoreFindsNothingWhenNeverBought() async throws {
+        try needsStore()
         let url = try XCTUnwrap(Bundle(for: PurchaseTests.self).url(forResource: "Full", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: url)
         session.resetToDefaultState()
