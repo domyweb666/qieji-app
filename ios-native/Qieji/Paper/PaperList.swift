@@ -126,11 +126,6 @@ struct PaperList: View {
                 }
                 store.dropIfEmpty(id)
             },
-            split: { before, after in
-                guard let next = store.split(id, before: before, after: after) else { return }
-                editingID = next
-                focus = FocusAsk(token: Tick.next(), atStart: true)
-            },
             joinUp: { text in
                 guard let joined = store.joinUp(id, text: text) else { return false }
                 editingID = joined.id

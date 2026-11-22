@@ -69,10 +69,15 @@ final class Store: ObservableObject {
         scheduleSave()
     }
 
+    /// 換到另一張紙。離開的那張收尾（1.1 closeNote）：空行拿掉，整張空白就不留
     func open(_ id: String) {
         guard book.note(id) != nil else { return }
+        let leaving = currentID
         currentID = id
         disk?.rememberLast(id)
+        if let leaving, leaving != id {
+            tidy(leaving)
+        }
     }
 
     // MARK: 紙上的行
@@ -103,9 +108,13 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 刪一行：進這張紙的最近刪除，跳一條可以復原的提示
+    /// 刪一行：進這張紙的最近刪除，跳一條可以復原的提示。空行直接拿掉，不進最近刪除、不提示（1.1 一樣）
     func binLine(_ itemID: String) {
         guard let note = current, let at = note.items.firstIndex(where: { $0.id == itemID }) else { return }
+        if Labels.trim(note.items[at].text).isEmpty {
+            editCurrent { $0.items.remove(at: at) }
+            return
+        }
         let noteID = note.id
         editCurrent { _ = Lines.bin(&$0, itemID, now: Clock.now()) }
         toast = Toast(text: Words.lineDeleted) { [weak self] in
@@ -131,23 +140,20 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 在一行裡按 Return：從游標切成兩行。回傳新那一行的 id；滿了回 nil
-    func split(_ itemID: String, before: String, after: String) -> String? {
-        guard let note = current, let at = note.items.firstIndex(where: { $0.id == itemID }) else { return nil }
-        guard Lines.room(note) > 0 else { toast = Toast(text: Words.full(Lines.max)); return nil }
-        let next = Item(text: after, done: false)
-        editCurrent { note in
-            note.items[at].text = before
-            note.items.insert(next, at: at + 1)
-        }
-        return next.id
-    }
-
-    /// 游標在最前面按 Backspace：這一行的字接到上一行後面。回傳上一行的 id 和接合處（原本上一行有幾個字）
+    /// 游標在最前面按 Backspace（1.1 A5）：空的一行＝這行拿掉、游標回到上一行最後面；有字的行＝字接到上一行後面。
+    /// 劃掉的行不參與併行（多米定）：上一行或這一行是劃掉的，有字的行按了沒反應。
+    /// 回傳游標要去的那行 id 和位置（原本上一行有幾個字）；沒接手回 nil
     func joinUp(_ itemID: String, text: String) -> (id: String, at: Int)? {
         guard let note = current, let at = note.items.firstIndex(where: { $0.id == itemID }), at > 0 else { return nil }
-        let prev = note.items[at - 1]
+        let prev = note.items[at - 1], line = note.items[at]
         let seam = (prev.text as NSString).length
+        if text.isEmpty {
+            editCurrent { $0.items.remove(at: at) }
+            return (prev.id, seam)
+        }
+        if prev.done || line.done {
+            return nil
+        }
         editCurrent { note in
             note.items[at - 1].text = prev.text + text
             note.items.remove(at: at)

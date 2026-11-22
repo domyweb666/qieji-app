@@ -302,11 +302,7 @@ final class DirModel: ObservableObject {
             }
             return
         }
-        let leaving = store.currentID
-        store.open(id)
-        if let leaving, leaving != id {
-            store.dropIfBlank(leaving)
-        }
+        store.open(id) // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
         guard !calm, let frame else {
             close()
             return

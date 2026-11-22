@@ -133,15 +133,8 @@ struct LineText: UIViewRepresentable {
             actions.end(view.text ?? "")
         }
 
-        func textView(_ view: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-            let whole = (view.text ?? "") as NSString
-            // Return＝從游標切成兩行（選字中的 Return 是確認選字，不攔）
-            if text == "\n", view.markedTextRange == nil {
-                actions.split(whole.substring(to: range.location), whole.substring(from: range.location + range.length))
-                return false
-            }
-            return true
-        }
+        // Return 在這一則裡換行（1.1.1 起，多米 2026-11-03：一則要能分好幾段；要新的一則按右下 ＋）。
+        // 貼上帶換行的字、口述「換行」也一樣整段留在這一則，所以不攔 Return，交給系統
     }
 }
 
@@ -149,8 +142,7 @@ struct LineText: UIViewRepresentable {
 struct LineActions {
     var change: (String) -> Void = { _ in }
     var end: (String) -> Void = { _ in }
-    var split: (String, String) -> Void = { _, _ in }
-    /// 回傳有沒有併（有併的話文字框不用自己刪字）
+    /// 回傳有沒有接手（接手的話文字框不用自己刪字）
     var joinUp: (String) -> Bool = { _ in false }
 }
 

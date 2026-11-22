@@ -62,10 +62,20 @@ extension Store {
         return note.id
     }
 
-    /// 離開一張完全空白的紙：直接拿掉，目錄不留空格
+    /// 離開一張完全空白的紙：直接拿掉，目錄不留空格。
+    /// 比 1.1 多兩條保護：最近刪除裡還有它刪掉的行、或放了封面圖，就留著（1.1 會連那些行一起拿掉）
     func dropIfBlank(_ id: String) {
         guard let note = book.note(id), !note.deleted, Labels.isEmpty(note), note.bin.isEmpty, note.cover == nil else { return }
         edit { book in Sync.dropNotes(&book, now: Clock.now()) { $0.id == id } }
+    }
+
+    /// 離開一張紙時收尾（1.1 closeNote）：空行拿掉（不進最近刪除、不動修改時間），整張空白就不留
+    func tidy(_ id: String) {
+        guard let note = book.note(id), !note.deleted else { return }
+        if note.items.contains(where: { Labels.trim($0.text).isEmpty }) {
+            editNote(id, touch: false) { $0.items.removeAll { Labels.trim($0.text).isEmpty } }
+        }
+        dropIfBlank(id)
     }
 
     func rename(_ id: String, _ name: String) {
