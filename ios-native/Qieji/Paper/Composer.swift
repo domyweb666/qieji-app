@@ -7,12 +7,13 @@ import UIKit
 /// 2026-11-23 改成原生：框用系統的「鍵盤線」釘在鍵盤上緣，鍵盤升降、手指把鍵盤往下拖，框都黏著它走
 struct ComposerHost: UIViewRepresentable {
     let open: Bool
-    @Binding var text: String
+    /// 打之前、打之後的字
+    let onText: (String, String) -> Void
     let tip: Bool
     /// 清單頂端在螢幕上的高度：框最高長到這裡
     let topLimit: CGFloat
     let onBlur: () -> Void
-    let onDone: () -> Void
+    let onDone: (Bool) -> Void
     let onTipTap: () -> Void
 
     func makeUIView(context _: Context) -> ComposerView {
@@ -20,7 +21,7 @@ struct ComposerHost: UIViewRepresentable {
     }
 
     func updateUIView(_ view: ComposerView, context _: Context) {
-        view.onText = { text = $0 }
+        view.onText = onText
         view.onBlur = onBlur
         view.onDone = onDone
         view.onTip = onTipTap
@@ -37,9 +38,11 @@ struct ComposerHost: UIViewRepresentable {
 }
 
 final class ComposerView: UIView, UITextViewDelegate {
-    var onText: (String) -> Void = { _ in }
+    var onText: (String, String) -> Void = { _, _ in }
+    private var was = "" // 上一次的字
     var onBlur: () -> Void = {}
-    var onDone: () -> Void = {}
+    /// 有沒有選字選到一半
+    var onDone: (Bool) -> Void = { _ in }
     var onTip: () -> Void = {}
     var topLimit: CGFloat = 0
 
@@ -103,6 +106,7 @@ final class ComposerView: UIView, UITextViewDelegate {
         leaving = false
         hiding = false
         field.text = ""
+        was = ""
         hint.isHidden = false
         card.layer.removeAllAnimations()
         card.isHidden = false
@@ -192,11 +196,17 @@ final class ComposerView: UIView, UITextViewDelegate {
 
     func textViewDidChange(_: UITextView) {
         hint.isHidden = !field.text.isEmpty
-        onText(field.text)
+        let now = field.text ?? ""
+        onText(was, now)
+        was = now
         refit()
     }
 
-    func textViewDidEndEditing(_: UITextView) {
+    func textViewDidEndEditing(_ view: UITextView) {
+        // 注音選到一半就收：系統這時才把字定下來
+        if view.text != was {
+            textViewDidChange(view)
+        }
         if opened {
             onBlur()
         }
@@ -275,7 +285,7 @@ final class ComposerView: UIView, UITextViewDelegate {
         done.setImage(UIImage(systemName: "checkmark", withConfiguration: symbol), for: .normal)
         done.tintColor = UIColor(Tok.Col.textPrimary)
         done.accessibilityLabel = Words.commit
-        done.addAction(UIAction { [weak self] _ in self?.onDone() }, for: .touchUpInside)
+        done.addAction(UIAction { [weak self] _ in self.map { $0.onDone($0.field.markedTextRange != nil) } }, for: .touchUpInside)
         buildTip()
         for part in [card, tipCard, field, hint, done] as [UIView] {
             part.translatesAutoresizingMaskIntoConstraints = false

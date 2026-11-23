@@ -341,7 +341,7 @@ extension LineListView: UIScrollViewDelegate {
 /// 紙拿著它跟清單講話（清單本體由系統建、系統拆，紙不直接握著）
 final class ListRemote {
     weak var list: LineListView?
-    var recording = false // 輸入框按了 ✓ 正在收：這時系統改的字、說「離開了」都不算
+    var recording = false // 輸入框按了 ✓ 正在收：這時系統說「離開了」不算
     let spy = ScrollSpy()
 
     var editingID: String? {

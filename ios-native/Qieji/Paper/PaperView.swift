@@ -30,7 +30,6 @@ struct PaperView: View {
     @State private var editingID: String?
     @State private var rowMenu: RowMenuAsk?
     @State private var composing = false
-    @State private var draft = ""
     @State private var tip = false // ✓ 的單點提示開著
     @State private var listTop: CGFloat = 0
     @State private var renaming = false
@@ -110,7 +109,7 @@ struct PaperView: View {
         }
         .overlay {
             ComposerHost(
-                open: composing, text: $draft, tip: tip, topLimit: listTop,
+                open: composing, onText: typed, tip: tip, topLimit: listTop,
                 onBlur: { remote.recording ? () : closeComposer() }, onDone: doneComposer, onTipTap: { tip = false }
             )
             .ignoresSafeArea()
@@ -143,10 +142,6 @@ struct PaperView: View {
         .onChange(of: store.plusAsk) { _ in addLine() }
         .onChange(of: store.renameAsk) { _ in renameIfAsked() }
         .onChange(of: fabWanted) { _ in updateFab() }
-        .onChange(of: draft) { [draft] text in
-            store.draft = text
-            noticeReturn(prev: draft, next: text)
-        }
         // 切到別的 app、鎖螢幕：輸入框裡打到一半的字先記成一行、框收起、馬上存（1.1 多米 2026-11-01 定）
         .onChange(of: phase) { now in
             if now != .active, composing {
@@ -176,7 +171,6 @@ struct PaperView: View {
         editingID = nil
         rowMenu = nil
         composing = false
-        draft = ""
         tip = false
         renaming = false
         padFocused = false
@@ -311,7 +305,6 @@ struct PaperView: View {
 
     private func openComposer() {
         guard !composing, !note.isText, !lockedNow else { return }
-        draft = ""
         store.draft = ""
         composing = true
     }
@@ -334,7 +327,6 @@ struct PaperView: View {
     private func closeComposer(stay: Bool = false) {
         guard composing else { return }
         let text = Labels.trim(store.takeDraft())
-        draft = ""
         tip = false
         composing = false
         guard !text.isEmpty else { return }
@@ -351,15 +343,24 @@ struct PaperView: View {
 
     /// 輸入框的 ✓：記下來、收起，鍵盤一起收。
     /// 先收鍵盤，框才會跟它同一段動畫往下走（等畫面更新時才收，框會直接跳到底、看起來整個不見）。
-    /// 字先拿在手上：收鍵盤的時候系統會把建議的字補進來（打 he 變 hello），那不是他打的
-    private func doneComposer() {
+    /// 字先拿在手上：收鍵盤的時候系統會自動訂正，那不是他打的。marked＝注音選到一半：照系統定下來的字（跟行裡打字一樣）
+    private func doneComposer(marked: Bool) {
         guard composing else { return }
         let text = store.takeDraft()
         remote.recording = true
         KeyboardWatch.dismiss()
         remote.recording = false
-        store.draft = text
+        let settled = store.takeDraft()
+        store.draft = marked && !settled.isEmpty ? settled : text
         closeComposer()
+    }
+
+    /// 輸入框裡打了字。字記在 store，不放在這個畫面的狀態裡：每打一個字整張紙重畫一次會卡
+    private func typed(prev: String, next: String) {
+        store.draft = next
+        if !remote.recording {
+            noticeReturn(prev: prev, next: next)
+        }
     }
 
     /// 從 1.0 更新上來的人第一次在輸入框按 Return：✓ 上面冒一張小卡（一輩子一次）
