@@ -20,7 +20,14 @@ extension LineListView {
     @objc func onGrip(_ gesture: GripPan) {
         switch gesture.state {
         case .began:
-            guard let row = row(at: touchStart), let from = spot(of: row.id), row.runner == nil else { return }
+            guard let row = row(at: touchStart), let from = spot(of: row.id), abs(row.seenSlide) < 1 else { return }
+            // 上一次滑動、放下只剩看不見的尾巴：停掉，從定位拿起
+            if row.runner != nil {
+                row.runner?.stopAnimation(true)
+                row.runner = nil
+                row.settle()
+                placeAll()
+            }
             // 拿起那一刻收鍵盤（1.1）
             window?.endEditing(true)
             let finger = gesture.location(in: self).y - contentOffset.y
@@ -148,18 +155,19 @@ extension LineListView {
             finishLanding()
             return
         }
-        let runner = UIViewPropertyAnimator(
-            duration: .zero, timingParameters: Tok.Motion.spring(Tok.Motion.slideBack, velocity: abs(left) < 1 ? 0 : speed / left)
-        )
+        let pace = abs(left) < 1 ? 0 : speed / left
+        let runner = UIViewPropertyAnimator(duration: .zero, timingParameters: Tok.Motion.spring(Tok.Motion.slideBack, velocity: pace))
         runner.isUserInteractionEnabled = true
         runner.addAnimations { row.center.y = now.top + rest + now.height / 2 }
-        runner.addCompletion { [weak self] _ in
-            row.runner = nil
+        runner.addCompletion { [weak row] _ in row?.runner = nil }
+        row.runner = runner
+        runner.startAnimation()
+        // 看起來到了就換資料，不等彈簧的尾巴停下來（動畫照跑完）
+        let there = Motions.arrival(Tok.Motion.slideBack, velocity: pace, over: left)
+        DispatchQueue.main.asyncAfter(deadline: .now() + there) { [weak self] in
             guard let self, dragTurn == turn else { return }
             finishLanding()
         }
-        row.runner = runner
-        runner.startAnimation()
     }
 
     /// 還在滑進落點時手指又碰了：不等滑完，馬上落定

@@ -28,7 +28,8 @@ struct SwitchPanel: View {
                     .accessibilityLabel(Words.closeSwitch)
                     .accessibilityAddTraits(.isButton)
                 sheet(maxHeight: geo.size.height * Tok.Shape.switchMaxRatio, bottom: geo.safeAreaInsets.bottom)
-                    .offset(y: calm ? 0 : (shown ? drag : max(height, geo.size.height)))
+                    // 升起時還沒量到面板多高，從整個螢幕外面開始；收起走面板自己那麼高（1.1）
+                    .offset(y: calm ? 0 : (shown ? drag : (closing ? height : max(height, geo.size.height))))
                     .opacity(calm && !shown ? 0 : 1)
             }
             // 面板貼到螢幕最底（Home 條那一段也是面板），底部的空間在面板裡面自己留（geo 還是量得到 Home 條多高）
@@ -91,28 +92,49 @@ struct SwitchPanel: View {
                 .onAppear { height = geo.size.height }
                 .onChange(of: geo.size.height) { height = $0 }
         })
+        .overlay(alignment: .top) { grabArea }
         .ignoresSafeArea(edges: .bottom)
     }
 
-    /// 上緣那條：往下撥，跟著手指；撥過面板高的一成五或往下甩就收起，不然彈回
+    /// 上緣那條的樣子（跟 1.1 一樣高 22 點；收手勢的是 grabArea）
     private var grab: some View {
         Capsule()
             .fill(Tok.Col.textSecondary.opacity(Tok.Shape.handleOff))
             .frame(width: Tok.Shape.handleSolo, height: Tok.Shape.dirGrab)
             .frame(maxWidth: .infinity, minHeight: Tok.Shape.hitMin / 2)
+            .accessibilityHidden(true)
+    }
+
+    /// 往下撥的熱區：上緣那條加上面 22 點，合起來 44（只有那條的話太矮，手指抓不到）。跟著手指；
+    /// 撥過面板高的一成五或往下甩就收起，不然彈回。點上面那半跟點露出的紙一樣是收起
+    private var grabArea: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: Tok.Shape.hitMin)
             .contentShape(Rectangle())
+            .onTapGesture { point in
+                if point.y < Tok.Shape.hitMin / 2 {
+                    dismiss()
+                }
+            }
             .gesture(
-                DragGesture(minimumDistance: Tok.Gesture.pullActivate)
-                    .onChanged { drag = max(0, $0.translation.height) }
+                // 用螢幕座標量：面板自己在動，用它的座標量會抖
+                DragGesture(minimumDistance: Tok.Gesture.pullActivate, coordinateSpace: .global)
+                    .onChanged { value in
+                        if !closing {
+                            drag = max(0, value.translation.height)
+                        }
+                    }
                     .onEnded { value in
-                        let flick = value.predictedEndTranslation.height - value.translation.height > Tok.Gesture.flickAhead
-                        if value.translation.height > height * Tok.Gesture.pushCloseRatio || flick {
-                            dismiss()
+                        let speed = Motions.downSpeed(value)
+                        if value.translation.height > height * Tok.Gesture.pushCloseRatio || speed > Tok.Gesture.flick {
+                            dismiss(speed: speed)
                         } else {
                             withAnimation(Tok.Motion.dirPanel) { drag = 0 }
                         }
                     }
             )
+            .offset(y: -Tok.Shape.hitMin / 2)
             .accessibilityHidden(true)
     }
 
@@ -185,11 +207,14 @@ struct SwitchPanel: View {
         .buttonStyle(MenuRowPress())
     }
 
-    /// 收起：面板馬上開始讓開，then（換紙、開目錄）下一格就做，不等面板收完；收完才拿掉。收到一半又叫一次照第一次的收
-    private func dismiss(then: (() -> Void)? = nil) {
+    /// 收起：面板馬上開始讓開，then（換紙、開目錄）下一格就做，不等面板收完；收完才拿掉。收到一半又叫一次照第一次的收。
+    /// speed＝往下撥放手時手指每秒幾點，接著那個速度收
+    private func dismiss(speed: CGFloat = 0, then: (() -> Void)? = nil) {
         guard !closing else { return }
         closing = true
-        withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.switchClose) { shown = false }
+        let slide = speed == 0
+            ? Tok.Motion.switchClose : Tok.Motion.switchCloseSpring(velocity: Motions.speed(speed, over: height - drag))
+        withAnimation(calm ? Tok.Motion.dirFade : slide) { shown = false }
         if let then {
             DispatchQueue.main.async(execute: then)
         }

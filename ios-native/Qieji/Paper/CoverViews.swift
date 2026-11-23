@@ -117,6 +117,8 @@ struct CoverHead: View {
 struct TimeRow: View {
     let note: Note
     let colors: Tok.NoteColors
+    /// 註記那種字一行多高（1.1 lineHeight 18，字貼著底），跟著系統字級走
+    @ScaledMetric(relativeTo: .footnote) private var line: CGFloat = Tok.Font.footnoteLine
 
     var body: some View {
         HStack(spacing: Tok.Space.sm) {
@@ -126,6 +128,7 @@ struct TimeRow: View {
         }
         .font(Tok.Font.footnote)
         .foregroundColor(Tok.Col.textSecondary)
+        .frame(minHeight: line, alignment: .bottom)
         .padding(.horizontal, Tok.Space.gutter)
         .padding(.top, Tok.Space.xs)
         .padding(.bottom, Tok.Space.xl)

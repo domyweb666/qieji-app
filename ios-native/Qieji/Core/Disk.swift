@@ -29,7 +29,9 @@ final class Disk {
     let dir: URL
     let legacyDirs: [URL]
     private let defaults: UserDefaults
-    private var written: String?
+    /// 寫檔一筆一筆排隊（背景寫的、馬上寫的都排同一條），先叫的先寫完：舊的不會蓋掉新的
+    private let queue = DispatchQueue(label: "org.domyweb.qieji.disk", qos: .userInitiated)
+    private var written: String? // 上次寫進去的那一份。只在 queue 上碰
 
     private var stateFile: URL {
         dir.appendingPathComponent("state.json")
@@ -102,7 +104,7 @@ final class Disk {
             Disk.log.error("state.json unreadable, rescued=\(saved)")
             return Loaded(book: Notebook(), source: .native, last: nil, recent: [], unreadable: true, legacy: [:])
         }
-        written = raw
+        queue.sync { written = raw }
         return Loaded(book: book, source: .native, last: last, recent: recent, unreadable: false, legacy: [:])
     }
 
@@ -125,8 +127,21 @@ final class Disk {
 
     // MARK: 寫
 
-    /// 整份存檔。跟上次寫的一字不差就不再寫。回傳有沒有成功
+    /// 整份存檔，寫完才回來（進背景用）。前面還在背景排隊的先寫完，這一份一定是最後寫的。回傳有沒有成功
     func write(_ book: Notebook) -> Bool {
+        queue.sync { put(book) }
+    }
+
+    /// 整份存檔，在背景做（打字中用，不卡畫面）。done 回主執行緒
+    func writeLater(_ book: Notebook, done: @escaping (Bool) -> Void) {
+        queue.async { [self] in
+            let saved = put(book)
+            DispatchQueue.main.async { done(saved) }
+        }
+    }
+
+    /// 跟上次寫的一字不差就不再寫
+    private func put(_ book: Notebook) -> Bool {
         let text = NoteCoding.write(book)
         if text == written {
             return true
@@ -145,6 +160,7 @@ final class Disk {
 
     /// 清除所有資料（只清這支手機）：另存的那幾份（從 1.1 搬過來的原文、讀不出來的那份）拿掉，最近開過的清掉，記下「清過了」
     func wipe() -> Bool {
+        queue.sync {} // 還在背景排隊的先寫完
         var clean = true
         for file in [expoCopy, rescueFile] where FileManager.default.fileExists(atPath: file.path) {
             do {
@@ -157,7 +173,7 @@ final class Disk {
         defaults.removeObject(forKey: LegacyStore.recentKey)
         defaults.removeObject(forKey: LegacyStore.lastKey)
         defaults.set(true, forKey: Disk.wipedKey)
-        written = nil
+        queue.sync { written = nil }
         return clean
     }
 

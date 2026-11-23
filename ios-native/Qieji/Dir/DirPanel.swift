@@ -83,7 +83,7 @@ struct DirPanel: View {
                 .accessibilityAddTraits(.isButton)
             sheet
                 .coordinateSpace(name: DirPanel.space)
-                .offset(y: model.fading ? 0 : (model.screen.height - Tok.Shape.dirPeek) * (1 - model.progress))
+                .offset(y: model.fading ? 0 : model.travel * (1 - model.progress))
                 // 整塊當成一張淡出：不這樣的話裡面每一層各自變透明，點磚打開時底下那一面磚會透出來閃一下
                 .compositingGroup()
                 .opacity(model.fading ? Double(model.progress) : 1)
@@ -170,14 +170,7 @@ struct DirPanel: View {
             .gesture(
                 DragGesture(minimumDistance: Tok.Gesture.pullActivate, coordinateSpace: .global)
                     .onChanged { model.pull($0.translation.height) }
-                    .onEnded { value in
-                        // 放手時手指往下每秒幾點；iOS 16 量不到，拿「放手後還會走多遠」估
-                        var speed = (value.predictedEndTranslation.height - value.translation.height) * Tok.Gesture.flickPredict
-                        if #available(iOS 17.0, *) {
-                            speed = value.velocity.height
-                        }
-                        model.pullEnd(value.translation.height, velocity: speed)
-                    }
+                    .onEnded { model.pullEnd($0.translation.height, velocity: Motions.downSpeed($0)) }
             )
             .accessibilityLabel(model.editing ? Words.doneEditing : Words.closeDir)
             .accessibilityAddTraits(.isButton)

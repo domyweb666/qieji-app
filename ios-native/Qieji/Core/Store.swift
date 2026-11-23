@@ -3,10 +3,21 @@ import SwiftUI
 
 /// 整個 app 只有一份資料。畫面改資料一律走這裡的方法：改完畫面重畫、稍後存檔。
 final class Store: ObservableObject {
-    @Published private(set) var book: Notebook {
-        didSet { onBook() }
+    private(set) var book: Notebook {
+        willSet {
+            if !quiet {
+                objectWillChange.send()
+            }
+        }
+        didSet {
+            if !quiet {
+                onBook()
+            }
+        }
     }
 
+    /// 這次換的東西畫面上看不到（同步用的指紋與時間）：不叫畫面重畫
+    private var quiet = false
     /// 資料換了馬上叫（目錄開著時照新的排）
     var onBook: () -> Void = {}
     @Published private(set) var currentID: String?
@@ -14,6 +25,8 @@ final class Store: ObservableObject {
     /// 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像提示條會自己消失（1.1 06-首次體驗 ❓7）
     @Published var notice: Notice?
     private var saveFailed = false
+    private var saveTurn = 0 // 第幾次存檔
+    private var savedTurn = 0 // 最新有結果的是第幾次
 
     struct Notice: Equatable {
         let title: String
@@ -246,18 +259,45 @@ final class Store: ObservableObject {
     private func scheduleSave() {
         guard disk != nil else { return }
         saveTask?.cancel()
-        let task = DispatchWorkItem { [weak self] in self?.flush() }
+        let task = DispatchWorkItem { [weak self] in self?.saveSoon() }
         saveTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.saveDebounce, execute: task)
     }
 
-    /// 馬上存（進背景時叫）
+    /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動
+    func saveSoon() {
+        guard let disk, readyToSave() else { return }
+        let turn = saveTurn
+        disk.writeLater(book) { [weak self] saved in self?.saveDone(saved, turn: turn) }
+    }
+
+    /// 馬上存、存完才回來（進背景時叫）。背景還沒寫完的排在前面，最後留在檔案裡的一定是這一份
     func flush() {
+        guard let disk, readyToSave() else { return }
+        saveDone(disk.write(book), turn: saveTurn)
+    }
+
+    /// 存檔前：變過的紙記下時間與指紋、排列補齊。沒變就不換 book；只變指紋不叫畫面重畫
+    private func readyToSave() -> Bool {
         saveTask?.cancel()
-        guard let disk, loaded, !frozen else { return }
-        Sync.stampMods(&book, now: Clock.now())
-        _ = Seats.fixOrder(&book)
-        if disk.write(book) {
+        guard loaded, !frozen else { return false }
+        saveTurn += 1
+        var copy = book
+        let stamped = Sync.stampMods(&copy, now: Clock.now()) > 0
+        let moved = Seats.fixOrder(&copy)
+        if stamped || moved {
+            quiet = !moved
+            book = copy
+            quiet = false
+        }
+        return true
+    }
+
+    /// 存完了（或沒存成）。背景那筆的結果晚到、後面已經又存過一次：只認新的
+    private func saveDone(_ saved: Bool, turn: Int) {
+        guard turn > savedTurn else { return }
+        savedTurn = turn
+        if saved {
             saveFailed = false
             pushWidget() // 存檔成功才推給桌面小工具（1.1 多米 2026-10-31）
             if CloudLink.shared.store === self {

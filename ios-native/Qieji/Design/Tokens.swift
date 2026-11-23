@@ -182,6 +182,7 @@ enum Tok {
         static let body = SwiftUI.Font.body // 17
         static let callout = SwiftUI.Font.subheadline // 15
         static let footnote = SwiftUI.Font.footnote // 13
+        static let footnoteLine: CGFloat = 18 // 註記一行多高（1.1 lineHeight 18）
         static let label = SwiftUI.Font.caption.weight(.medium) // 12
         static let fabSymbol = SwiftUI.Font.system(size: 24, weight: .semibold)
         static let barIcon = SwiftUI.Font.system(size: 20) // 右上 ⋯ 的圖示（1.1 Sym size 20）
@@ -274,6 +275,7 @@ enum Tok {
         // 目錄面板（數值照 Expo 版 tokens.ts 的 shape）
         static let borderCard: CGFloat = 1
         static let tileLabelH: CGFloat = 16
+        static let dirTail: CGFloat = 16 // 目錄收起時多滑出螢幕的一小截
         static let dirPeek: CGFloat = 92 // 面板上面留一截看得到後面的紙
         static let dirGrab: CGFloat = 5
         static let handleSolo: CGFloat = 38
@@ -369,6 +371,10 @@ enum Tok {
         static let blurSpan: Double = 1 // 霧面停在中間用的那段動畫多長（不會真的跑）
         static let slideBack: Double = 0.25 // 劃掉後滑回、沒滑夠彈回、放手滑進落點
         static let slideOut: Double = 0.22 // 刪除滑出畫面
+        static let springNear: CGFloat = 2 // 離終點剩這麼多點以內，看起來就是到了
+        static let goneNear: CGFloat = 12 // 滑出畫面的行剩這麼一小條就算出去了
+        static let springTail: Double = 0.02 // 最多等到感知時長之後再過這麼久
+        static let springStep: Double = 1 / 120
         static let swipeLabelFrom: Double = 0.35
         static let swipeLabelArm: CGFloat = 1.15
         static let pressDim: Double = 0.6
@@ -381,6 +387,11 @@ enum Tok {
         static let dirPanel = Animation.spring(response: 0.34, dampingFraction: 1)
         /// 切換清單收起：點了一張紙馬上換，面板只是讓開，比升起快（1.1 switchClose 240）
         static let switchClose = Animation.spring(response: 0.24, dampingFraction: 1)
+        /// 往下甩收起：同一個彈簧，接著手指的速度
+        static func switchCloseSpring(velocity: CGFloat) -> Animation {
+            .interpolatingSpring(stiffness: 685.39, damping: 52.36, initialVelocity: velocity)
+        }
+
         static let dirPanelSeconds: Double = 0.34
         static let dirFade = Animation.easeInOut(duration: 0.2)
         static let dirFadeSeconds: Double = 0.2
@@ -427,8 +438,7 @@ enum Tok {
         static let swapStill: CGFloat = 3
         static let pullActivate: CGFloat = 10
         static let pushCloseRatio: CGFloat = 0.15
-        static let flickAhead: CGFloat = 140 // 放手後照慣性還會再走這麼遠就算「甩」
-        static let flick: CGFloat = 550 // 目錄往下拉：放手時往下每秒這麼多點就算甩（1.1 flick）
+        static let flick: CGFloat = 550 // 目錄、切換清單往下拉：放手時往下每秒這麼多點就算甩（1.1 flick）
         static let flickPredict: CGFloat = 4 // iOS 16 量不到手指速度：拿「放手後還會走多遠」乘這個估
         static let editLift: CGFloat = 12 // 抖動中手指在磚上移超過這麼多才拿起（1.1）
         static let speedWindow: Double = 0.1 // 算放手速度只看最後這麼多秒

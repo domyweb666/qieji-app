@@ -105,9 +105,8 @@ extension LineListView {
     private func keyboardMoved(_ note: Notification) {
         guard let window, let info = note.userInfo else { return }
         var overlap: CGFloat = 0
-        if note.name != UIResponder.keyboardWillHideNotification,
-           let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
-        {
+        let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+        if note.name != UIResponder.keyboardWillHideNotification, let end {
             let board = window.convert(end, from: nil)
             let mine = convert(bounds, to: window)
             overlap = board.minY < window.bounds.maxY ? max(0, mine.maxY - board.minY) : 0

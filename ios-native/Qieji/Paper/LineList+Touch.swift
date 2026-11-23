@@ -21,14 +21,14 @@ extension LineListView: UIGestureRecognizerDelegate {
     // MARK: 誰可以開始
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        // 還在滑進落點時手指又碰了：馬上落定，這一下照常收（捲動也是，不然剛放下那一刻捲不動）
+        landNow()
+        guard drag == nil else { return false }
         if gesture === panGestureRecognizer {
             // 往旁邊動的不算捲動：留給左右滑
             let speed = panGestureRecognizer.velocity(in: self)
-            return drag == nil && abs(speed.y) >= abs(speed.x)
+            return abs(speed.y) >= abs(speed.x)
         }
-        // 還在滑進落點時手指又碰了：馬上落定，這一下照常收
-        landNow()
-        guard drag == nil else { return false }
         let inGrip = touchStart.x > bounds.width - Tok.Shape.hitMin
         if gesture === swipePan {
             return row(at: touchStart) != nil && swiping == nil
@@ -48,9 +48,8 @@ extension LineListView: UIGestureRecognizerDelegate {
             return false
         }
         // 正在打字的那一行自己收觸控（移游標、選字），不跟清單的手勢搶
-        if gesture === tap || gesture === hold, let id = editingID, let field = live[id]?.field, let view = touch.view,
-           view.isDescendant(of: field)
-        {
+        let typing = editingID.flatMap { live[$0]?.field }
+        if gesture === tap || gesture === hold, let typing, touch.view?.isDescendant(of: typing) == true {
             return false
         }
         if gesture === tap {
@@ -114,6 +113,7 @@ extension LineListView: UIGestureRecognizerDelegate {
             swipeBase = row.runner == nil ? 0 : row.seenSlide
             row.runner?.stopAnimation(true)
             row.runner = nil
+            placeAll() // 剛排好順序、還差一點點滑到：停在原地的那一點補回來
             row.card.alpha = 1
             row.struckAtStart = rows.first { $0.id == row.id }?.done ?? false
             row.beginSlide()
@@ -156,13 +156,17 @@ extension LineListView: UIGestureRecognizerDelegate {
             row.leaving = true
             let goal = -bounds.width
             let pace = abs(goal - spot) < 1 ? 0 : speed / (goal - spot)
-            run(row, Tok.Motion.spring(calm ? Tok.Motion.fadeSeconds : Tok.Motion.slideOut, velocity: calm ? 0 : pace)) {
+            let span = calm ? Tok.Motion.fadeSeconds : Tok.Motion.slideOut
+            run(row, Tok.Motion.spring(span, velocity: calm ? 0 : pace)) {
                 if self.calm {
                     row.alpha = 0
                 } else {
                     row.move(to: goal, glow: 1)
                 }
-            } done: { [weak self] in
+            }
+            // 字一離開畫面就拿掉這一行、下面補上（不等彈簧看不見的尾巴）
+            let gone = Motions.arrival(span, velocity: calm ? 0 : pace, over: goal - spot, near: Tok.Motion.goneNear)
+            DispatchQueue.main.asyncAfter(deadline: .now() + gone) { [weak self] in
                 self?.onDelete(id)
                 self?.refresh()
             }
@@ -189,7 +193,7 @@ extension LineListView: UIGestureRecognizerDelegate {
     }
 
     private func run(
-        _ row: LineRowView, _ spring: UISpringTimingParameters, _ body: @escaping () -> Void, done: @escaping () -> Void
+        _ row: LineRowView, _ spring: UISpringTimingParameters, _ body: @escaping () -> Void, done: @escaping () -> Void = {}
     ) {
         let runner = UIViewPropertyAnimator(duration: .zero, timingParameters: spring)
         runner.isUserInteractionEnabled = true

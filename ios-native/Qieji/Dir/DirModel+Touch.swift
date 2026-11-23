@@ -195,6 +195,19 @@ extension DirModel {
         return acts
     }
 
+    /// VoiceOver 的「往前移／往後移」：照整排格子換（含空位），換頁標記跳過
+    func moveBy(_ id: String, _ step: Int) {
+        var ids = entries.map(\.id)
+        guard let from = ids.firstIndex(of: id) else { return }
+        var target = from + step
+        while target >= 0, target < ids.count, Seats.isBreak(ids[target]) {
+            target += step
+        }
+        guard target >= 0, target < ids.count else { return }
+        ids.swapAt(from, target)
+        store.edit { book in Seats.reseat(&book, visible: ids, now: Clock.now()) }
+    }
+
     func voiceActivate(_ entry: Seats.Entry) {
         if entry.folder != nil {
             showFolder(entry.id)

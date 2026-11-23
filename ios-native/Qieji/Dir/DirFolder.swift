@@ -8,9 +8,15 @@ struct DirFolderView: View {
     @ObservedObject var model: DirModel
     let entry: Seats.Entry
     let currentID: String?
+    @ObservedObject private var covers = Covers.shared
     @Environment(\.accessibilityReduceTransparency) private var solid
-    @Environment(\.accessibilityReduceMotion) private var calm
     @Environment(\.displayScale) private var scale
+
+    init(model: DirModel, entry: Seats.Entry, currentID: String?) {
+        self.model = model
+        self.entry = entry
+        self.currentID = currentID
+    }
 
     var body: some View {
         let metrics = model.metrics
@@ -93,23 +99,13 @@ struct DirFolderView: View {
     private func tile(_ note: Note, index: Int, width: CGFloat) -> some View {
         let metrics = model.metrics, per = DirMetrics.folderPer
         let spot = metrics.slot(index % per, cols: DirMetrics.folderCols)
-        let item = Seats.Entry(id: note.id, note: note, notes: [note])
-        return DirTile(
-            entry: item, cell: metrics.cell, index: index,
+        return DirSlot(
+            model: model, entry: Seats.Entry(id: note.id, note: note, notes: [note]), cell: metrics.cell, index: index,
+            spot: CGPoint(x: CGFloat(index / per) * width + Tok.Space.lg + spot.x, y: Tok.Space.lg + spot.y),
             current: note.id == currentID, editing: model.editing, hidden: model.drag?.id == note.id,
-            held: model.heldID == note.id
+            held: model.heldID == note.id, inFolder: true, covers: covers.version
         )
-        .offset(x: CGFloat(index / per) * width + Tok.Space.lg + spot.x, y: Tok.Space.lg + spot.y)
-        .animation(calm ? nil : Tok.Motion.tileShift, value: index)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.voiceLabel(item))
-        .accessibilityAddTraits(note.id == currentID ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { model.voiceActivate(item) }
-        .accessibilityActions {
-            ForEach(model.voiceActs(item, inFolder: true), id: \.name) { act in
-                Button(act.name, action: act.run)
-            }
-        }
+        .equatable()
     }
 
     private func dots(_ count: Int) -> some View {
@@ -199,7 +195,7 @@ struct DirSearchList: View {
             .padding(.horizontal, Tok.Space.lg)
             .padding(.bottom, Tok.Space.lg)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
     }
 
     private func head(_ hit: Seats.LineHit, _ needle: String) -> some View {
@@ -277,6 +273,6 @@ struct DirPickGrid: View {
                 EmptyNote(lines: [Words.searchNoneNote(Labels.trim(model.query))])
             }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
     }
 }

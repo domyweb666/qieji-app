@@ -7,6 +7,31 @@ enum Motions {
         return min(Tok.Motion.springSpeedMax, max(-Tok.Motion.springSpeedMax, points / distance))
     }
 
+    /// 彈簧（Tok.Motion.spring 那種，不過頭）多久之後只剩看不見的尾巴：距離剩 near 點以內就算到了。
+    /// 動畫自己停下來要再多等 0.3 秒，那段什麼都沒在動，不拿它當「做完了」
+    static func arrival(
+        _ response: Double, velocity: CGFloat, over distance: CGFloat, near points: CGFloat = Tok.Motion.springNear
+    ) -> Double {
+        let pace = 2 * Double.pi / response, near = Double(points / max(1, abs(distance)))
+        let last = response + Tok.Motion.springTail
+        var time: Double = 0
+        while time < last {
+            if (1 + (pace - Double(velocity)) * time) * exp(-pace * time) <= near {
+                return time
+            }
+            time += Tok.Motion.springStep
+        }
+        return last
+    }
+
+    /// 放手時手指往下每秒幾點；iOS 16 量不到，拿「放手後還會走多遠」估
+    static func downSpeed(_ value: DragGesture.Value) -> CGFloat {
+        if #available(iOS 17.0, *) {
+            return value.velocity.height
+        }
+        return (value.predictedEndTranslation.height - value.translation.height) * Tok.Gesture.flickPredict
+    }
+
     /// 跑一段動畫，跑完叫 done。iOS 17 起用系統的「動畫做完了」；更舊的照 fallback 秒數計時
     static func run(_ animation: Animation, fallback: Double, _ body: () -> Void, done: @escaping () -> Void) {
         if #available(iOS 17.0, *) {

@@ -83,6 +83,7 @@ final class DirModel: ObservableObject {
         get { scene.drag }
         set { scene.drag = newValue }
     }
+
     @Published var openFolder: OpenFolder?
     @Published var folderPage = 0
     @Published var menu: Menu?
@@ -149,6 +150,13 @@ final class DirModel: ObservableObject {
 
     var entries: [Seats.Entry] {
         scene.entries
+    }
+
+    /// 全開到收起要滑多遠：面板整個出螢幕，再多一小截。時間到就拿掉，彈簧那時還差一點點，不多走這截會看到一條面板被切掉；
+    /// 打開的資料夾連露出的那截都霧著，所以再加那一截
+    var travel: CGFloat {
+        let peek = openFolder == nil ? Tok.Shape.dirPeek : Tok.Space.zero
+        return max(1, screen.height - peek + Tok.Shape.dirTail)
     }
 
     /// 改資料，改完跟拖曳一起換（中間不多畫一格）
@@ -278,8 +286,10 @@ final class DirModel: ObservableObject {
         if soft {
             fading = true
         }
-        let travel = (screen.height - Tok.Shape.dirPeek) * progress
-        let slide = velocity == 0 ? Tok.Motion.dirPanel : Tok.Motion.dirPanelSpring(velocity: Motions.speed(velocity, over: travel))
+        let slide = velocity == 0 ? Tok.Motion.dirPanel : Tok.Motion.dirPanelSpring(velocity: Motions.speed(
+            velocity,
+            over: travel * progress
+        ))
         withAnimation(soft ? Tok.Motion.dirFade : slide) { progress = 0 }
         _ = after(soft ? Tok.Motion.dirFadeSeconds : Tok.Motion.dirPanelSeconds) { [weak self] in
             guard let self, progress == 0 else { return }
@@ -307,18 +317,16 @@ final class DirModel: ObservableObject {
     /// 把手往下拉：面板跟著手指
     func pull(_ distance: CGFloat) {
         guard !editing, menu == nil, drag == nil else { return }
-        let height = max(1, screen.height - Tok.Shape.dirPeek)
-        progress = min(1, max(0, 1 - distance / height))
+        progress = min(1, max(0, 1 - distance / travel))
     }
 
     /// 放手：拉過一成五或往下甩（每秒 550 點）就收，不然彈回全開；兩種都接著手指的速度走（1.1 settle 帶 velocity）
     func pullEnd(_ distance: CGFloat, velocity: CGFloat) {
         guard !editing, menu == nil, drag == nil else { return }
-        let height = max(1, screen.height - Tok.Shape.dirPeek)
-        if distance > height * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
+        if distance > travel * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
             close(velocity: velocity)
         } else {
-            let speed = Motions.speed(-velocity, over: height * (1 - progress))
+            let speed = Motions.speed(-velocity, over: travel * (1 - progress))
             withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanelSpring(velocity: speed)) { progress = 1 }
         }
     }
@@ -482,18 +490,5 @@ final class DirModel: ObservableObject {
 
     func moveInto(_ id: String, folder: String) {
         store.edit { book in _ = Seats.intoFolder(&book, noteID: id, folderID: folder, now: Clock.now()) }
-    }
-
-    /// VoiceOver 的「往前移／往後移」：照整排格子換（含空位），換頁標記跳過
-    func moveBy(_ id: String, _ step: Int) {
-        var ids = entries.map(\.id)
-        guard let from = ids.firstIndex(of: id) else { return }
-        var target = from + step
-        while target >= 0, target < ids.count, Seats.isBreak(ids[target]) {
-            target += step
-        }
-        guard target >= 0, target < ids.count else { return }
-        ids.swapAt(from, target)
-        store.edit { book in Seats.reseat(&book, visible: ids, now: Clock.now()) }
     }
 }

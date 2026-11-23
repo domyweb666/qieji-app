@@ -216,12 +216,63 @@ struct DirTile: View {
     }
 }
 
+/// 排在某一格的一塊磚（目錄一頁裡、打開的資料夾裡共用）：位置、換位的動畫、VoiceOver。
+/// 自己比「有沒有變」：手指每點一下、目錄別的狀態動了，只重畫真的變了的那塊，不整面重做
+struct DirSlot: View, Equatable {
+    let model: DirModel
+    let entry: Seats.Entry
+    let cell: CGFloat
+    let index: Int
+    let spot: CGPoint
+    let current: Bool
+    let editing: Bool
+    let hidden: Bool
+    var target = false
+    var pop = false
+    let held: Bool
+    let inFolder: Bool
+    /// 封面圖到了、換了（紙本身沒變，磚也要重畫）
+    let covers: Int
+    @Environment(\.accessibilityReduceMotion) private var calm
+
+    static func == (lhs: DirSlot, rhs: DirSlot) -> Bool {
+        lhs.entry == rhs.entry && lhs.cell == rhs.cell && lhs.index == rhs.index && lhs.spot == rhs.spot
+            && lhs.current == rhs.current && lhs.editing == rhs.editing && lhs.hidden == rhs.hidden
+            && lhs.target == rhs.target && lhs.pop == rhs.pop && lhs.held == rhs.held
+            && lhs.inFolder == rhs.inFolder && lhs.covers == rhs.covers
+    }
+
+    var body: some View {
+        DirTile(
+            entry: entry, cell: cell, index: index, current: current, editing: editing, hidden: hidden,
+            target: target, pop: pop, held: held
+        )
+        .offset(x: spot.x, y: spot.y)
+        .animation(calm ? nil : Tok.Motion.tileShift, value: index)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(model.voiceLabel(entry))
+        .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { model.voiceActivate(entry) }
+        .accessibilityActions {
+            ForEach(model.voiceActs(entry, inFolder: inFolder), id: \.name) { act in
+                Button(act.name, action: act.run)
+            }
+        }
+    }
+}
+
 /// 目錄的一頁：每塊磚用位置排到第幾格，換位只改位置
 struct DirPageView: View {
     @ObservedObject var model: DirModel
     let items: [Seats.Entry]
     let currentID: String?
-    @Environment(\.accessibilityReduceMotion) private var calm
+    @ObservedObject private var covers = Covers.shared
+
+    init(model: DirModel, items: [Seats.Entry], currentID: String?) {
+        self.model = model
+        self.items = items
+        self.currentID = currentID
+    }
 
     var body: some View {
         let metrics = model.metrics
@@ -229,23 +280,13 @@ struct DirPageView: View {
         ZStack(alignment: .topLeading) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, entry in
                 if !entry.isHole {
-                    let spot = metrics.slot(index)
-                    DirTile(
-                        entry: entry, cell: metrics.cell, index: index,
+                    DirSlot(
+                        model: model, entry: entry, cell: metrics.cell, index: index, spot: metrics.slot(index),
                         current: isCurrent(entry), editing: model.editing, hidden: model.drag?.id == entry.id,
-                        target: model.stackOn == entry.id, pop: model.popID == entry.id, held: model.heldID == entry.id
+                        target: model.stackOn == entry.id, pop: model.popID == entry.id, held: model.heldID == entry.id,
+                        inFolder: false, covers: covers.version
                     )
-                    .offset(x: spot.x, y: spot.y)
-                    .animation(calm ? nil : Tok.Motion.tileShift, value: index)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(model.voiceLabel(entry))
-                    .accessibilityAddTraits(isCurrent(entry) ? [.isButton, .isSelected] : .isButton)
-                    .accessibilityAction { model.voiceActivate(entry) }
-                    .accessibilityActions {
-                        ForEach(model.voiceActs(entry), id: \.name) { act in
-                            Button(act.name, action: act.run)
-                        }
-                    }
+                    .equatable()
                 }
             }
         }

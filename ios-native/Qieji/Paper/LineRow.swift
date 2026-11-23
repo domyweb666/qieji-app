@@ -239,7 +239,8 @@ final class LineRowView: UIView {
 final class LinePitch: NSObject, NSLayoutManagerDelegate {
     var look: LineLook?
 
-    func layoutManager(
+    // swiftlint:disable:next function_parameter_count
+    func layoutManager( // 系統定的樣子
         _: NSLayoutManager, shouldSetLineFragmentRect rect: UnsafeMutablePointer<CGRect>,
         lineFragmentUsedRect used: UnsafeMutablePointer<CGRect>, baselineOffset: UnsafeMutablePointer<CGFloat>,
         in _: NSTextContainer, forGlyphRange _: NSRange
