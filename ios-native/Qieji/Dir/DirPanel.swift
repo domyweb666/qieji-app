@@ -1,13 +1,18 @@
 import SwiftUI
 
-/// 目錄面板掛在紙的上面。只有這一層看著目錄的狀態，紙不會跟著目錄每一格重畫
-struct DirHost: View {
-    @ObservedObject var store: Store
+/// 目錄面板掛在紙的上面。只有這一層看著目錄的狀態，紙不會跟著目錄每一格重畫；根畫面重畫時這裡也不跟著重做。
+/// 打開 app 之後趁閒著分幾次做好、藏在螢幕外面，之後打開只要滑上來（第一次掛上去系統要查一大堆型別，一次做完會卡 100 多毫秒）
+struct DirHost: View, Equatable {
+    let store: Store
     @ObservedObject var model: DirModel
     let onRoute: (Route) -> Void
 
+    static func == (lhs: DirHost, rhs: DirHost) -> Bool {
+        lhs.model === rhs.model
+    }
+
     var body: some View {
-        if model.shown {
+        if model.stage > 0 {
             ZStack {
                 DirPanel(store: store, model: model, onRoute: onRoute)
                 // 改磚上的字：自己畫的卡片，放在釘住螢幕的那層外面，才會停在鍵盤上方那段的正中
@@ -17,6 +22,9 @@ struct DirHost: View {
                 }
             }
             .animation(Tok.Motion.fade, value: model.glyphFor)
+            .opacity(model.shown ? 1 : 0)
+            .allowsHitTesting(model.shown)
+            .accessibilityHidden(!model.shown)
         }
     }
 }
@@ -26,7 +34,7 @@ struct DirHost: View {
 /// 裡面：搜尋、新的一張、方磚（一排四塊、放不下往右一頁）、資料夾、最近刪除、設定。
 /// 整層蓋滿螢幕（不避開瀏海和底部），所以裡面量到的位置就是螢幕座標，拖曳不用換算。
 struct DirPanel: View {
-    @ObservedObject var store: Store
+    let store: Store // 資料變了由 model 叫重畫（收著的時候不用）
     @ObservedObject var model: DirModel
     let onRoute: (Route) -> Void
     @FocusState private var searchFocused: Bool
@@ -81,12 +89,14 @@ struct DirPanel: View {
                 .onTapGesture { model.tapOut() }
                 .accessibilityLabel(model.editing ? Words.doneEditing : Words.closeDir)
                 .accessibilityAddTraits(.isButton)
-            sheet
-                .coordinateSpace(name: DirPanel.space)
-                .offset(y: model.fading ? 0 : model.travel * (1 - model.progress))
-                // 整塊當成一張淡出：不這樣的話裡面每一層各自變透明，點磚打開時底下那一面磚會透出來閃一下
-                .compositingGroup()
-                .opacity(model.fading ? Double(model.progress) : 1)
+            if model.stage > 1 {
+                sheet
+                    .coordinateSpace(name: DirPanel.space)
+                    .offset(y: model.fading ? 0 : model.travel * (1 - model.progress))
+                    // 整塊當成一張淡出：不這樣的話裡面每一層各自變透明，點磚打開時底下那一面磚會透出來閃一下
+                    .compositingGroup()
+                    .opacity(model.fading ? Double(model.progress) : 1)
+            }
         }
     }
 
@@ -126,9 +136,15 @@ struct DirPanel: View {
                 .accessibilityHidden(true)
             VStack(spacing: Tok.Space.zero) {
                 grabber
-                topBar
+                if model.stage > 2 {
+                    topBar
+                }
                 moveHead
-                content
+                if model.stage > 3 {
+                    content
+                } else {
+                    Spacer(minLength: Tok.Space.zero)
+                }
                 dots
                 rows
             }
@@ -136,7 +152,7 @@ struct DirPanel: View {
             .padding(.bottom, model.safeBottom)
             // VoiceOver 鎖在目錄裡（不會滑到後面的紙）；兩指 Z 字＝點露出的紙（1.1 accessibilityViewIsModal、onAccessibilityEscape）
             .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(.isModal)
+            .accessibilityAddTraits(model.shown ? .isModal : [])
             .accessibilityAction(.escape) { model.tapOut() }
             if let entry = model.openEntry {
                 DirFolderView(model: model, entry: entry, currentID: store.currentID)

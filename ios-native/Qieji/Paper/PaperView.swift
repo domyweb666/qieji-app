@@ -5,11 +5,11 @@ import UIKit
 /// 一張紙：最上面名字和 ⋯，下面一行一行。右下 ＋（畫在根畫面，換紙時不跟著閃）按了從底下升起輸入框。
 struct PaperView: View {
     @ObservedObject var store: Store
-    /// 根畫面交下來的那張。只拿來認是哪一張：字改了之後這個畫面可能比根畫面先重畫，這時它還是舊的，
-    /// 照它排會把剛打的字蓋回去（快打的字會掉、游標會跳，2026-11-23 模擬器抓到）。內容一律看 note
+    /// 根畫面交下來的那張。一律看 store 現在的那張（note），不看它：字改了、換了紙之後這個畫面可能比根畫面先重畫，
+    /// 照舊的排會把剛打的字蓋回去（快打的字會掉、游標會跳，2026-11-23 模擬器抓到）；換紙那一刻跑的程式也還拿著上一張
     let given: Note
     var note: Note {
-        store.book.note(given.id) ?? given
+        store.current ?? store.book.note(given.id) ?? given
     }
 
     var onTitle: () -> Void = {}
@@ -45,24 +45,28 @@ struct PaperView: View {
             if let photo, note.isText {
                 // 記事本的封面圖：固定在上面，清單名和 ⋯ 疊在圖上
                 ZStack(alignment: .top) {
-                    CoverFixed(photo: photo)
+                    CoverFixed(photo: photo).modifier(FreshPaper(id: note.id))
                     header(colors, cover: .fixed)
                 }
-                TimeRow(note: note, colors: colors)
+                TimeRow(note: note, colors: colors).modifier(FreshPaper(id: note.id))
             } else {
                 header(colors, cover: float ? .floating(remote.spy) : .none)
             }
-            Group {
+            ZStack {
                 if lockedNow {
                     LockedBody { Task { await locks.unlock(note.id, reason: Words.unlockReason) } }
+                        .modifier(FreshPaper(id: note.id))
                 } else if note.isText {
                     NotePad(store: store, note: note, focused: $padFocused, scale: size.scale)
+                        .modifier(FreshPaper(id: note.id))
                 } else {
                     PaperList(
                         store: store, remote: remote, note: note, onEditing: { editingID = $0 },
                         onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale,
                         head: float ? AnyView(CoverHead(note: note, colors: colors, spy: remote.spy, onTitle: onTitle)) : nil
                     )
+                    // 清單換清單：同一個清單自己換內容、自己淡（LineListView.swap）
+                    .transition(.opacity)
                 }
             }
             .background(GeometryReader { geo in
@@ -87,9 +91,10 @@ struct PaperView: View {
             ZStack(alignment: .top) {
                 colors.paper.ignoresSafeArea()
                 if float, let photo {
-                    CoverBanner(photo: photo, paper: colors.paper, spy: remote.spy)
+                    CoverBanner(photo: photo, paper: colors.paper, spy: remote.spy).modifier(FreshPaper(id: note.id))
                 }
             }
+            .animation(Tok.Motion.fade, value: note.id)
         }
         // 封面圖（完整版）：系統的照片選取畫面，不用跟使用者要相簿權限
         .photosPicker(isPresented: $pickingCover, selection: $coverPick, matching: .images)
@@ -116,14 +121,12 @@ struct PaperView: View {
                 RowMenu(items: rowItems(ask.id), rowBottom: ask.bottom, close: closeRowMenu)
             }
         }
-        .onAppear {
-            openIfAsked()
-            renameIfAsked()
-            updateFab()
-            // 上鎖的紙一打開就問一次 Face ID；取消的話停在鎖住的畫面，上面有「打開」可以再試
-            if lockedNow {
-                Task { await locks.unlock(note.id, reason: Words.unlockReason) }
-            }
+        // 換一張紙：新的內容淡入、舊的淡出，底色一起變過去，⋯ 停在原地（1.1 S2）
+        .animation(Tok.Motion.fade, value: note.id)
+        .onAppear(perform: arrive)
+        .onChange(of: note.id) { _ in
+            leave()
+            arrive()
         }
         .alert(Words.lockAskTitle, isPresented: $lockAsk) {
             Button(Words.cancel, role: .cancel) {}
@@ -151,6 +154,33 @@ struct PaperView: View {
                 store.flush()
             }
         }
+    }
+
+    /// 這張紙剛出現（打開 app、換紙）
+    private func arrive() {
+        openIfAsked()
+        renameIfAsked()
+        updateFab()
+        // 上鎖的紙一打開就問一次 Face ID；取消的話停在鎖住的畫面，上面有「打開」可以再試
+        if lockedNow {
+            let id = note.id
+            Task { await locks.unlock(id, reason: Words.unlockReason) }
+        }
+    }
+
+    /// 上一張紙收尾：跟哪一張有關的狀態全部歸零（輸入框裡打到一半的字 store.open 已經記到原本那張了）
+    private func leave() {
+        KeyboardWatch.dismiss()
+        remote.spy.y = 0
+        remote.spy.nameEnd = ScrollSpy.far
+        editingID = nil
+        rowMenu = nil
+        composing = false
+        draft = ""
+        tip = false
+        renaming = false
+        padFocused = false
+        pinChoices = []
     }
 
     /// 清單名變成可以打字（⋯「改名字」、目錄 VoiceOver 的「改名字」）
@@ -262,8 +292,8 @@ struct PaperView: View {
     }
 
     private func updateFab() {
-        if store.fabShown != fabWanted {
-            store.fabShown = fabWanted
+        if store.fab.shown != fabWanted {
+            store.fab.shown = fabWanted
         }
     }
 
@@ -371,6 +401,17 @@ struct PaperView: View {
             return
         }
         list.fadeOut(id) { store.binLine(id, in: paper) }
+    }
+}
+
+/// 換紙時這一塊換一份：新的淡進來、舊的同時淡出（底色是同一片，先拿掉會空白一格）
+struct FreshPaper: ViewModifier {
+    let id: String
+
+    func body(content: Content) -> some View {
+        content
+            .id(id)
+            .transition(.opacity)
     }
 }
 

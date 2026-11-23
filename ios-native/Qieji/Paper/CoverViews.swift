@@ -4,7 +4,8 @@ import UIKit
 /// 紙捲到哪（封面圖跟著捲、標題列的底與小膠囊淡進來用）。只有封面那幾塊看著它：捲動時紙不用整張重畫
 final class ScrollSpy: ObservableObject {
     @Published var y: CGFloat = 0 // 捲動位置，最上面＝0、往下拉是負的
-    @Published var nameEnd: CGFloat = 1000 // 大字名字的底邊在捲動內容裡的位置
+    @Published var nameEnd: CGFloat = ScrollSpy.far // 大字名字的底邊在捲動內容裡的位置
+    static let far: CGFloat = 1000
 }
 
 /// 隨捲動淡進來：y 從 start 走到 start＋24 時從 0 變 1

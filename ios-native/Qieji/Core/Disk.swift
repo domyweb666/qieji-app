@@ -32,6 +32,7 @@ final class Disk {
     /// 寫檔一筆一筆排隊（背景寫的、馬上寫的都排同一條），先叫的先寫完：舊的不會蓋掉新的
     private let queue = DispatchQueue(label: "org.domyweb.qieji.disk", qos: .userInitiated)
     private var written: String? // 上次寫進去的那一份。只在 queue 上碰
+    private var recentSeen: [String]? // 最近開過的，手上這份。只在主執行緒碰
 
     private var stateFile: URL {
         dir.appendingPathComponent("state.json")
@@ -96,6 +97,7 @@ final class Disk {
     }
 
     private func loadNative(_ raw: String) -> Loaded {
+        queue.sync {} // 上一份設定還在排隊的先寫完
         let last = defaults.string(forKey: LegacyStore.lastKey)
         let recent = defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
         guard let book = NoteCoding.readBook(raw) else {
@@ -170,6 +172,7 @@ final class Disk {
                 clean = false
             }
         }
+        recentSeen = nil
         defaults.removeObject(forKey: LegacyStore.recentKey)
         defaults.removeObject(forKey: LegacyStore.lastKey)
         defaults.set(true, forKey: Disk.wipedKey)
@@ -177,20 +180,34 @@ final class Disk {
         return clean
     }
 
+    /// 記下正在看哪一張、最近開過的。寫設定要等系統（換紙那一刻卡 3 毫秒）：先記在手上，寫的排到背景（跟存檔同一條，進背景前一定寫完）
     func rememberLast(_ id: String?) {
-        defaults.set(id, forKey: LegacyStore.lastKey)
-        guard let id else { return }
-        var recent = defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
-        recent.removeAll { $0 == id }
-        recent.insert(id, at: 0)
-        defaults.set(Array(recent.prefix(20)), forKey: LegacyStore.recentKey)
+        var list = recent
+        if let id {
+            list.removeAll { $0 == id }
+            list.insert(id, at: 0)
+            list = Array(list.prefix(20))
+            recentSeen = list
+        }
+        queue.async { [defaults] in
+            defaults.set(id, forKey: LegacyStore.lastKey)
+            if id != nil {
+                defaults.set(list, forKey: LegacyStore.recentKey)
+            }
+        }
     }
 
     var recent: [String] {
-        defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
+        if let recentSeen {
+            return recentSeen
+        }
+        let list = defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
+        recentSeen = list
+        return list
     }
 
     func seedRecent(_ list: [String], last: String?) {
+        recentSeen = nil
         if defaults.stringArray(forKey: LegacyStore.recentKey) == nil {
             defaults.set(list, forKey: LegacyStore.recentKey)
         }

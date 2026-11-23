@@ -37,12 +37,9 @@ struct RootView: View {
     @State private var dir: DirModel
     @State private var sheet: Route? // 從下面升起的表單：只有付費頁
     @State private var path: [Page] = [] // 推進來的頁
-    @State private var switching = false // 切換清單開著
+    @State private var switcher = SwitchModel() // 切換清單。不讓根畫面看著它：開、收的時候紙不用跟著重畫
     @State private var newsCard: News.Entry? // 更新後第一次打開跳一次的新功能卡片
     @State private var fullNotice = false // 1.0 開過同步的人：iCloud 同步改成完整版功能
-    @State private var underKey = "yellow" // 紙底下墊的顏色（換紙時是上一張的）
-    @State private var shownID: String?
-    @State private var booted = false // 第一張紙已經出來了：之後換紙才淡入
     @ObservedObject private var shop = Purchases.shared
     @ObservedObject private var look = Look.shared
     @ObservedObject private var cloud = CloudLink.shared
@@ -109,6 +106,7 @@ struct RootView: View {
             store.boot()
             TextSize.shared.load()
             look.load()
+            warmUp()
             if !RootView.offline {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
                 store.isFull = shop.full
@@ -190,7 +188,7 @@ struct RootView: View {
             switch url.host {
             case "new":
                 dir.close()
-                switching = false
+                switcher.close()
                 if store.isFull {
                     path.removeAll()
                     sheet = nil
@@ -210,48 +208,53 @@ struct RootView: View {
     /// 紙、右下 ＋、目錄、切換清單疊在一起：紙是家，其他都從紙上面升起來
     private var paperRoot: some View {
         ZStack {
-            // 換紙時底下墊的是上一張的顏色（1.1 2026-11-04）：新的那張淡入時不會先露出奶油底、看起來閃一下
-            Tok.note(underKey).paper.ignoresSafeArea()
             if let note = store.current {
+                // 換紙時同一個紙面換內容（不整個重做），新的那張自己淡入：見 PaperView
                 PaperView(
                     store: store, given: note, onTitle: { go(.switcher) }, onRoute: go,
                     onMoveLine: { dir.open(move: $0) }
                 )
-                .id(note.id)
-                .transition(.asymmetric(insertion: .opacity, removal: .identity))
-            }
-        }
-        // 換一張紙：只有新的那張淡入（1.1 S2）。第一次打開 app 那張不淡，交給啟動畫面
-        .animation(booted ? Tok.Motion.fade : nil, value: store.currentID)
-        .onChange(of: store.currentID) { id in
-            DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
-                shownID = id
-                underKey = store.current?.color ?? underKey
-                booted = true
-            }
-        }
-        .onChange(of: store.current?.color) { key in
-            // 同一張換了顏色：底色跟著換（換紙時由上面那段等新的淡入完才換）
-            if store.currentID == shownID, let key {
-                underKey = key
             }
         }
         // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
         .overlay(alignment: .bottomTrailing) {
-            PlusButton(shown: store.fabShown && !switching) { store.plusAsk += 1 }
+            PlusButton(fab: store.fab, switcher: switcher) { store.plusAsk += 1 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .ignoresSafeArea(.keyboard) // 鍵盤升起時停在原地淡掉，不跟著鍵盤往上跑
         }
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
-        .overlay { DirHost(store: store, model: dir, onRoute: go) }
+        .overlay { DirHost(store: store, model: dir, onRoute: go).equatable() }
         // 切換清單（點左上清單名）：自己做的底部面板，蓋在最上面
-        .overlay {
-            if switching {
-                SwitchPanel(
-                    store: store, gone: { switching = false }, onManage: { dir.open() }, onFull: { sheet = .full }
-                )
-            }
+        .overlay { SwitchHost(model: switcher).ignoresSafeArea() }
+    }
+
+    private var switchContent: SwitchPanelView.Content {
+        let lists = Seats.switchList(store.book, recent: store.disk?.recent ?? [])
+        return SwitchPanelView.Content(
+            pinned: lists.pinned, recent: lists.recent, currentID: store.currentID, full: store.isFull
+        )
+    }
+
+    /// 紙出來之後趁閒著先做好（切換清單的列、目錄，一次一步）：第一次打開就跟之後一樣快
+    private func warmUp() {
+        let switcher = switcher, dir = dir, store = store
+        Covers.shared.warm(store.book.notes)
+        IdleWork.shared.add { [content = switchContent] in switcher.panel.prepare(content) }
+        for _ in 0 ..< 2 {
+            IdleWork.shared.add { LineListView.current?.warmBench(LineListView.warmRows) }
         }
+        for _ in 0 ..< DirModel.stages {
+            IdleWork.shared.add { dir.warm() }
+        }
+        IdleWork.shared.start()
+    }
+
+    private func openSwitcher() {
+        switcher.isOpen = true
+        switcher.panel.show(switchContent, SwitchPanelView.Actions(
+            newNote: { store.newNote() }, newPad: { store.newPad() }, open: { store.open($0) },
+            manage: { dir.open() }, gone: { [weak switcher] in switcher?.isOpen = false }
+        ))
     }
 
     /// 紙上、目錄裡要去別的畫面
@@ -259,7 +262,7 @@ struct RootView: View {
         switch next {
         case .switcher:
             KeyboardWatch.dismiss()
-            switching = true
+            openSwitcher()
         case .trash:
             path.append(.trash)
         case .settings:

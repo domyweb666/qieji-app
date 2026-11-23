@@ -35,9 +35,9 @@ struct PaperHeader: View {
                     titleField
                 } else if case let .floating(spy) = cover {
                     // 在最上面時不畫（名字已經用大字寫在圖下面），大字捲進標題列後面時淡進來接手
-                    SpyFade(spy: spy, start: { $0.nameEnd - Tok.Space.xl }, content: { titlePill })
+                    SpyFade(spy: spy, start: { $0.nameEnd - Tok.Space.xl }, content: { titlePill }).modifier(FreshPaper(id: note.id))
                 } else {
-                    titlePill
+                    titlePill.modifier(FreshPaper(id: note.id))
                 }
                 Spacer(minLength: Tok.Space.sm)
                 Menu {
@@ -74,7 +74,7 @@ struct PaperHeader: View {
                 }
             }
             if case .none = cover {
-                TimeRow(note: note, colors: colors)
+                TimeRow(note: note, colors: colors).modifier(FreshPaper(id: note.id))
             }
         }
     }

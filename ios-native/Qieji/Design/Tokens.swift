@@ -197,6 +197,28 @@ enum Tok {
             .system(size: side * glyphRatio, weight: .semibold)
         }
 
+        static let glyphShrink: CGFloat = 0.5 // 磚上的字放不下時最多縮成一半
+        /// 同一個字，給原生畫的磚用
+        static func glyphUI(_ side: CGFloat) -> UIFont {
+            UIFont.systemFont(ofSize: side * glyphRatio, weight: .semibold)
+        }
+
+        /// 磚下面的名字、磚角的圖示（＝label），最多放大到 titleMaxScale 那一級
+        static func labelUI() -> UIFont {
+            let cap = UITraitCollection(preferredContentSizeCategory: .extraExtraExtraLarge)
+            let most = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: cap).pointSize
+            return UIFont.systemFont(ofSize: min(most, UIFont.preferredFont(forTextStyle: .caption1).pointSize), weight: .medium)
+        }
+
+        /// 系統樣式的字（切換清單用原生畫）
+        static func styleUI(_ style: UIFont.TextStyle, weight: UIFont.Weight? = nil) -> UIFont {
+            let base = UIFont.preferredFont(forTextStyle: style)
+            return weight.map { UIFont.systemFont(ofSize: base.pointSize, weight: $0) } ?? base
+        }
+
+        static let barIconUI = UIFont.systemFont(ofSize: 20)
+        static let chevronUI = UIFont.systemFont(ofSize: 12, weight: .semibold)
+
         /// 紙上每一行（UIKit 那邊量高度、畫輸入框用同一個字）
         static var lineUI: UIFont {
             UIFont.preferredFont(forTextStyle: .body)
@@ -328,8 +350,6 @@ enum Tok {
 
         /// 帶速度的彈簧最多帶這麼快（每秒走幾個「全程」）：再快不過頭的彈簧也會衝過頭（1.1 的彈簧都不准過頭）
         static let springSpeedMax: CGFloat = 16
-        /// 停止抖動：立刻歸正（1.1）。用一段零秒的動畫蓋掉來回轉的那個
-        static let jiggleStop = Animation.linear(duration: 0)
         /// 搜尋點一行：紙捲到那一行（1.1 用系統的捲動動畫）
         static let seek = Animation.easeInOut(duration: 0.3)
         /// 輸入框打錯被擋下：卡片左右晃（1.1 reject：8 點、每段 0.05 秒，四段）
@@ -383,25 +403,24 @@ enum Tok {
         static let fadeSeconds: Double = 0.15
         static let composerFocusDelay: Double = 0.3
         // 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
-        static let tileShift = Animation.interpolatingSpring(mass: 1, stiffness: 484, damping: 37)
-        static let dirPanel = Animation.spring(response: 0.34, dampingFraction: 1)
-        /// 切換清單收起：點了一張紙馬上換，面板只是讓開，比升起快（1.1 switchClose 240）
-        static let switchClose = Animation.spring(response: 0.24, dampingFraction: 1)
-        /// 往下甩收起：同一個彈簧，接著手指的速度
-        static func switchCloseSpring(velocity: CGFloat) -> Animation {
-            .interpolatingSpring(stiffness: 685.39, damping: 52.36, initialVelocity: velocity)
+        /// 磚換位（1.1 tileShift）
+        static var tileSpring: UISpringTimingParameters {
+            UISpringTimingParameters(mass: 1, stiffness: 484, damping: 37, initialVelocity: .zero)
         }
 
+        static let dirPanel = Animation.spring(response: 0.34, dampingFraction: 1)
         static let dirPanelSeconds: Double = 0.34
+        /// 切換清單收起：點了一張紙馬上換，面板只是讓開，比升起快（1.1 switchClose 240）
+        static let switchCloseSeconds: Double = 0.24
         static let dirFade = Animation.easeInOut(duration: 0.2)
         static let dirFadeSeconds: Double = 0.2
-        static let jiggle = Animation.easeInOut(duration: 0.12)
+        static let jiggleSeconds: Double = 0.12
         static let jiggleDeg: Double = 1.2
         static let tileHoldScale: CGFloat = 1.08
         static let menuLiftScale: CGFloat = 1.04
         static let stackPlate: CGFloat = 1.25
         static let stackDim: Double = 0.6
-        static let stackCue = Animation.easeInOut(duration: 0.12)
+        static let stackCueSeconds: Double = 0.12
         static let stackPop: CGFloat = 1.1
         static let stackPopSeconds: Double = 0.13
         static let sink = Animation.easeOut(duration: 0.26)
@@ -449,6 +468,9 @@ enum Tok {
 
     enum Timing {
         static let toastStay: Double = 3.5
+        static let warmWait: Double = 0.6 // 打開 app 之後等這麼久，才趁閒著先做好目錄、切換清單
+        static let warmStep: Double = 0.12 // 一步和下一步之間
+        static let warmQuiet: Double = 0.4 // 手指放開這麼久才算閒著
         static let saveDebounce: Double = 0.25
         static let cloudOffGrace: Double = 10
         static let cloudPushWait: Double = 2

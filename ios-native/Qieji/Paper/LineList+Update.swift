@@ -235,7 +235,8 @@ extension LineListView {
             }
             self.placeAll()
         } completion: { _ in
-            for row in gone {
+            // 淡出途中換了紙：這幾行已經給新的那張用了，不准再收一次
+            for row in gone where self.leavers.contains(where: { $0 === row }) {
                 self.leavers.removeAll { $0 === row }
                 self.recycle(row)
             }

@@ -55,6 +55,8 @@ final class DirModel: ObservableObject {
 
     // 面板
     @Published var shown = false
+    /// 掛到第幾步：0＝還沒、1＝後面的霧、2＝面板和底下兩列、3＝搜尋列、4＝全部（方磚）
+    @Published var stage = 0
     @Published var progress: CGFloat = 0 // 0＝收起、1＝全開
     @Published var fading = false // 這次用淡的不用滑的
     @Published var isOpen = false // 停在全開
@@ -125,6 +127,11 @@ final class DirModel: ObservableObject {
         gridTouch.model = self
         folderTouch.model = self
         store.onBook = { [weak self] in self?.bookChanged() }
+        store.onCurrent = { [weak self] in
+            if let self, shown {
+                objectWillChange.send()
+            }
+        }
     }
 
     var calm: Bool {
@@ -254,9 +261,8 @@ final class DirModel: ObservableObject {
     func open(move: String? = nil) {
         guard !shown else { return }
         endKeyboard()
-        let window = DirModel.window()
-        screen = window?.bounds.size ?? UIScreen.main.bounds.size
-        safeBottom = window?.safeAreaInsets.bottom ?? 0
+        let ready = stage == DirModel.stages
+        measure()
         moveLine = move
         moveHeld = movingItem
         query = ""
@@ -268,13 +274,38 @@ final class DirModel: ObservableObject {
         fading = calm
         progress = 0
         scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
+        gridTouch.scroll(toPage: 0, animated: false)
+        stage = DirModel.stages
         shown = true
-        // 先掛上去（還在螢幕外），下一格才開始滑：一起改的話面板會直接出現在定位
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanel) { self.progress = 1 }
-            isOpen = true
+        guard !ready else {
+            rise()
+            return
         }
+        // 剛打開 app 就按、還沒先做好：先掛上去（還在螢幕外），下一格才開始滑。一起改的話面板會直接出現在定位
+        DispatchQueue.main.async { [weak self] in self?.rise() }
+    }
+
+    private func rise() {
+        withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanel) { progress = 1 }
+        isOpen = true
+    }
+
+    static let stages = 4
+
+    private func measure() {
+        let window = DirModel.window()
+        screen = window?.bounds.size ?? UIScreen.main.bounds.size
+        safeBottom = window?.safeAreaInsets.bottom ?? 0
+    }
+
+    /// 先掛一步（藏在螢幕外面）
+    func warm() {
+        guard stage < DirModel.stages else { return }
+        if stage == 0 {
+            measure()
+            scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
+        }
+        stage += 1
     }
 
     /// 收起。fade＝用淡出（點一張從磚放大打開之後）；velocity＝往下拉放手時手指每秒幾點（接著那個速度收）；then＝收完才做的事
@@ -324,6 +355,8 @@ final class DirModel: ObservableObject {
         let next = Seats.seatedLayout(store.book)
         if next != scene.entries {
             scene.entries = next
+        } else {
+            objectWillChange.send() // 最近刪除的數字、選單裡的釘選
         }
         if openFolder != nil, openEntry == nil {
             openFolder = nil

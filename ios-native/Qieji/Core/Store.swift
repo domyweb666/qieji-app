@@ -20,7 +20,12 @@ final class Store: ObservableObject {
     private var quiet = false
     /// 資料換了馬上叫（目錄開著時照新的排）
     var onBook: () -> Void = {}
-    @Published private(set) var currentID: String?
+    /// 換紙了馬上叫（目錄開著時框到新的那張）
+    var onCurrent: () -> Void = {}
+    @Published private(set) var currentID: String? {
+        didSet { onCurrent() }
+    }
+
     @Published var toast: Toast?
     /// 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像提示條會自己消失（1.1 06-首次體驗 ❓7）
     @Published var notice: Notice?
@@ -44,8 +49,8 @@ final class Store: ObservableObject {
     /// VoiceOver 在目錄的「改名字」（1.1 requestRename）：換到那張，清單名變成可以打字
     var renameID: String?
     @Published var renameAsk = 0
-    /// 右下 ＋ 要不要畫（紙依自己的狀態說：鍵盤、輸入框、選單開著就不畫）
-    @Published var fabShown = false
+    /// 右下 ＋ 要不要畫（紙依自己的狀態說：鍵盤、輸入框、選單開著就不畫）。自己一份：變的時候只重畫 ＋，不叫整個畫面重畫
+    let fab = Fab()
     /// 輸入框裡打到一半的字：換到別張紙時跟著原本那張走，不丟（1.1 closeNote）
     var draft = ""
 
@@ -105,6 +110,10 @@ final class Store: ObservableObject {
     private var showTask: DispatchWorkItem? // 打字停下來之後重畫一次
     /// 存檔前在背景先把指紋算好（千行的紙一張要十幾毫秒，在主執行緒算會卡一格）
     private static let warmQueue = DispatchQueue(label: "org.domyweb.qieji.print", qos: .userInitiated)
+
+    final class Fab: ObservableObject {
+        @Published var shown = false
+    }
 
     struct Toast: Equatable {
         let id = UUID()

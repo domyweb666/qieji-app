@@ -58,11 +58,7 @@ struct DirFolderView: View {
         let shape = RoundedRectangle(cornerRadius: Tok.Shape.radiusLg, style: .continuous)
         return VStack(spacing: Tok.Space.zero) {
             ScrollView(.horizontal, showsIndicators: false) {
-                ZStack(alignment: .topLeading) {
-                    ForEach(Array(list.enumerated()), id: \.element.id) { index, note in
-                        tile(note, index: index, width: width)
-                    }
-                }
+                DirGrid(model: model, slots: slots(list, width: width), cell: metrics.cell)
                 .frame(width: CGFloat(pageCount) * width, height: height, alignment: .topLeading)
                 .background(DirHook(touch: model.folderTouch))
             }
@@ -96,16 +92,18 @@ struct DirFolderView: View {
         )
     }
 
-    private func tile(_ note: Note, index: Int, width: CGFloat) -> some View {
+    private func slots(_ list: [Note], width: CGFloat) -> [DirSlot] {
         let metrics = model.metrics, per = DirMetrics.folderPer
-        let spot = metrics.slot(index % per, cols: DirMetrics.folderCols)
-        return DirSlot(
-            model: model, entry: Seats.Entry(id: note.id, note: note, notes: [note]), cell: metrics.cell, index: index,
-            spot: CGPoint(x: CGFloat(index / per) * width + Tok.Space.lg + spot.x, y: Tok.Space.lg + spot.y),
-            current: note.id == currentID, editing: model.editing, hidden: model.drag?.id == note.id,
-            held: model.heldID == note.id, inFolder: true, covers: covers.version
-        )
-        .equatable()
+        _ = covers.version // 封面圖到了、換了（紙本身沒變，磚也要重畫）
+        return list.enumerated().map { index, note in
+            let spot = metrics.slot(index % per, cols: DirMetrics.folderCols)
+            return DirSlot(
+                entry: Seats.Entry(id: note.id, note: note, notes: [note]), index: index,
+                spot: CGPoint(x: CGFloat(index / per) * width + Tok.Space.lg + spot.x, y: Tok.Space.lg + spot.y),
+                current: note.id == currentID, editing: model.editing, hidden: model.drag?.id == note.id,
+                held: model.heldID == note.id, inFolder: true
+            )
+        }
     }
 
     private func dots(_ count: Int) -> some View {

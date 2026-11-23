@@ -7,6 +7,7 @@ import UIKit
 /// 排版與更新在這個檔；打字與鍵盤在 LineList+Edit，點、按住、左右滑在 LineList+Touch，排順序在 LineList+Drag。
 final class LineListView: UIScrollView {
     // 資料
+    var paperID = "" // 這是哪一張紙的清單
     var rows: [LineItem] = []
     var look = LineLook(key: "yellow", scale: 1)
     var heights: [CGFloat] = []
@@ -21,6 +22,12 @@ final class LineListView: UIScrollView {
     var live: [String: LineRowView] = [:]
     var leavers: [LineRowView] = [] // 刪掉了、還在淡出的
     private static var spare: [LineRowView] = []
+    /// 暫時用不到的行：藏著但還掛在清單上，要用時換個字就出來（重新掛一次，一個畫面的行要 8 毫秒）
+    private var bench: [LineRowView] = []
+    private static let benchMax = 24
+    static let warmRows = 8
+    /// 現在畫面上那個清單（先做好用）
+    private(set) weak static var current: LineListView?
     private static let spareMax = 36
     let content = PassView()
 
@@ -76,6 +83,7 @@ final class LineListView: UIScrollView {
         delaysContentTouches = false
         addSubview(content)
         delegate = self
+        LineListView.current = self
         wireTouches()
         watchKeyboard()
     }
@@ -256,7 +264,7 @@ final class LineListView: UIScrollView {
     @discardableResult
     func mount(_ index: Int) -> LineRowView {
         let item = rows[index]
-        let row = LineListView.spare.popLast() ?? LineRowView(frame: .zero)
+        let row = bench.popLast() ?? LineListView.spare.popLast() ?? LineRowView(frame: .zero)
         row.bounds.size = CGSize(width: bounds.width, height: heights[index])
         row.show(item, look: look)
         row.field.delegate = self
@@ -266,7 +274,12 @@ final class LineListView: UIScrollView {
         }
         dress(row, index)
         live[item.id] = row
-        content.addSubview(row)
+        if row.superview === content {
+            row.isHidden = false
+            content.bringSubviewToFront(row)
+        } else {
+            content.addSubview(row)
+        }
         if item.id == freshID {
             // 掛行是在「不准動畫」裡做的，晚一格才亮
             DispatchQueue.main.async { [weak self] in
@@ -291,14 +304,45 @@ final class LineListView: UIScrollView {
 
     func recycle(_ row: LineRowView) {
         row.clear()
+        row.isHidden = true
+        guard bench.count >= LineListView.benchMax else {
+            bench.append(row)
+            return
+        }
+        stow(row)
+    }
+
+    private func stow(_ row: LineRowView) {
         row.removeFromSuperview()
+        row.isHidden = false
         if LineListView.spare.count < LineListView.spareMax {
             LineListView.spare.append(row)
         }
     }
 
-    /// 這張紙收起來：行全部還回去，下一張直接拿來用（換紙不用重新做一批文字框）
+    /// 先掛幾行藏著（打開 app 之後閒著的時候）：第一次換到行多的紙就不用現做
+    func warmBench(_ count: Int) {
+        for _ in 0 ..< count where bench.count + live.count < LineListView.benchMax {
+            let row = LineListView.spare.popLast() ?? LineRowView(frame: .zero)
+            row.bounds.size = CGSize(width: bounds.width, height: Tok.Shape.rowMin)
+            row.isHidden = true
+            content.addSubview(row)
+            row.layoutIfNeeded()
+            bench.append(row)
+        }
+    }
+
+    /// 這張紙收起來：行全部還回去，下一個清單直接拿來用（不用重新做一批文字框）
     func dismantle() {
+        leavePaper()
+        for row in bench {
+            stow(row)
+        }
+        bench = []
+    }
+
+    /// 上一張紙收尾：還在滑的、在打字的、在淡出的都停，行收到 bench
+    private func leavePaper() {
         settleLanding()
         stopAutoScroll()
         glider.stop()
@@ -309,6 +353,50 @@ final class LineListView: UIScrollView {
         }
         live = [:]
         leavers = []
+        editingID = nil
+        swiping = nil
+        freshID = nil
+    }
+
+    /// 換成另一張紙：同一個清單換內容、回到最上面；新的淡進來，上面蓋一張舊的樣子淡出去。
+    /// 不拆了重做（十幾行重新掛上去要 10 毫秒）。先收尾上一張（它的動作還接著它自己那張），再叫 wire 接上新的
+    func swap(to paper: String, look next: LineLook, wire: () -> Void, front: AnyView?) {
+        let shot = window == nil ? nil : snapshotView(afterScreenUpdates: false)
+        let seen = bounds.size
+        leavePaper()
+        layer.removeAllAnimations()
+        paperID = paper
+        wire()
+        look = next
+        rows = source()
+        index()
+        heights = []
+        tops = []
+        measured = []
+        setContentOffset(.zero, animated: false)
+        setHead(front)
+        if bounds.width > 0 {
+            remeasureAll()
+            contentSize = wantedSize
+            fill(spare: LineListView.firstSpare)
+            DispatchQueue.main.async { [weak self] in self?.fill() }
+        }
+        showEmpty(animated: false)
+        guard let shot else { return }
+        shot.frame = CGRect(origin: .zero, size: seen)
+        shot.isUserInteractionEnabled = false
+        addSubview(shot)
+        let fresh = [content, headHost?.view, rows.isEmpty ? emptyHost?.view : nil].compactMap { $0 }
+        for view in fresh {
+            view.layer.removeAllAnimations()
+            view.alpha = 0
+        }
+        UIView.animate(withDuration: Tok.Motion.fadeSeconds, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            shot.alpha = 0
+            for view in fresh {
+                view.alpha = 1
+            }
+        } completion: { _ in shot.removeFromSuperview() }
     }
 
     func placeAll() {

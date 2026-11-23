@@ -312,10 +312,12 @@ final class ComposerView: UIView, UITextViewDelegate {
 
 /// 右下角的茄紫 ＋（1.1 PageBar）：畫在根畫面、紙的外面，換紙時一直停在原地；鍵盤、輸入框、選單開著時淡出，跟鍵盤同一個時鐘
 struct PlusButton: View {
-    let shown: Bool
+    @ObservedObject var fab: Store.Fab
+    @ObservedObject var switcher: SwitchModel
     let action: () -> Void
 
     var body: some View {
+        let shown = fab.shown && !switcher.isOpen
         ZStack {
             if shown {
                 Button(action: action) {

@@ -15,6 +15,7 @@ final class Covers: ObservableObject {
     @Published private(set) var version = 0
     let dir: URL
     private let cache = NSCache<NSString, UIImage>()
+    private let thumbs = NSCache<NSString, UIImage>()
     private var have: [String: Bool] = [:]
 
     init(dir: URL) {
@@ -56,6 +57,44 @@ final class Covers: ObservableObject {
         return loaded
     }
 
+    /// 這張紙的磚要畫哪張圖（代號）；沒有封面、圖還沒到、上鎖都回 nil
+    func shownCode(_ note: Note) -> String? {
+        guard !note.locked, let code = note.cover, has(code) else { return nil }
+        return code
+    }
+
+    /// 磚上用的小圖（解好、縮好的）：原圖寬 1200，每塊磚各自解一次、縮一次會卡
+    func thumb(_ code: String) -> UIImage? {
+        if let hit = thumbs.object(forKey: code as NSString) {
+            return hit
+        }
+        guard Covers.safe(code), let made = Covers.shrink(file(code)) else { return nil }
+        thumbs.setObject(made, forKey: code as NSString)
+        return made
+    }
+
+    /// 先在背景把磚上的小圖準備好（打開 app、圖剛到的時候）
+    func warm(_ notes: [Note]) {
+        for code in Set(notes.compactMap(shownCode)) where thumbs.object(forKey: code as NSString) == nil {
+            let url = file(code), thumbs = thumbs
+            DispatchQueue.global(qos: .utility).async {
+                if let made = Covers.shrink(url) {
+                    thumbs.setObject(made, forKey: code as NSString)
+                }
+            }
+        }
+    }
+
+    private static func shrink(_ url: URL) -> UIImage? {
+        guard let full = UIImage(contentsOfFile: url.path), full.size.width > 0, full.size.height > 0 else { return nil }
+        let scale = min(1, thumbSide / min(full.size.width, full.size.height))
+        let size = CGSize(width: (full.size.width * scale).rounded(), height: (full.size.height * scale).rounded())
+        return full.preparingThumbnail(of: size)
+    }
+
+    /// 小圖的短邊幾個像素：最大的磚 64 點、螢幕三倍
+    private static let thumbSide: CGFloat = Tok.Shape.tileMax * 3
+
     /// 選好的照片：縮到寬 1200、存成 JPEG。回傳新的代號；失敗回 nil
     func save(_ data: Data) -> String? {
         guard let picked = UIImage(data: data) else { return nil }
@@ -79,6 +118,7 @@ final class Covers: ObservableObject {
             try data.write(to: file(code), options: .atomic)
             have[code] = true
             cache.removeObject(forKey: code as NSString)
+            thumbs.removeObject(forKey: code as NSString)
             version += 1
             return true
         } catch {
@@ -104,6 +144,7 @@ final class Covers: ObservableObject {
         }
         have[code] = false
         cache.removeObject(forKey: code as NSString)
+        thumbs.removeObject(forKey: code as NSString)
         version += 1
     }
 }
