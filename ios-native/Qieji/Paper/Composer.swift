@@ -194,6 +194,13 @@ final class ComposerView: UIView, UITextViewDelegate {
 
     // MARK: 打字
 
+    /// 選字選到一半（注音、拼音、日文、韓文）。英文的自動訂正預覽也會有標記的字，那不算：要記他打的
+    private var choosing: Bool {
+        guard field.markedTextRange != nil else { return false }
+        let lang = field.textInputMode?.primaryLanguage ?? ""
+        return ["zh", "ja", "ko"].contains { lang.hasPrefix($0) }
+    }
+
     func textViewDidChange(_: UITextView) {
         hint.isHidden = !field.text.isEmpty
         let now = field.text ?? ""
@@ -285,7 +292,7 @@ final class ComposerView: UIView, UITextViewDelegate {
         done.setImage(UIImage(systemName: "checkmark", withConfiguration: symbol), for: .normal)
         done.tintColor = UIColor(Tok.Col.textPrimary)
         done.accessibilityLabel = Words.commit
-        done.addAction(UIAction { [weak self] _ in self.map { $0.onDone($0.field.markedTextRange != nil) } }, for: .touchUpInside)
+        done.addAction(UIAction { [weak self] _ in self.map { $0.onDone($0.choosing) } }, for: .touchUpInside)
         buildTip()
         for part in [card, tipCard, field, hint, done] as [UIView] {
             part.translatesAutoresizingMaskIntoConstraints = false

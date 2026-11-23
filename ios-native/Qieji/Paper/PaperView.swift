@@ -165,12 +165,14 @@ struct PaperView: View {
 
     /// 上一張紙收尾：跟哪一張有關的狀態全部歸零（輸入框裡打到一半的字 store.open 已經記到原本那張了）
     private func leave() {
+        // 先當成收好了再收鍵盤：收的時候系統會訂正、把選到一半的字定下來，那些不准再記一次、更不准記到新的這張
+        composing = false
         KeyboardWatch.dismiss()
+        store.draft = ""
         remote.spy.y = 0
         remote.spy.nameEnd = ScrollSpy.far
         editingID = nil
         rowMenu = nil
-        composing = false
         tip = false
         renaming = false
         padFocused = false
@@ -357,6 +359,8 @@ struct PaperView: View {
 
     /// 輸入框裡打了字。字記在 store，不放在這個畫面的狀態裡：每打一個字整張紙重畫一次會卡
     private func typed(prev: String, next: String) {
+        // 框已經收了（字記好了）才來的訂正：留著會在下次換紙時多記一行
+        guard composing else { return }
         store.draft = next
         if !remote.recording {
             noticeReturn(prev: prev, next: next)
