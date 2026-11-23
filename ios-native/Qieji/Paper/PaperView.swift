@@ -281,9 +281,8 @@ struct PaperView: View {
 
     /// 開了新的一張、或控制中心按了「記一行」：輸入框直接升起（紙剛出現、面板還在收，等一下再叫鍵盤）
     private func openIfAsked() {
-        guard store.takeCompose() else {
-            return
-        }
+        // 要的是現在這張：換紙那一刻上一張還沒拆掉，也會收到「升起輸入框」，被它拿走新的那張就不升了
+        guard note.id == store.currentID, store.takeCompose() else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.composerFocusDelay) {
             if note.isText {
                 padFocused = true // 剛開的新記事本：一打開游標就在裡面

@@ -400,7 +400,8 @@ extension DirModel {
         folderEdgeWork = after(Tok.Timing.edgeFlip) { [weak self] in self?.folderFlip(zone) }
     }
 
-    /// 打開的資料夾裡拖到框的左右邊停一下：翻資料夾的頁。最後一頁滿了再往右＝拖的那張排到最後、自己落在新的一頁
+    /// 打開的資料夾裡拖到框的左右邊停一下：翻資料夾的頁，拖的那張跟著過去（往右排那頁第一格、往左排那頁最後一格）。
+    /// 最後一頁再往右不動：頁數本來就算上手上這張（別張剛好排滿時，它自己已經在最後一頁）；照 1.1 再翻會翻到一頁空的
     private func folderFlip(_ zone: Int) {
         guard var now = drag, let fid = now.inFolder, folderEdge == zone,
               let entry = entries.first(where: { $0.id == fid }) else { return }
@@ -408,19 +409,8 @@ extension DirModel {
         let per = DirMetrics.folderPer
         let count = max(1, (list.count + per - 1) / per)
         let target = geo.folderPage + zone
-        if target < 0 {
-            return
-        }
-        if target >= count {
-            // 別張剛好排滿整頁才開新頁
-            if (list.count - 1) % per != 0 || list.count < 2 {
-                return
-            }
-            now.folderSlot = list.count - 1
-        } else {
-            // 翻到已有的頁：拖的那張跟著過去（往右排那頁第一格、往左排那頁最後一格）
-            now.folderSlot = min(list.count - 1, zone > 0 ? target * per : target * per + per - 1)
-        }
+        guard target >= 0, target < count else { return }
+        now.folderSlot = min(list.count - 1, zone > 0 ? target * per : target * per + per - 1)
         setDrag(now)
         aimWork?.cancel()
         unstack()
