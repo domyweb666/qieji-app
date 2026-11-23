@@ -310,7 +310,9 @@ struct PaperView: View {
         let added = store.addTop(text)
         guard let list = remote.list else { return }
         if stay || remote.editingID != nil || remote.dragging {
-            list.refresh(animated: false, stay: true)
+            // 已經捲下去：畫面原地不動；在最上面：新的一行淡入、其他行讓開（1.1 anchorNext）
+            let scrolled = list.contentOffset.y > Tok.Shape.rowMin
+            list.refresh(animated: !scrolled, stay: scrolled)
             return
         }
         list.toTop(added)

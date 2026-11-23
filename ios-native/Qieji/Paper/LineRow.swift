@@ -302,10 +302,11 @@ extension UIFont {
 
 /// 游標在最前面按 Backspace 時系統不會通知代理（沒有字可以刪），所以自己攔：跟上一行併在一起
 final class LineTextView: UITextView {
-    var onDeleteAtStart: (() -> Bool)?
+    var onDeleteAtStart: (() -> Void)?
 
     override func deleteBackward() {
-        if selectedRange.location == 0, selectedRange.length == 0, markedTextRange == nil, onDeleteAtStart?() == true {
+        if selectedRange.location == 0, selectedRange.length == 0, markedTextRange == nil, let onDeleteAtStart {
+            onDeleteAtStart()
             return
         }
         super.deleteBackward()

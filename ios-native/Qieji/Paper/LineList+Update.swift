@@ -157,18 +157,23 @@ extension LineListView {
         }
         leavers.append(contentsOf: gone)
         let target = min(max(0, contentOffset.y), maxOffset)
-        // 變完之後看得到、現在還沒掛的：先掛在它原本的位置（本來就在的）或新的位置（剛加的，先看不到）
+        // 變完之後看得到、現在還沒掛的：先掛在它原本的位置（本來就在的）或新的位置（剛加的，先看不到，墊在最底下讓別行滑開露出來）
+        var fresh: [LineRowView] = []
         UIView.performWithoutAnimation {
             for index in window(from: target) where live[rows[index].id] == nil {
                 let row = mount(index)
                 if let old = oldSpots[rows[index].id], old < oldTops.count {
                     row.frame = CGRect(x: 0, y: headHeight + oldTops[old], width: bounds.width, height: oldHeights[old])
                 } else {
+                    row.frame = frame(at: index)
                     row.alpha = 0
+                    content.sendSubviewToBack(row)
+                    fresh.append(row)
                 }
                 row.layoutIfNeeded()
             }
         }
+        fadeIn(fresh)
         contentSize = CGSize(width: bounds.width, height: max(contentSize.height, wantedSize.height))
         UIView.animate(withDuration: Tok.Motion.rowShiftSeconds, delay: 0, options: LineListView.shiftOptions) {
             if self.contentOffset.y != target, !self.isTracking {
@@ -176,9 +181,6 @@ extension LineListView {
             }
             for row in gone {
                 row.alpha = 0
-            }
-            for row in self.live.values where !row.leaving {
-                row.alpha = 1
             }
             self.placeAll()
         } completion: { _ in
@@ -189,6 +191,18 @@ extension LineListView {
             self.contentSize = self.wantedSize
             self.fill()
             self.backInside()
+        }
+    }
+
+    /// 剛加的行淡進來。不能跟別行同一段動畫：那段從「現在看到的樣子」接著走，回收來的行會被當成本來就看得到、直接跳出來
+    private func fadeIn(_ fresh: [LineRowView]) {
+        for row in fresh {
+            row.layer.removeAllAnimations()
+        }
+        UIView.animate(withDuration: Tok.Motion.rowShiftSeconds, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            for row in fresh {
+                row.alpha = 1
+            }
         }
     }
 

@@ -14,12 +14,12 @@ extension LineListView {
             fill()
         }
         guard let row = live[id] else { return }
-        if let old = editingID, old != id {
-            live[old]?.editing = false
-        }
+        let old = editingID == id ? nil : editingID.flatMap { live[$0] }
         editingID = id
         row.editing = true
         row.field.becomeFirstResponder()
+        // 先接手再放開：上一行先關掉觸控的話系統會先收鍵盤，接著又升起來
+        old?.editing = false
         let field = row.field
         var spot = field.endOfDocument
         if let caret, let seam = field.position(from: field.beginningOfDocument, offset: caret) {
@@ -38,15 +38,23 @@ extension LineListView {
     }
 
     /// 游標在最前面按 Backspace：空的一行拿掉、有字的接到上一行後面。鍵盤不收，游標直接跳到上一行
-    func joinUp(_ row: LineRowView) -> Bool {
-        guard let joined = onJoinUp(row.id, row.field.text ?? "") else { return false }
+    /// 等這一下按鍵處理完才換（還在刪字的半路換輸入框，系統會把鍵盤收掉再升起來）
+    func joinUp(_ row: LineRowView) {
+        let id = row.id
+        DispatchQueue.main.async { [weak self, weak row] in
+            guard let self, let row, row.id == id, editingID == id, row.field.selectedRange.location == 0 else { return }
+            join(row)
+        }
+    }
+
+    private func join(_ row: LineRowView) {
+        guard let joined = onJoinUp(row.id, row.field.text ?? "") else { return }
         // 上一行的字先換成接好的，再進去；這一行接著拿掉
         if let item = source().first(where: { $0.id == joined.id }), let prev = live[joined.id] {
             prev.show(item, look: look)
         }
         beginEditing(joined.id, caret: joined.at)
         refresh()
-        return true
     }
 
     // MARK: 打的那一行要看得到

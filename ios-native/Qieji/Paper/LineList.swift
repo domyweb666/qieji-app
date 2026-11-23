@@ -261,15 +261,19 @@ final class LineListView: UIScrollView {
         row.show(item, look: look)
         row.field.delegate = self
         row.field.onDeleteAtStart = { [weak self, weak row] in
-            guard let self, let row else { return false }
-            return joinUp(row)
+            guard let self, let row else { return }
+            joinUp(row)
         }
         dress(row, index)
         live[item.id] = row
         content.addSubview(row)
         if item.id == freshID {
-            freshID = nil
-            row.flash(wait: calm ? 0 : Tok.Motion.freshGlowDelay)
+            // 掛行是在「不准動畫」裡做的，晚一格才亮
+            DispatchQueue.main.async { [weak self] in
+                if self?.freshID == item.id {
+                    self?.flash(item.id)
+                }
+            }
         }
         return row
     }
