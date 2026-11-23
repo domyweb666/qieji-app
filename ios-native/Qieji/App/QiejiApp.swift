@@ -359,7 +359,13 @@ enum Demo {
             }
         }
         guard let data = picture.jpegData(compressionQuality: Covers.quality) else { return nil }
-        return Covers.shared.save(data)
+        let code = Covers.shared.save(data)
+        // 封面圖晚到（iCloud 還沒下載完）：QIEJI_DEMO_LATE=秒數，先拿掉、過這麼久才出現
+        if let code, let late = ProcessInfo.processInfo.environment["QIEJI_DEMO_LATE"].flatMap(Double.init) {
+            Covers.shared.remove(code)
+            DispatchQueue.main.asyncAfter(deadline: .now() + late) { _ = Covers.shared.write(code, data) }
+        }
+        return code
     }
 
     static func book() -> Notebook {

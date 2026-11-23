@@ -259,8 +259,9 @@ struct PaperView: View {
         let id = note.id
         Task {
             let data = try? await item.loadTransferable(type: Data.self)
+            let jpeg = await Task.detached(priority: .userInitiated) { data.flatMap(Covers.small) }.value
             await MainActor.run {
-                if let data, let code = Covers.shared.save(data) {
+                if let jpeg, let code = Covers.shared.keep(jpeg) {
                     store.setCover(id, code)
                 } else {
                     store.toast = Store.Toast(text: Words.coverFailTitle)

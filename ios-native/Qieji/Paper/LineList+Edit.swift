@@ -88,7 +88,8 @@ extension LineListView {
 
     func showEditing(animated: Bool) {
         guard let target = editingOffset(), abs(target - contentOffset.y) > 0.5, !isDragging else { return }
-        if animated, !calm {
+        // 超過一個畫面遠（打字打到一半把紙捲走）：直接到，捲過去的途中中間的行還沒掛、會空白幾格
+        if animated, !calm, abs(target - contentOffset.y) <= bounds.height {
             fill()
             UIView.animate(withDuration: Tok.Motion.rowShiftSeconds, delay: 0, options: LineListView.shiftOptions) {
                 self.contentOffset.y = target

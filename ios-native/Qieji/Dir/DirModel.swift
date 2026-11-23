@@ -382,19 +382,21 @@ final class DirModel: ObservableObject {
             return
         }
         // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
-        if let line {
-            store.openAt(id, line: line)
-        } else {
-            store.open(id)
-        }
-        guard !calm, let frame else {
+        guard !calm, let frame, line == nil else {
+            if let line {
+                store.openAt(id, line: line)
+            } else {
+                store.open(id)
+            }
             close()
             return
         }
         menu = nil
-        // 紙已經換好了：放大那一小段時間面板不再收觸控，手指碰到的是後面那張紙（不會有一段碰了沒反應）
+        // 放大那一小段時間面板不再收觸控，手指碰到的是後面那張紙（不會有一段碰了沒反應）
         isOpen = false
         launch = Launch(id: id, color: note.color, title: Labels.label(note), frame: frame)
+        // 先讓磚開始放大，下一格就換紙：換紙那一下不擋第一格
+        DispatchQueue.main.async { [store] in store.open(id) }
     }
 
     /// 第一個空格換成資料規則要的「放哪」：空位＝那個空位；最後一張後面（這頁還放得下）＝排在最後那格後面

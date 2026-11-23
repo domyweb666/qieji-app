@@ -118,37 +118,96 @@ struct DirMenuView: View {
     }
 }
 
-/// 點一張打開（照 iOS 開 App）：那張紙的底色從方磚的位置放大到鋪滿，卡上有清單名、邊放大邊淡掉；鋪滿了面板淡出，露出後面已經換好的那張紙
+/// 點一張打開（照 iOS 開 App）：那張紙的底色從方磚的位置放大到鋪滿，卡上有清單名、邊放大邊淡掉；鋪滿了面板淡出，露出後面已經換好的那張紙。
+/// 用系統動畫放大（不靠主執行緒一格一格算）：放大的同時紙在後面換，換紙那一下不會讓放大卡住
 struct DirLaunchView: View {
     let launch: DirModel.Launch
     let size: CGSize
     let done: () -> Void
-    @State private var grown = false
 
     var body: some View {
-        let from = launch.frame
-        let colors = Tok.note(launch.color)
-        let shape = RoundedRectangle(cornerRadius: grown ? Tok.Space.zero : from.width * Tok.Shape.tileRadiusRatio, style: .continuous)
-        shape
-            .fill(colors.paper)
-            .overlay(shape.strokeBorder(colors.rule, lineWidth: Tok.Shape.borderCard))
-            .overlay(alignment: .topLeading) {
-                Text(launch.title)
-                    .font(Tok.Font.headline)
-                    .foregroundColor(Tok.Col.textPrimary)
-                    .lineLimit(2)
-                    .padding(Tok.Space.md)
-                    .opacity(grown ? 0 : 1)
-            }
-            .clipShape(shape)
-            .frame(width: grown ? size.width : from.width, height: grown ? size.height : from.height)
-            .offset(x: grown ? 0 : from.minX, y: grown ? 0 : from.minY)
+        Grow(launch: launch, size: size)
+            .frame(width: size.width, height: size.height)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .onAppear {
-                withAnimation(Tok.Motion.launch) { grown = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.launchSeconds) { done() }
             }
+    }
+
+    private struct Grow: UIViewRepresentable {
+        let launch: DirModel.Launch
+        let size: CGSize
+
+        func makeUIView(context _: Context) -> DirLaunchCard {
+            DirLaunchCard(launch, size)
+        }
+
+        func updateUIView(_: DirLaunchCard, context _: Context) {}
+    }
+}
+
+final class DirLaunchCard: UIView {
+    private let card = UIView()
+    private let title = UILabel()
+    private let size: CGSize
+    private var started = false
+
+    init(_ launch: DirModel.Launch, _ size: CGSize) {
+        self.size = size
+        super.init(frame: CGRect(origin: .zero, size: size))
+        isUserInteractionEnabled = false
+        let colors = Tok.note(launch.color)
+        card.frame = launch.frame
+        card.backgroundColor = UIColor(colors.paper)
+        card.layer.cornerRadius = launch.frame.width * Tok.Shape.tileRadiusRatio
+        card.layer.cornerCurve = .continuous
+        card.layer.borderWidth = Tok.Shape.borderCard
+        card.layer.borderColor = UIColor(colors.rule).resolvedColor(with: .current).cgColor
+        card.clipsToBounds = true
+        addSubview(card)
+        title.text = launch.title
+        title.font = Tok.Font.styleUI(.headline)
+        title.textColor = UIColor(Tok.Col.textPrimary)
+        title.numberOfLines = 2
+        card.addSubview(title)
+        placeTitle()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        nil
+    }
+
+    /// 字照鋪滿之後的寬排，卡還小的時候超出的部分被卡切掉（不會先縮成「…」再變回來）
+    private func placeTitle() {
+        let pad = Tok.Space.md, width = max(0, size.width - pad * 2)
+        let tall = title.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        title.frame = CGRect(x: pad, y: pad, width: width, height: tall)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil, !started else { return }
+        started = true
+        // 掛上去那一刻系統不准一般動畫（會直接跳到定位），所以直接加在圖層上，跟第一格一起送出去
+        let from = card.layer.frame, radius = card.layer.cornerRadius
+        card.frame = CGRect(origin: .zero, size: size)
+        card.layer.cornerRadius = 0
+        title.alpha = 0
+        grow(card.layer, "position", CGPoint(x: from.midX, y: from.midY), card.layer.position)
+        grow(card.layer, "bounds.size", from.size, size)
+        grow(card.layer, "cornerRadius", radius, 0)
+        grow(title.layer, "opacity", 1, 0)
+    }
+
+    private func grow(_ layer: CALayer, _ path: String, _ from: Any, _ goal: Any) {
+        let part = CABasicAnimation(keyPath: path)
+        part.fromValue = from
+        part.toValue = goal
+        part.duration = Tok.Motion.launchSeconds
+        part.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(part, forKey: path)
     }
 }
 

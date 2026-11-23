@@ -425,7 +425,6 @@ enum Tok {
         static let stackPopSeconds: Double = 0.13
         static let sink = Animation.easeOut(duration: 0.26)
         static let sinkScale: CGFloat = 0.3
-        static let launch = Animation.easeOut(duration: 0.26)
         static let launchSeconds: Double = 0.26
         static let dragLandSeconds: Double = 0.25
         /// 拿起時磚補上手指已經走的那段（手勢要走一段才啟動），補完磚的位置就是手指的位置

@@ -73,17 +73,26 @@ final class Covers: ObservableObject {
         return made
     }
 
-    /// 先在背景把磚上的小圖準備好（打開 app、圖剛到的時候）
+    /// 先在背景把圖準備好（打開 app 的時候）：磚上的小圖全部，紙頂的大圖只準備最近改過的幾張（佔記憶體）
     func warm(_ notes: [Note]) {
-        for code in Set(notes.compactMap(shownCode)) where thumbs.object(forKey: code as NSString) == nil {
-            let url = file(code), thumbs = thumbs
+        let newest = notes.filter { !$0.deleted }.sorted { $0.updated > $1.updated }
+        let codes = newest.compactMap(shownCode)
+        for (index, code) in codes.enumerated() {
+            let key = code as NSString, url = file(code), thumbs = thumbs, cache = cache
+            let big = index < Covers.warmBig && cache.object(forKey: key) == nil
+            guard big || thumbs.object(forKey: key) == nil else { continue }
             DispatchQueue.global(qos: .utility).async {
                 if let made = Covers.shrink(url) {
-                    thumbs.setObject(made, forKey: code as NSString)
+                    thumbs.setObject(made, forKey: key)
+                }
+                if big, let ready = UIImage(contentsOfFile: url.path)?.preparingForDisplay() {
+                    cache.setObject(ready, forKey: key)
                 }
             }
         }
     }
+
+    private static let warmBig = 6
 
     private static func shrink(_ url: URL) -> UIImage? {
         guard let full = UIImage(contentsOfFile: url.path), full.size.width > 0, full.size.height > 0 else { return nil }
@@ -97,17 +106,26 @@ final class Covers: ObservableObject {
 
     /// 選好的照片：縮到寬 1200、存成 JPEG。回傳新的代號；失敗回 nil
     func save(_ data: Data) -> String? {
+        Covers.small(data).flatMap(keep)
+    }
+
+    /// 縮好的圖存起來，回傳新的代號
+    func keep(_ jpeg: Data) -> String? {
+        let code = Ident.make().filter { $0.isLetter || $0.isNumber }.lowercased()
+        return write(code, jpeg) ? code : nil
+    }
+
+    /// 縮圖、壓成 JPEG。一張照片要一兩百毫秒，在背景做
+    static func small(_ data: Data) -> Data? {
         guard let picked = UIImage(data: data) else { return nil }
         let shrink = picked.size.width > Covers.width ? Covers.width / picked.size.width : 1
         let size = CGSize(width: (picked.size.width * shrink).rounded(), height: (picked.size.height * shrink).rounded())
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        let small = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
             picked.draw(in: CGRect(origin: .zero, size: size))
         }
-        guard let jpeg = small.jpegData(compressionQuality: Covers.quality) else { return nil }
-        let code = Ident.make().filter { $0.isLetter || $0.isNumber }.lowercased()
-        return write(code, jpeg) ? code : nil
+        .jpegData(compressionQuality: Covers.quality)
     }
 
     @discardableResult
