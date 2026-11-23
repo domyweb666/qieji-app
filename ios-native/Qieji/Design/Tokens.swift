@@ -92,6 +92,10 @@ enum Tok {
         static let folderGlassBlur = Raw.cream50.color(0.55, 0.5)
         static let folderGlass = Raw.cream50.color(0.92, 0.9)
         static let folderGlassEdge = Raw.white.color(0.7, 0.12)
+        // 霧幾成（1.1 expo-blur 的 intensity）：長按選單後面、打開的資料夾後面、資料夾框
+        static let menuBlur: CGFloat = 0.3
+        static let folderBlur: CGFloat = 0.55
+        static let folderBoxBlur: CGFloat = 0.6
         static let menuScrim = Raw.black.color(0.28, 0.4)
         static let menuVeil = Raw.black.color(0.06, 0.18) // 長按選單後面：霧掉之後只壓一點點黑（1.1 ALPHA.menuVeil）
         static let shadow = Tok.solid(Raw.shadowInk)
@@ -181,6 +185,7 @@ enum Tok {
         static let label = SwiftUI.Font.caption.weight(.medium) // 12
         static let fabSymbol = SwiftUI.Font.system(size: 24, weight: .semibold)
         static let barIcon = SwiftUI.Font.system(size: 20) // 右上 ⋯ 的圖示（1.1 Sym size 20）
+        static let barCheckSize: CGFloat = 20
         static let barCheck = SwiftUI.Font.system(size: 20, weight: .semibold) // 右上 ✓、輸入框的 ✓
         static let chevron = SwiftUI.Font.system(size: 12, weight: .semibold) // 清單名膠囊裡的 ▾
         static let menuIcon = SwiftUI.Font.system(size: 18) // 選單卡每一項右邊的圖示
@@ -218,6 +223,7 @@ enum Tok {
         static let gutter: CGFloat = 20
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 32
+        static let keyboardGap: CGFloat = 16 // 打字的那行離鍵盤多遠
         static let belowList: CGFloat = 200 // 清單最下面留白，最後一行才捲得上來
         static let pageBottom: CGFloat = 120 // 推進來的頁最下面留白，最後一組才捲得上來
     }
@@ -345,6 +351,24 @@ enum Tok {
         static let freshGlowSeconds: Double = 0.6
         static let toTopSeconds: Double = 0.3 // 記下新的一則捲回最上面（1.1 toTop，跟 freshGlowDelay 對齊）
         static let dragLiftScale: CGFloat = 1.02
+        static let dragLiftSeconds: Double = 0.15
+        static let dragShiftSeconds: Double = 0.2
+        static let swipeLabelSeconds: Double = 0.25
+        static let swipeLabelDamping: CGFloat = 0.6
+        static let rowShiftSeconds: Double = 0.18 // 補位（1.1 rowShift）
+        static let seekSeconds: Double = 0.3
+        static let keyboardSeconds: Double = 0.25
+        /// 紙面的彈簧（原生那份）：感知時長 response 秒、不過頭，接手指的速度（每秒走幾個「全程」）
+        static func spring(_ response: Double, velocity: CGFloat) -> UISpringTimingParameters {
+            let pace = 2 * Double.pi / response
+            return UISpringTimingParameters(
+                mass: 1, stiffness: CGFloat(pace * pace), damping: CGFloat(2 * pace), initialVelocity: CGVector(dx: velocity, dy: velocity)
+            )
+        }
+
+        static let blurSpan: Double = 1 // 霧面停在中間用的那段動畫多長（不會真的跑）
+        static let slideBack: Double = 0.25 // 劃掉後滑回、沒滑夠彈回、放手滑進落點
+        static let slideOut: Double = 0.22 // 刪除滑出畫面
         static let swipeLabelFrom: Double = 0.35
         static let swipeLabelArm: CGFloat = 1.15
         static let pressDim: Double = 0.6

@@ -10,7 +10,7 @@ struct PaperView: View {
     var onRoute: (Route) -> Void = { _ in }
     var onMoveLine: (String) -> Void = { _ in }
 
-    @StateObject private var touch = ListTouch()
+    @State private var remote = ListRemote()
     @StateObject private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
     @ObservedObject private var covers = Covers.shared
@@ -22,15 +22,13 @@ struct PaperView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(\.accessibilityReduceMotion) private var calm
     @State private var editingID: String?
-    @State private var focus: FocusAsk?
     @State private var rowMenu: RowMenuAsk?
     @State private var composing = false
     @State private var draft = ""
     @State private var tip = false // ✓ 的單點提示開著
-    @State private var listHeight: CGFloat = 0
+    @State private var listTop: CGFloat = 0
     @State private var renaming = false
     @State private var pinChoices: [Note] = [] // 釘滿時問要換掉哪一張（有值＝問著）
-    @FocusState private var composerFocused: Bool
     @FocusState private var padFocused: Bool
 
     var body: some View {
@@ -46,7 +44,7 @@ struct PaperView: View {
                 }
                 TimeRow(note: note, colors: colors)
             } else {
-                header(colors, cover: float ? .floating(touch.spy) : .none)
+                header(colors, cover: float ? .floating(remote.spy) : .none)
             }
             Group {
                 if lockedNow {
@@ -55,17 +53,16 @@ struct PaperView: View {
                     NotePad(store: store, note: note, focused: $padFocused, scale: size.scale)
                 } else {
                     PaperList(
-                        store: store, touch: touch, note: note,
-                        editingID: $editingID, focus: $focus, colors: colors,
+                        store: store, remote: remote, note: note, onEditing: { editingID = $0 },
                         onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale,
-                        head: float ? AnyView(CoverHead(note: note, colors: colors, spy: touch.spy, onTitle: onTitle)) : nil
+                        head: float ? AnyView(CoverHead(note: note, colors: colors, spy: remote.spy, onTitle: onTitle)) : nil
                     )
                 }
             }
             .background(GeometryReader { geo in
                 Color.clear
-                    .onAppear { listHeight = geo.size.height }
-                    .onChange(of: geo.size.height) { listHeight = $0 }
+                    .onAppear { listTop = geo.frame(in: .global).minY }
+                    .onChange(of: geo.frame(in: .global).minY) { listTop = $0 }
             })
             // 釘滿 5 張再釘：一步問要換掉哪一張（1.1 pin.ts），換完提示條可以復原
             .confirmationDialog(Words.pinFullTitle(Seats.pinMax), isPresented: pinAsking, titleVisibility: .visible) {
@@ -77,11 +74,14 @@ struct PaperView: View {
                 Text(Words.pinSwapAsk)
             }
         }
+        // 清單鋪到螢幕最底（Home 條、鍵盤後面都有行）；鍵盤擋住的部分清單自己讓，不讓系統把整頁推來推去。
+        // 記事本照系統的：底下讓出鍵盤
+        .ignoresSafeArea(note.isText ? [] : .all, edges: .bottom)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 colors.paper.ignoresSafeArea()
                 if float, let photo {
-                    CoverBanner(photo: photo, paper: colors.paper, spy: touch.spy)
+                    CoverBanner(photo: photo, paper: colors.paper, spy: remote.spy)
                 }
             }
         }
@@ -97,7 +97,14 @@ struct PaperView: View {
                 .animation(Tok.Motion.keyboard, value: composing)
                 .accessibilityHidden(true)
         }
-        .overlay(alignment: .bottom) { composerBar }
+        .overlay {
+            ComposerHost(
+                open: composing, text: $draft, tip: tip, topLimit: listTop,
+                onBlur: { closeComposer() }, onDone: doneComposer, onTipTap: { tip = false }
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(composing)
+        }
         .overlay {
             if let ask = rowMenu {
                 RowMenu(items: rowItems(ask.id), rowBottom: ask.bottom, close: closeRowMenu)
@@ -127,11 +134,6 @@ struct PaperView: View {
         .onChange(of: store.plusAsk) { _ in addLine() }
         .onChange(of: store.renameAsk) { _ in renameIfAsked() }
         .onChange(of: fabWanted) { _ in updateFab() }
-        .onChange(of: composerFocused) { focused in
-            if !focused, composing {
-                closeComposer()
-            }
-        }
         .onChange(of: draft) { [draft] text in
             store.draft = text
             noticeReturn(prev: draft, next: text)
@@ -147,7 +149,7 @@ struct PaperView: View {
 
     /// 清單名變成可以打字（⋯「改名字」、目錄 VoiceOver 的「改名字」）
     private func startRename() {
-        editingID = nil
+        remote.list?.endEditingLine()
         closeComposer(stay: true)
         renaming = true
     }
@@ -184,7 +186,7 @@ struct PaperView: View {
     /// ⋯「上鎖／解除上鎖」：解除要先驗、不看買了沒；上鎖要完整版、手機要能驗，先問一次
     private func toggleLock() {
         closeComposer(stay: true)
-        editingID = nil
+        remote.list?.endEditingLine()
         let id = note.id
         if note.locked {
             Task {
@@ -241,7 +243,6 @@ struct PaperView: View {
 
     /// 右上 ✓：誰在打字都收起來
     private func doneTyping() {
-        editingID = nil
         renaming = false
         padFocused = false
         KeyboardWatch.dismiss()
@@ -273,11 +274,9 @@ struct PaperView: View {
 
     private func openComposer() {
         guard !composing, !note.isText, !lockedNow else { return }
-        editingID = nil
         draft = ""
         store.draft = ""
-        withAnimation(calm ? Tok.Motion.fade : Tok.Motion.keyboard) { composing = true }
-        DispatchQueue.main.async { composerFocused = true }
+        composing = true
     }
 
     /// 開了新的一張、或控制中心按了「記一行」：輸入框直接升起（紙剛出現、面板還在收，等一下再叫鍵盤）
@@ -301,17 +300,19 @@ struct PaperView: View {
         let text = Labels.trim(store.takeDraft())
         draft = ""
         tip = false
-        withAnimation(calm ? Tok.Motion.fade : Tok.Motion.keyboard) { composing = false }
-        composerFocused = false
+        composing = false
         guard !text.isEmpty else { return }
-        if stay || editingID != nil || touch.dragID != nil {
-            touch.keepStill { _ = store.addTop(text) }
+        let added = store.addTop(text)
+        guard let list = remote.list else { return }
+        if stay || remote.editingID != nil || remote.dragging {
+            list.refresh(animated: false, stay: true)
             return
         }
-        var added: String?
-        withAnimation(calm ? nil : Tok.Motion.rowShift) { added = store.addTop(text) }
-        touch.fresh = added
-        touch.glideTop()
+        list.refresh()
+        list.glider.toTop(list)
+        if let added {
+            list.flash(added)
+        }
     }
 
     /// 輸入框的 ✓：記下來、收起，鍵盤一起收
@@ -320,24 +321,9 @@ struct PaperView: View {
         KeyboardWatch.dismiss()
     }
 
-    private var composerLines: Int {
-        let line = max(1, Tok.Font.lineUI.lineHeight)
-        return max(1, Int((listHeight - Tok.Space.sm * 4) / line))
-    }
-
-    @ViewBuilder private var composerBar: some View {
-        if composing {
-            ComposerBar(
-                text: $draft, focused: $composerFocused, maxLines: composerLines, tip: tip,
-                onDone: doneComposer, onTipTap: { tip = false }
-            )
-            .transition(calm ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
     /// 從 1.0 更新上來的人第一次在輸入框按 Return：✓ 上面冒一張小卡（一輩子一次）
     private func noticeReturn(prev: String, next: String) {
-        guard !tip, !Prefs.shared.returnTipSeen, ComposerBar.typedReturn(prev: prev, next: next) else { return }
+        guard !tip, !Prefs.shared.returnTipSeen, ComposerHost.typedReturn(prev: prev, next: next) else { return }
         Prefs.shared.markReturnTip()
         tip = true
         UIAccessibility.post(notification: .announcement, argument: Words.returnTip)
@@ -347,7 +333,6 @@ struct PaperView: View {
 
     /// 按住一行：先收鍵盤，選單卡接在那一行下面（1.1 openRowMenu）
     private func openRowMenu(_ id: String, bottom: CGFloat) {
-        editingID = nil
         KeyboardWatch.dismiss()
         withAnimation(Tok.Motion.menuPopIn) { rowMenu = RowMenuAsk(id: id, bottom: bottom) }
     }
@@ -377,11 +362,11 @@ struct PaperView: View {
 
     /// 從選單刪一行：先淡出（0.15 秒），淡完才拿掉
     private func fadeThenBin(_ id: String) {
-        withAnimation(Tok.Motion.fade) { _ = touch.fading.insert(id) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Motion.fadeSeconds) {
+        guard let list = remote.list else {
             store.binLine(id)
-            touch.fading.remove(id)
+            return
         }
+        list.fadeOut(id) { store.binLine(id) }
     }
 }
 

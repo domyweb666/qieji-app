@@ -36,7 +36,7 @@ struct DirFolderView: View {
     }
 
     private var veil: some View {
-        Veil(solidColor: Tok.Col.folderVeil)
+        Veil(solidColor: Tok.Col.folderVeil, soft: Tok.Col.folderBlur)
             .contentShape(Rectangle())
             .onTapGesture { model.closeFolder() }
             .accessibilityLabel(Words.closeFolder)
@@ -72,7 +72,7 @@ struct DirFolderView: View {
             if solid {
                 shape.fill(Tok.Col.folderGlass)
             } else {
-                shape.fill(.regularMaterial)
+                SoftBlur(amount: Tok.Col.folderBoxBlur).clipShape(shape)
                 shape.fill(Tok.Col.folderGlassBlur)
             }
         }

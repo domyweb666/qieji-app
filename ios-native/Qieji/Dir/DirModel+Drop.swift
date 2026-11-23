@@ -19,19 +19,20 @@ extension DirModel {
         let onto = stackOn.flatMap { id in row.first { $0.entry.id == id }?.entry }
         var into: String?
         var keepOpen = false
-        if let now, let fid = now.inFolder {
-            keepOpen = dropInFolder(now, folder: fid, stamp: stamp)
-        } else if let now, let onto {
-            into = dropOnto(now, onto: onto, stamp: stamp)
-        } else if let now, now.cells != nil {
-            let ids = row.map(\.entry.id), before = entries.map(\.id)
-            if now.source != nil {
-                store.edit { book in Seats.placeTop(&book, noteID: now.id, visible: ids, now: stamp) }
-            } else if ids != before {
-                store.edit { book in Seats.reseat(&book, visible: ids, now: stamp) }
+        change {
+            if let now, let fid = now.inFolder {
+                keepOpen = dropInFolder(now, folder: fid, stamp: stamp)
+            } else if let now, let onto {
+                into = dropOnto(now, onto: onto, stamp: stamp)
+            } else if let now, now.cells != nil {
+                let ids = row.map(\.entry.id), before = entries.map(\.id)
+                if now.source != nil {
+                    store.edit { book in Seats.placeTop(&book, noteID: now.id, visible: ids, now: stamp) }
+                } else if ids != before {
+                    store.edit { book in Seats.reseat(&book, visible: ids, now: stamp) }
+                }
             }
         }
-        stackOn = nil
         stackSlot = -1
         geo.folderOpen = false
         aim = .none
@@ -41,7 +42,8 @@ extension DirModel {
         var quiet = Transaction()
         quiet.disablesAnimations = true
         withTransaction(quiet) {
-            setDrag(nil)
+            settle()
+            stackOn = nil
             ghost.entry = nil
             ghost.shift = .zero
             ghost.catchUp = .zero

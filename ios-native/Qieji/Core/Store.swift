@@ -3,7 +3,12 @@ import SwiftUI
 
 /// 整個 app 只有一份資料。畫面改資料一律走這裡的方法：改完畫面重畫、稍後存檔。
 final class Store: ObservableObject {
-    @Published private(set) var book: Notebook
+    @Published private(set) var book: Notebook {
+        didSet { onBook() }
+    }
+
+    /// 資料換了馬上叫（目錄開著時照新的排）
+    var onBook: () -> Void = {}
     @Published private(set) var currentID: String?
     @Published var toast: Toast?
     /// 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像提示條會自己消失（1.1 06-首次體驗 ❓7）

@@ -240,6 +240,8 @@ struct RootView: View {
         // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
         .overlay(alignment: .bottomTrailing) {
             PlusButton(shown: store.fabShown && !switching) { store.plusAsk += 1 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .ignoresSafeArea(.keyboard) // 鍵盤升起時停在原地淡掉，不跟著鍵盤往上跑
         }
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
         .overlay { DirHost(store: store, model: dir, onRoute: go) }

@@ -64,7 +64,25 @@ final class DirModel: ObservableObject {
     @Published var query = ""
     @Published var page = 0
     @Published var editing = false // 抖動中
-    @Published var drag: DirDrag?
+    /// 目錄現在畫的樣子：排列和拖曳綁成一份，一次換。分兩次換的話中間會多畫一格「資料已經改了、拖曳還沒結束」，
+    /// 疊成資料夾放手那一刻整頁的磚會亂飛（2026-11-23）
+    struct Scene {
+        var entries: [Seats.Entry] = []
+        var drag: DirDrag?
+    }
+
+    @Published var scene = Scene() {
+        didSet { pagesSeen = nil }
+    }
+
+    private var pagesSeen: [[Seats.Entry]]?
+    private var pagesSize = 0
+    private var holding = false // 正在改資料，等一起換
+
+    var drag: DirDrag? {
+        get { scene.drag }
+        set { scene.drag = newValue }
+    }
     @Published var openFolder: OpenFolder?
     @Published var folderPage = 0
     @Published var menu: Menu?
@@ -104,6 +122,7 @@ final class DirModel: ObservableObject {
         self.store = store
         gridTouch.model = self
         folderTouch.model = self
+        store.onBook = { [weak self] in self?.bookChanged() }
     }
 
     var calm: Bool {
@@ -129,7 +148,19 @@ final class DirModel: ObservableObject {
     }
 
     var entries: [Seats.Entry] {
-        Seats.seatedLayout(store.book)
+        scene.entries
+    }
+
+    /// 改資料，改完跟拖曳一起換（中間不多畫一格）
+    func change(_ body: () -> Void) {
+        holding = true
+        body()
+        holding = false
+    }
+
+    /// 改完了：新的排列、沒有拖曳，一次換上
+    func settle() {
+        scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
     }
 
     /// 這頁格子左上角（螢幕座標）
@@ -155,16 +186,23 @@ final class DirModel: ObservableObject {
 
     /// 畫面上每一頁（拖的時候照格子表排）
     var pages: [[Seats.Entry]] {
+        // 一次重畫會問好幾次、手指每點一下也會問：排列沒變就用上次算好的
+        if let pagesSeen, pagesSize == perPage {
+            return pagesSeen
+        }
         var list = entries
         if let drag {
             list = flat(drag).map(\.entry)
         }
-        return pageIndex(list).map { page in page.map { list[$0] } }
+        let out = pageIndex(list).map { page in page.map { list[$0] } }
+        pagesSeen = out
+        pagesSize = perPage
+        return out
     }
 
     var openEntry: Seats.Entry? {
         guard let openFolder else { return nil }
-        return Seats.seatedEntries(store.book).first { $0.id == openFolder.id && $0.folder != nil }
+        return entries.first { $0.id == openFolder.id && $0.folder != nil }
     }
 
     var folderList: [Note] {
@@ -218,6 +256,7 @@ final class DirModel: ObservableObject {
         launch = nil
         fading = calm
         progress = 0
+        scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
         shown = true
         // 先掛上去（還在螢幕外），下一格才開始滑：一起改的話面板會直接出現在定位
         DispatchQueue.main.async { [weak self] in
@@ -286,6 +325,11 @@ final class DirModel: ObservableObject {
 
     /// 資料變了（同步、刪除、復原）：打開的資料夾不見了就收起
     func bookChanged() {
+        guard shown, !holding else { return }
+        let next = Seats.seatedLayout(store.book)
+        if next != scene.entries {
+            scene.entries = next
+        }
         if openFolder != nil, openEntry == nil {
             openFolder = nil
         }

@@ -4,12 +4,18 @@ import UIKit
 /// 浮層後面那一層：霧面（毛玻璃）再疊一層很淡的暗；開了「減少透明度」改用實的暗幕
 struct Veil: View {
     let solidColor: Color
+    /// 霧幾成（沒給＝系統最薄的那種材質，整片蓋住）
+    var soft: CGFloat?
     @Environment(\.accessibilityReduceTransparency) private var solid
 
     var body: some View {
         ZStack {
             if !solid {
-                Rectangle().fill(.ultraThinMaterial)
+                if let soft {
+                    SoftBlur(amount: soft)
+                } else {
+                    Rectangle().fill(.ultraThinMaterial)
+                }
             }
             solid ? solidColor : Tok.Col.folderVeilBlur
         }

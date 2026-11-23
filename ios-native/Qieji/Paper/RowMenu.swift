@@ -104,7 +104,7 @@ struct MenuVeil: View {
             if solid {
                 Tok.Col.scrim
             } else {
-                Rectangle().fill(.ultraThinMaterial)
+                SoftBlur(amount: Tok.Col.menuBlur)
                 Tok.Col.menuVeil
             }
         }

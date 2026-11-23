@@ -9,9 +9,8 @@ extension DirModel {
     }
 
     /// 換拖曳狀態一律走這裡：同時把瞄哪要用的格子位置、格數、讓出來那格算好
-    func setDrag(_ next: DirDrag?) {
+    func setDrag(_ next: DirDrag) {
         drag = next
-        guard let next else { return }
         let row = flat(next)
         let index = pageIndex(row.map(\.entry))
         let here = next.page >= 0 && next.page < index.count ? index[next.page] : []

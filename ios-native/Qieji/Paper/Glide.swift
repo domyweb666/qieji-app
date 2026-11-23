@@ -7,17 +7,26 @@ final class Glide: NSObject {
     private var link: CADisplayLink?
     private var from: CGFloat = 0
     private var start: CFTimeInterval = 0
+    private var goal: CGFloat = 0
+    private var seconds = Tok.Motion.toTopSeconds
     private weak var scroll: UIScrollView?
 
     func toTop(_ view: UIScrollView) {
         stop()
         let top = -view.adjustedContentInset.top
         guard view.contentOffset.y > top else { return }
+        go(view, to: top, seconds: Tok.Motion.toTopSeconds)
+    }
+
+    func go(_ view: UIScrollView, to target: CGFloat, seconds: Double) {
+        stop()
         if UIAccessibility.isReduceMotionEnabled {
-            view.contentOffset.y = top
+            view.contentOffset.y = target
             return
         }
         scroll = view
+        goal = target
+        self.seconds = seconds
         from = view.contentOffset.y
         start = CACurrentMediaTime()
         let next = CADisplayLink(target: self, selector: #selector(step(_:)))
@@ -30,10 +39,9 @@ final class Glide: NSObject {
             stop()
             return
         }
-        let progress = min(1, (CACurrentMediaTime() - start) / Tok.Motion.toTopSeconds)
+        let progress = min(1, (CACurrentMediaTime() - start) / seconds)
         let eased = 1 - pow(1 - progress, 3)
-        let top = -scroll.adjustedContentInset.top
-        scroll.contentOffset.y = from + (top - from) * CGFloat(eased)
+        scroll.contentOffset.y = from + (goal - from) * CGFloat(eased)
         if progress >= 1 {
             stop()
         }
@@ -42,14 +50,5 @@ final class Glide: NSObject {
     func stop() {
         link?.invalidate()
         link = nil
-    }
-}
-
-extension ListTouch {
-    /// 搜尋點過來的那一行離現在看的地方在幾個螢幕內（還沒排出來的行當作很遠，直接跳過去）
-    func near(_ id: String, screens: CGFloat) -> Bool {
-        guard let scroll, let row = frames[id] else { return false }
-        let height = scroll.bounds.height
-        return abs(row.minY - height * Tok.Shape.seekAnchor.y - scroll.contentOffset.y) < height * screens
     }
 }

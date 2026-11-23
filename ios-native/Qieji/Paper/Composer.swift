@@ -4,45 +4,29 @@ import UIKit
 /// 輸入框（照 1.1 Composer）：按右下 ＋ 從底下升起、貼在鍵盤上面，跟著字長高（長到清單頂端，再多在框裡捲）。
 /// Return＝在框裡換行；✓＝記下來、收起；點紙上一行或空白處、切到別的 app 一樣記下來再收起，字不會丟。
 /// 卡片是不透明的奶油白（後面是變暗的紙，玻璃會照著變深、字看不清）。
-struct ComposerBar: View {
+/// 2026-11-23 改成原生：框用系統的「鍵盤線」釘在鍵盤上緣，鍵盤升降、手指把鍵盤往下拖，框都黏著它走
+struct ComposerHost: UIViewRepresentable {
+    let open: Bool
     @Binding var text: String
-    var focused: FocusState<Bool>.Binding
-    let maxLines: Int
     let tip: Bool
+    /// 清單頂端在螢幕上的高度：框最高長到這裡
+    let topLimit: CGFloat
+    let onBlur: () -> Void
     let onDone: () -> Void
     let onTipTap: () -> Void
 
-    var body: some View {
-        HStack(alignment: .bottom, spacing: Tok.Space.zero) {
-            TextField("", text: $text, prompt: Text(Words.composerHint).foregroundColor(Tok.Col.textMuted), axis: .vertical)
-                .font(Tok.Font.body)
-                .foregroundColor(Tok.Col.textPrimary)
-                .lineLimit(1 ... max(1, maxLines))
-                .focused(focused)
-                .frame(minHeight: Tok.Shape.hitMin)
-                .accessibilityLabel(Words.composerField)
-            Button(action: onDone) {
-                Image(systemName: "checkmark")
-                    .font(Tok.Font.barCheck)
-                    .foregroundColor(Tok.Col.textPrimary)
-                    .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
-            }
-            .buttonStyle(PressDim())
-            .accessibilityLabel(Words.commit)
-        }
-        .padding(.leading, Tok.Space.lg)
-        .padding(.trailing, Tok.Space.xs)
-        .padding(.vertical, Tok.Space.sm)
-        .background(RoundedRectangle(cornerRadius: Tok.Shape.radiusLg).fill(Tok.Col.surface))
-        .shadow(color: Tok.Col.shadow.opacity(Tok.Shape.shadowSoft), radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY)
-        .overlay(alignment: .topTrailing) {
-            if tip {
-                ReturnTip(onTap: onTipTap)
-                    .alignmentGuide(.top) { $0[.bottom] + Tok.Space.md }
-            }
-        }
-        .padding(.horizontal, Tok.Space.sm)
-        .padding(.bottom, Tok.Space.sm)
+    func makeUIView(context _: Context) -> ComposerView {
+        ComposerView(frame: .zero)
+    }
+
+    func updateUIView(_ view: ComposerView, context _: Context) {
+        view.onText = { text = $0 }
+        view.onBlur = onBlur
+        view.onDone = onDone
+        view.onTip = onTipTap
+        view.topLimit = topLimit
+        view.showTip(tip)
+        view.setOpen(open)
     }
 
     /// 這次改字是不是「按了一下 Return」：剛好多一個字，而且多的是換行（貼上一大段、刪字、選字確認都不算）
@@ -52,51 +36,268 @@ struct ComposerBar: View {
     }
 }
 
-/// ✓ 的單點提示（1.1 tip）：從 1.0 更新上來的人第一次在輸入框按 Return（現在是換行）時，✓ 上面冒一張小卡，一輩子一次。
-/// 不變暗、不擋觸控；點它、按 ✓、框收起就不見。底色用字的顏色、字用卡片的顏色（深淺色自己反過來）
-struct ReturnTip: View {
-    let onTap: () -> Void
+final class ComposerView: UIView, UITextViewDelegate {
+    var onText: (String) -> Void = { _ in }
+    var onBlur: () -> Void = {}
+    var onDone: () -> Void = {}
+    var onTip: () -> Void = {}
+    var topLimit: CGFloat = 0
 
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .trailing, spacing: Tok.Space.zero) {
-                Text(Words.returnTip)
-                    .font(Tok.Font.footnote)
-                    .foregroundColor(Tok.Col.surface)
-                    .padding(.horizontal, Tok.Space.md)
-                    .padding(.vertical, Tok.Space.sm)
-                    .background(RoundedRectangle(cornerRadius: Tok.Shape.radiusSm).fill(Tok.Col.textPrimary))
-                // 小尾巴：轉 45 度的方塊，中心對著 ✓ 的中心
-                Rectangle()
-                    .fill(Tok.Col.textPrimary)
-                    .frame(width: Tok.Space.md, height: Tok.Space.md)
-                    .rotationEffect(.degrees(Tok.Shape.tipTailTurn))
-                    .offset(y: -Tok.Space.md / 2)
-                    .padding(.trailing, Tok.Space.xs + Tok.Shape.hitMin / 2 - Tok.Space.md / 2)
-            }
+    private let card = UIView()
+    private let field = UITextView()
+    private let hint = UILabel()
+    private let done = UIButton(type: .custom)
+    private let tipCard = UIButton(type: .custom)
+    private var tall: NSLayoutConstraint?
+    private var opened = false
+    private var rising = false // 框還在往上升，等鍵盤那段動畫一起走
+    private var leaving = false // 要收了，等鍵盤一起走
+    private var tokens: [NSObjectProtocol] = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        build()
+        let center = NotificationCenter.default
+        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification] {
+            tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                self?.keyboardMoved(note)
+            })
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Words.returnTip)
-        .accessibilityHint(Words.tipHint)
-        .transition(.opacity.animation(Tok.Motion.fade))
     }
-}
 
-/// 剛記下的那一行亮一下：捲回頂端那段時間亮著，之後慢慢淡掉，回答「我剛剛記的去哪了」（1.1 FreshGlow）
-struct FreshGlow: View {
-    let done: () -> Void
-    @State private var shown = 1.0
-    @Environment(\.accessibilityReduceMotion) private var calm
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        nil
+    }
 
-    var body: some View {
-        Tok.Col.rowEditingFill
-            .opacity(shown)
-            .allowsHitTesting(false)
-            .onAppear {
-                let wait = calm ? 0 : Tok.Motion.freshGlowDelay
-                withAnimation(Tok.Motion.freshGlowFade.delay(wait)) { shown = 0 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + wait + Tok.Motion.freshGlowSeconds, execute: done)
+    deinit {
+        for token in tokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+
+    /// 只有卡片收觸控：其他地方照樣點得到紙上的行
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+
+    // MARK: 開、收
+
+    func setOpen(_ next: Bool) {
+        guard next != opened else { return }
+        opened = next
+        if next {
+            rise()
+        } else {
+            fall()
+        }
+    }
+
+    private var calm: Bool {
+        UIAccessibility.isReduceMotionEnabled
+    }
+
+    private func rise() {
+        leaving = false
+        field.text = ""
+        hint.isHidden = false
+        card.layer.removeAllAnimations()
+        card.isHidden = false
+        card.alpha = calm ? 0 : 1
+        card.transform = .identity
+        refit()
+        layoutIfNeeded()
+        card.transform = calm ? .identity : below
+        rising = true
+        field.becomeFirstResponder()
+        // 接實體鍵盤時系統不升鍵盤、也不通知：自己升
+        if rising {
+            move(seconds: Tok.Motion.keyboardSeconds, curve: ComposerView.keyboardCurve)
+        }
+    }
+
+    private static let keyboardCurve: UInt = 7
+
+    /// 躲到螢幕底下要移多少
+    private var below: CGAffineTransform {
+        CGAffineTransform(translationX: 0, y: max(0, bounds.height - card.center.y + card.bounds.height / 2) + Tok.Space.xl)
+    }
+
+    private func move(seconds: Double, curve: UInt) {
+        rising = false
+        let options = UIView.AnimationOptions(rawValue: curve << 16).union([.allowUserInteraction, .beginFromCurrentState])
+        UIView.animate(withDuration: calm ? Tok.Motion.fadeSeconds : seconds, delay: 0, options: options) {
+            self.card.transform = .identity
+            self.card.alpha = 1
+        }
+    }
+
+    private func fall() {
+        rising = false
+        leaving = true
+        field.resignFirstResponder()
+        // 鍵盤跟著收：框跟它一起下去（keyboardMoved）。鍵盤留著（換到紙上一行打字）：框直接淡掉
+        DispatchQueue.main.async { [weak self] in
+            guard let self, leaving, !opened else { return }
+            hide(seconds: Tok.Motion.fadeSeconds, curve: 0, slide: false)
+        }
+    }
+
+    private func hide(seconds: Double, curve: UInt, slide: Bool) {
+        leaving = false
+        let options = UIView.AnimationOptions(rawValue: curve << 16).union([.allowUserInteraction, .beginFromCurrentState])
+        UIView.animate(withDuration: seconds, delay: 0, options: options) {
+            if slide, !self.calm {
+                self.card.transform = self.below
+            } else {
+                self.card.alpha = 0
             }
+        } completion: { _ in
+            guard !self.opened else { return }
+            self.card.isHidden = true
+            self.card.transform = .identity
+        }
+    }
+
+    private func keyboardMoved(_ note: Notification) {
+        let info = note.userInfo
+        let seconds = (info?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? Tok.Motion.keyboardSeconds
+        let curve = (info?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? ComposerView.keyboardCurve
+        if note.name == UIResponder.keyboardWillShowNotification {
+            if rising {
+                move(seconds: seconds, curve: curve)
+            }
+        } else if leaving || (opened && !rising) {
+            hide(seconds: max(seconds, Tok.Motion.fadeSeconds), curve: curve, slide: true)
+        }
+    }
+
+    // MARK: 打字
+
+    func textViewDidChange(_: UITextView) {
+        hint.isHidden = !field.text.isEmpty
+        onText(field.text)
+        refit()
+    }
+
+    func textViewDidEndEditing(_: UITextView) {
+        if opened {
+            onBlur()
+        }
+    }
+
+    /// 跟著字長高；長到清單頂端為止，再多在框裡捲
+    private func refit() {
+        let side = Tok.Space.sm * 2 + Tok.Space.lg + Tok.Space.xs + Tok.Shape.hitMin
+        let width = field.bounds.width > 0 ? field.bounds.width : bounds.width - side
+        let fit = field.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude)).height
+        let room = max(Tok.Shape.hitMin, keyboardLayoutGuide.layoutFrame.minY - topLimit - Tok.Space.sm * 4)
+        let next = max(Tok.Shape.hitMin, min(fit, room))
+        field.isScrollEnabled = fit > room
+        if tall?.constant != next {
+            tall?.constant = next
+            layoutIfNeeded()
+        }
+    }
+
+    // MARK: 提示卡
+
+    func showTip(_ on: Bool) {
+        guard tipCard.isHidden == on else { return }
+        if on {
+            tipCard.isHidden = false
+            tipCard.alpha = 0
+        }
+        UIView.animate(withDuration: Tok.Motion.fadeSeconds) {
+            self.tipCard.alpha = on ? 1 : 0
+        } completion: { _ in
+            self.tipCard.isHidden = !on
+        }
+    }
+
+    // MARK: 排版
+
+    private func build() {
+        card.isHidden = true
+        card.backgroundColor = UIColor(Tok.Col.surface)
+        card.layer.cornerRadius = Tok.Shape.radiusLg
+        card.layer.cornerCurve = .continuous
+        card.layer.shadowColor = UIColor(Tok.Col.shadow).cgColor
+        card.layer.shadowOpacity = Float(Tok.Shape.shadowSoft)
+        card.layer.shadowRadius = Tok.Shape.shadowRadius
+        card.layer.shadowOffset = CGSize(width: 0, height: Tok.Shape.shadowY)
+        field.backgroundColor = .clear
+        field.font = Tok.Font.lineUI
+        field.adjustsFontForContentSizeCategory = true
+        field.textColor = UIColor(Tok.Col.textPrimary)
+        field.tintColor = UIColor(Tok.Col.accent)
+        field.textContainer.lineFragmentPadding = 0
+        field.scrollsToTop = false
+        field.delegate = self
+        field.accessibilityLabel = Words.composerField
+        let pad = max(0, (Tok.Shape.hitMin - Tok.Font.lineUI.lineHeight) / 2)
+        field.textContainerInset = UIEdgeInsets(top: pad, left: 0, bottom: pad, right: 0)
+        hint.text = Words.composerHint
+        hint.font = Tok.Font.lineUI
+        hint.adjustsFontForContentSizeCategory = true
+        hint.textColor = UIColor(Tok.Col.textMuted)
+        hint.isAccessibilityElement = false
+        let symbol = UIImage.SymbolConfiguration(pointSize: Tok.Font.barCheckSize, weight: .semibold)
+        done.setImage(UIImage(systemName: "checkmark", withConfiguration: symbol), for: .normal)
+        done.tintColor = UIColor(Tok.Col.textPrimary)
+        done.accessibilityLabel = Words.commit
+        done.addAction(UIAction { [weak self] _ in self?.onDone() }, for: .touchUpInside)
+        buildTip()
+        for part in [card, tipCard, field, hint, done] as [UIView] {
+            part.translatesAutoresizingMaskIntoConstraints = false
+        }
+        addSubview(card)
+        for part in [field, hint, done, tipCard] as [UIView] {
+            card.addSubview(part)
+        }
+        pin()
+    }
+
+    private func pin() {
+        let height = field.heightAnchor.constraint(equalToConstant: Tok.Shape.hitMin)
+        tall = height
+        NSLayoutConstraint.activate([
+            height,
+            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Tok.Space.sm),
+            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Tok.Space.sm),
+            card.bottomAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor, constant: -Tok.Space.sm),
+            field.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Tok.Space.lg),
+            field.topAnchor.constraint(equalTo: card.topAnchor, constant: Tok.Space.sm),
+            field.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -Tok.Space.sm),
+            field.trailingAnchor.constraint(equalTo: done.leadingAnchor),
+            hint.leadingAnchor.constraint(equalTo: field.leadingAnchor),
+            hint.topAnchor.constraint(equalTo: field.topAnchor, constant: field.textContainerInset.top),
+            done.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Tok.Space.xs),
+            done.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -Tok.Space.sm),
+            done.widthAnchor.constraint(equalToConstant: Tok.Shape.hitMin),
+            done.heightAnchor.constraint(equalToConstant: Tok.Shape.hitMin),
+            tipCard.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            tipCard.bottomAnchor.constraint(equalTo: card.topAnchor, constant: -Tok.Space.md),
+        ])
+    }
+
+    /// ✓ 的單點提示（1.1 tip）：從 1.0 更新上來的人第一次在輸入框按 Return 時，✓ 上面冒一張小卡，一輩子一次。點它、按 ✓、框收起就不見
+    private func buildTip() {
+        var look = UIButton.Configuration.filled()
+        look.baseBackgroundColor = UIColor(Tok.Col.textPrimary)
+        look.baseForegroundColor = UIColor(Tok.Col.surface)
+        look.background.cornerRadius = Tok.Shape.radiusSm
+        look.contentInsets = NSDirectionalEdgeInsets(
+            top: Tok.Space.sm, leading: Tok.Space.md, bottom: Tok.Space.sm, trailing: Tok.Space.md
+        )
+        var words = AttributedString(Words.returnTip)
+        words.font = UIFont.preferredFont(forTextStyle: .footnote)
+        look.attributedTitle = words
+        tipCard.configuration = look
+        tipCard.isHidden = true
+        tipCard.accessibilityHint = Words.tipHint
+        tipCard.addAction(UIAction { [weak self] _ in self?.onTip() }, for: .touchUpInside)
     }
 }
 
