@@ -1,4 +1,3 @@
-import UIKit
 import UIKit.UIGestureRecognizerSubclass
 
 /// 打開 app 之後趁閒著一步一步做的事（先把目錄、切換清單做好）。手指正碰著螢幕、剛放開、正在捲、鍵盤開著的時候都不做：

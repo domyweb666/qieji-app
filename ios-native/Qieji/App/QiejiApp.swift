@@ -225,7 +225,7 @@ struct RootView: View {
         // 目錄蓋滿整個螢幕：放在 overlay，不然它會把後面的紙一起撐到狀態列底下
         .overlay { DirHost(store: store, model: dir, onRoute: go).equatable() }
         // 切換清單（點左上清單名）：自己做的底部面板，蓋在最上面
-        .overlay { SwitchHost(model: switcher).ignoresSafeArea() }
+        .overlay { SwitchLayer(model: switcher) }
     }
 
     private var switchContent: SwitchPanelView.Content {
@@ -250,11 +250,11 @@ struct RootView: View {
     }
 
     private func openSwitcher() {
-        switcher.isOpen = true
         switcher.panel.show(switchContent, SwitchPanelView.Actions(
             newNote: { store.newNote() }, newPad: { store.newPad() }, open: { store.open($0) },
             manage: { dir.open() }, gone: { [weak switcher] in switcher?.isOpen = false }
         ))
+        switcher.isOpen = true
     }
 
     /// 紙上、目錄裡要去別的畫面

@@ -331,7 +331,7 @@ final class DirGridView: UIView {
             tile.center = center
             return
         }
-        let runner = UIViewPropertyAnimator(duration: 0, timingParameters: Tok.Motion.tileSpring)
+        let runner = UIViewPropertyAnimator(duration: .zero, timingParameters: Tok.Motion.tileSpring)
         runner.addAnimations { tile.center = center }
         runner.startAnimation()
     }

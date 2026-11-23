@@ -59,8 +59,8 @@ struct DirFolderView: View {
         return VStack(spacing: Tok.Space.zero) {
             ScrollView(.horizontal, showsIndicators: false) {
                 DirGrid(model: model, slots: slots(list, width: width), cell: metrics.cell)
-                .frame(width: CGFloat(pageCount) * width, height: height, alignment: .topLeading)
-                .background(DirHook(touch: model.folderTouch))
+                    .frame(width: CGFloat(pageCount) * width, height: height, alignment: .topLeading)
+                    .background(DirHook(touch: model.folderTouch))
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .frame(width: width, height: height)

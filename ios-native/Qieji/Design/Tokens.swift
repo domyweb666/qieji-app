@@ -402,7 +402,7 @@ enum Tok {
         static let deleteSlideSeconds: Double = 0.22
         static let fadeSeconds: Double = 0.15
         static let composerFocusDelay: Double = 0.3
-        // 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
+        /// 目錄面板（數值照 Expo 版 tokens.ts 的 motion）
         /// 磚換位（1.1 tileShift）
         static var tileSpring: UISpringTimingParameters {
             UISpringTimingParameters(mass: 1, stiffness: 484, damping: 37, initialVelocity: .zero)
