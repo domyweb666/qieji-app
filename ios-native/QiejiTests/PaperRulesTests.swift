@@ -208,4 +208,35 @@ final class PaperRulesTests: XCTestCase {
         XCTAssertEqual(store.renameID, "abc")
         XCTAssertEqual(store.renameAsk, before + 1)
     }
+
+    /// 刪除滑出途中換了紙：刪的還是原本那張的那一行，換過去的那張不動；復原也回到原本那張
+    func testBinAfterSwitchingPaper() throws {
+        var book = Notebook()
+        var first = Note.blank(color: "yellow", now: 1)
+        let line = Item(text: "要刪的")
+        first.items = [line, Item(text: "留著")]
+        var second = Note.blank(color: "green", now: 2)
+        second.items = [Item(text: "另一張")]
+        book.notes = [first, second]
+        let store = Store(book: book)
+        store.open(first.id)
+        store.open(second.id)
+        store.binLine(line.id, in: first.id)
+        XCTAssertEqual(store.book.note(first.id)?.items.map(\.text), ["留著"])
+        XCTAssertEqual(store.book.note(second.id)?.items.map(\.text), ["另一張"])
+        try XCTUnwrap(store.toast?.undo)()
+        XCTAssertEqual(store.book.note(first.id)?.items.map(\.text), ["要刪的", "留著"])
+    }
+
+    /// 打字當下資料就是新的（畫面可以慢一拍重畫，資料不行）
+    func testTypingIsInTheBookRightAway() {
+        var book = Notebook()
+        var first = Note.blank(color: "yellow", now: 1)
+        let line = Item(text: "a")
+        first.items = [line]
+        book.notes = [first]
+        let store = Store(book: book)
+        store.setText(line.id, "ab", in: first.id)
+        XCTAssertEqual(store.current?.items.first?.text, "ab")
+    }
 }

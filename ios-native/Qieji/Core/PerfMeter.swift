@@ -50,12 +50,6 @@ final class PerfMeter: NSObject {
         return out
     }
 
-    static func note(_ words: String) {
-        if on {
-            log.notice("\(words, privacy: .public)")
-        }
-    }
-
     private func fellAsleep() {
         guard woke > 0 else { return }
         let busy = (CACurrentMediaTime() - woke) * PerfMeter.thousand

@@ -16,6 +16,7 @@ struct NotePad: View {
                 .lineSpacing(Tok.Font.padLineGap * scale)
                 .foregroundColor(Tok.Col.textPrimary)
                 .scrollContentBackground(.hidden)
+                .modifier(PadEnd())
                 .focused(focused)
                 .accessibilityLabel(Words.padField)
             if note.body.isEmpty {
@@ -31,6 +32,16 @@ struct NotePad: View {
         }
         .padding(.horizontal, Tok.Space.lg)
         .padding(.top, Tok.Space.xs)
-        .padding(.bottom, Tok.Space.xl)
+    }
+}
+
+/// 記事本最底留的空：在捲動內容裡留（字可以捲到螢幕最底、Home 條後面），iOS 16 沒有這個就留在外面
+private struct PadEnd: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.contentMargins(.bottom, Tok.Shape.hitMin + Tok.Space.lg, for: .scrollContent)
+        } else {
+            content.padding(.bottom, Tok.Shape.hitMin)
+        }
     }
 }

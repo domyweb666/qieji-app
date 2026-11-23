@@ -109,9 +109,6 @@ final class LineRowView: UIView {
         let typing = field.isFirstResponder
         let wordsMoved = field.text != item.text
         let styleMoved = restyle || shown?.done != item.done
-        if typing, wordsMoved {
-            PerfMeter.note("typing reset field=\(field.text ?? "") item=\(item.text)")
-        }
         if wordsMoved ? (!typing || field.markedTextRange == nil) : (styleMoved && field.markedTextRange == nil) {
             let spot = typing ? field.selectedRange : nil
             field.attributedText = NSAttributedString(string: item.text, attributes: attrs)
@@ -303,6 +300,12 @@ extension UIFont {
 /// 游標在最前面按 Backspace 時系統不會通知代理（沒有字可以刪），所以自己攔：跟上一行併在一起
 final class LineTextView: UITextView {
     var onDeleteAtStart: (() -> Void)?
+    /// 從另一行直接換過來：鍵盤沿用那一行正在用的（注音就還是注音）
+    static var carried: UITextInputMode?
+
+    override var textInputMode: UITextInputMode? {
+        LineTextView.carried ?? super.textInputMode
+    }
 
     override func deleteBackward() {
         if selectedRange.location == 0, selectedRange.length == 0, markedTextRange == nil, let onDeleteAtStart {

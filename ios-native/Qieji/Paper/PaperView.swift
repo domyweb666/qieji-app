@@ -81,8 +81,8 @@ struct PaperView: View {
             }
         }
         // 清單鋪到螢幕最底（Home 條、鍵盤後面都有行）；鍵盤擋住的部分清單自己讓，不讓系統把整頁推來推去。
-        // 記事本照系統的：底下讓出鍵盤
-        .ignoresSafeArea(note.isText ? [] : .all, edges: .bottom)
+        // 記事本照系統的：底下讓出鍵盤；沒有鍵盤時字一樣鋪到螢幕最底，不在 Home 條上方硬切一刀
+        .ignoresSafeArea(note.isText ? .container : .all, edges: .bottom)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 colors.paper.ignoresSafeArea()

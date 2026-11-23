@@ -17,7 +17,9 @@ extension LineListView {
         let old = editingID == id ? nil : editingID.flatMap { live[$0] }
         editingID = id
         row.editing = true
+        LineTextView.carried = old?.field.textInputMode
         PerfMeter.time("become") { _ = row.field.becomeFirstResponder() }
+        LineTextView.carried = nil
         // 先接手再放開：上一行先關掉觸控的話系統會先收鍵盤，接著又升起來
         old?.editing = false
         let field = row.field
@@ -165,6 +167,10 @@ extension LineListView: UITextViewDelegate {
         guard let row = row(of: field) else { return }
         row.editing = false
         let id = row.id
+        // 注音選到一半就換走：系統這時才把字定下來
+        if let item = rows.first(where: { $0.id == id }), let words = field.text, words != item.text {
+            onChange(id, words)
+        }
         if editingID == id {
             editingID = nil
             onEditing(nil)
