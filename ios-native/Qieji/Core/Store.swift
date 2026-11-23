@@ -102,6 +102,9 @@ final class Store: ObservableObject {
 
     let disk: Disk?
     private var saveTask: DispatchWorkItem?
+    private var showTask: DispatchWorkItem? // 打字停下來之後重畫一次
+    /// 存檔前在背景先把指紋算好（千行的紙一張要十幾毫秒，在主執行緒算會卡一格）
+    private static let warmQueue = DispatchQueue(label: "org.domyweb.qieji.print", qos: .userInitiated)
 
     struct Toast: Equatable {
         let id = UUID()
@@ -149,8 +152,10 @@ final class Store: ObservableObject {
         disk?.rememberLast(id)
         pushWidgetSoon()
         if let leaving, leaving != id {
-            keepDraft(in: leaving)
-            tidy(leaving)
+            PerfMeter.time("tidy") {
+                keepDraft(in: leaving)
+                tidy(leaving)
+            }
         }
     }
 
@@ -181,11 +186,25 @@ final class Store: ObservableObject {
         return item.id
     }
 
+    /// 一行打字（每個字叫一次）。字在輸入框裡已經看得到，不叫整個畫面重畫（1.1 touch(quiet)）；停一下才重畫一次（時間列、選單）
     func setText(_ itemID: String, _ text: String, in noteID: String? = nil) {
-        editCurrent(noteID) { note in
-            guard let idx = note.items.firstIndex(where: { $0.id == itemID }), note.items[idx].text != text else { return }
-            note.items[idx].text = text
+        quietly {
+            editCurrent(noteID) { note in
+                guard let idx = note.items.firstIndex(where: { $0.id == itemID }), note.items[idx].text != text else { return }
+                note.items[idx].text = text
+            }
         }
+    }
+
+    /// 改了但先不重畫：停手一下再重畫一次
+    func quietly(_ change: () -> Void) {
+        quiet = true
+        change()
+        quiet = false
+        showTask?.cancel()
+        let task = DispatchWorkItem { [weak self] in self?.objectWillChange.send() }
+        showTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.saveDebounce, execute: task)
     }
 
     func toggle(_ itemID: String, in noteID: String? = nil) {
@@ -267,9 +286,24 @@ final class Store: ObservableObject {
     private func scheduleSave() {
         guard disk != nil else { return }
         saveTask?.cancel()
-        let task = DispatchWorkItem { [weak self] in self?.saveSoon() }
+        let task = DispatchWorkItem { [weak self] in self?.warmThenSave() }
         saveTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.saveDebounce, execute: task)
+    }
+
+    /// 指紋在背景算好（記在 PrintCache）再存。算的時候又改了、或已經馬上存過：這一趟不用存
+    private func warmThenSave() {
+        guard let task = saveTask, !task.isCancelled else { return }
+        let notes = book.notes
+        Store.warmQueue.async {
+            for note in notes {
+                _ = PrintCache.shared.print(of: note)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, saveTask === task, !task.isCancelled else { return }
+                saveSoon()
+            }
+        }
     }
 
     /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動

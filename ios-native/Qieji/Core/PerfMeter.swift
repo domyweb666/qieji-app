@@ -8,8 +8,8 @@ final class PerfMeter: NSObject {
     static let on = ProcessInfo.processInfo.environment["QIEJI_PERF"] == "1"
     static let shared = PerfMeter()
     private static let log = Logger(subsystem: "org.domyweb.qieji", category: "perf")
-    private static let stallMs: Double = 16
-    private static let partMs: Double = 2
+    private static let stallMs = ProcessInfo.processInfo.environment["QIEJI_PERF_MS"].flatMap(Double.init) ?? 16
+    private static let partMs: Double = 0.5
     private static let reportSeconds: Double = 2
     private static let thousand: Double = 1000
 

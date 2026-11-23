@@ -326,9 +326,11 @@ final class LineListView: UIScrollView {
         super.layoutSubviews()
         guard bounds.width > 0 else { return }
         if laidWidth != bounds.width {
-            remeasureAll()
-            layoutHead()
-            layoutEmpty()
+            PerfMeter.time("firstLayout") {
+                remeasureAll()
+                layoutHead()
+                layoutEmpty()
+            }
             contentSize = wantedSize
             placeAll()
         }

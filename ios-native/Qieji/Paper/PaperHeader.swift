@@ -222,7 +222,8 @@ struct PaperMenu: View {
 
     /// 分享、複製全文：名字空一行，再來每行編號
     private var shareText: String {
-        (note.title.isEmpty ? "" : note.title + "\n\n") + Labels.plain(note)
+        let note = store.book.note(note.id) ?? note // 打到一半的字也要在（打字不會每個字都重畫這裡）
+        return (note.title.isEmpty ? "" : note.title + "\n\n") + PerfMeter.time("plain") { Labels.plain(note) }
     }
 
     private var colorBinding: Binding<String> {

@@ -310,13 +310,17 @@ final class PrintCache {
         bare.hash = nil
         bare.mod = nil
         bare.syncedHash = nil
+        // 算的時候不佔著鎖：背景先算的那一趟不擋主執行緒
         lock.lock()
-        defer { lock.unlock() }
-        if let hit = seen[note.id], hit.note == bare {
-            return hit.print
+        let old = seen[note.id]
+        lock.unlock()
+        if let old, old.note == bare {
+            return old.print
         }
         let fresh = Sync.fingerprint(note)
+        lock.lock()
         seen[note.id] = (bare, fresh)
+        lock.unlock()
         return fresh
     }
 }

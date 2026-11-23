@@ -115,8 +115,13 @@ extension Store {
 
     /// 記事本的內文（每打一個字叫一次）
     func setBody(_ id: String, _ text: String) {
-        guard book.note(id)?.body != text else { return }
-        editNote(id) { $0.body = text }
+        guard let old = book.note(id)?.body, old != text else { return }
+        // 打字不叫整個畫面重畫；從空的變有字（或反過來）提示字要換，照樣重畫
+        guard old.isEmpty == text.isEmpty else {
+            editNote(id) { $0.body = text }
+            return
+        }
+        quietly { editNote(id) { $0.body = text } }
     }
 
     /// 開新的記事本（完整版）：玉米黃、放進目錄第一個空位，打開後游標直接在裡面

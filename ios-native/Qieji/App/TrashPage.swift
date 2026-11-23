@@ -1,5 +1,22 @@
 import SwiftUI
 
+/// 照自己的寬，最多這麼寬（系統的 frame(maxWidth:) 會把空著的地方也佔走，刪掉的行只剩半排字）
+private struct AtMost: Layout {
+    let width: CGFloat
+
+    private func room(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: min(proposal.width ?? width, width), height: proposal.height)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(room(proposal)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
 /// 「最近刪除」（照 1.1 trash.tsx）：從目錄最下面那列推進來。上面是刪掉的清單（一張一張），下面是各張紙刪掉的行（帶那張紙的名字）。
 /// 點一則跳系統的動作表單：還原／永久刪除。右上 ⋯ 裡「清空最近刪除」。放滿 30 天自動清，講規則、不在每則上顯示剩幾天（那是壓力來源）。
 /// 上鎖的紙刪掉的行不列（沒驗過不露內容）
@@ -48,11 +65,12 @@ struct TrashPage: View {
                             ColorDot(key: ask.note.color)
                             Text(ask.line.text).font(Tok.Font.body).foregroundColor(Tok.Col.textPrimary).lineLimit(2)
                         }, trail: {
-                            Text(Labels.label(ask.note))
-                                .font(Tok.Font.footnote)
-                                .foregroundColor(Tok.Col.textSecondary)
-                                .lineLimit(1)
-                                .frame(maxWidth: Tok.Shape.trashDetailMax, alignment: .trailing)
+                            AtMost(width: Tok.Shape.trashDetailMax) {
+                                Text(Labels.label(ask.note))
+                                    .font(Tok.Font.footnote)
+                                    .foregroundColor(Tok.Col.textSecondary)
+                                    .lineLimit(1)
+                            }
                         })
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(Words.lineFrom(ask.line.text, Labels.label(ask.note)))

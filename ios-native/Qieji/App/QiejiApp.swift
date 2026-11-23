@@ -318,6 +318,10 @@ enum Demo {
         if let count = env["QIEJI_DEMO_ROWS"].flatMap(Int.init), count > 0 {
             made.notes[0].items = rows(min(count, Lines.max))
         }
+        // 上鎖擋板（模擬器沒有臉）：QIEJI_DEMO_LOCK=1 把「想讀的書」鎖起來
+        if env["QIEJI_DEMO_LOCK"] == "1", let spot = made.notes.firstIndex(where: { $0.title == "想讀的書" }) {
+            made.notes[spot].locked = true
+        }
         let last = made.notes.first?.id
         guard PerfMeter.on, let defaults = UserDefaults(suiteName: "qieji.perf") else {
             let demo = Store(book: made)

@@ -16,7 +16,7 @@ struct ComposerHost: UIViewRepresentable {
     let onTipTap: () -> Void
 
     func makeUIView(context _: Context) -> ComposerView {
-        ComposerView(frame: .zero)
+        PerfMeter.time("composer") { ComposerView(frame: .zero) }
     }
 
     func updateUIView(_ view: ComposerView, context _: Context) {
@@ -56,7 +56,6 @@ final class ComposerView: UIView, UITextViewDelegate {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        build()
         let center = NotificationCenter.default
         for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification] {
             tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
@@ -88,6 +87,7 @@ final class ComposerView: UIView, UITextViewDelegate {
         guard next != opened else { return }
         opened = next
         if next {
+            buildOnce()
             rise()
         } else {
             fall()
@@ -110,7 +110,7 @@ final class ComposerView: UIView, UITextViewDelegate {
         layoutIfNeeded()
         card.transform = calm ? .identity : below
         rising = true
-        field.becomeFirstResponder()
+        PerfMeter.time("become") { _ = field.becomeFirstResponder() }
         // 接實體鍵盤時系統不升鍵盤、也不通知：自己升
         if rising {
             move(seconds: Tok.Motion.keyboardSeconds, curve: ComposerView.keyboardCurve)
@@ -204,7 +204,7 @@ final class ComposerView: UIView, UITextViewDelegate {
     // MARK: 提示卡
 
     func showTip(_ on: Bool) {
-        guard tipCard.isHidden == on else { return }
+        guard built, tipCard.isHidden == on else { return }
         if on {
             tipCard.isHidden = false
             tipCard.alpha = 0
@@ -217,6 +217,15 @@ final class ComposerView: UIView, UITextViewDelegate {
     }
 
     // MARK: 排版
+
+    private var built = false
+
+    /// 第一次升起才做裡面的東西：每換一張紙都先做好一個，換紙那一刻多卡幾毫秒
+    private func buildOnce() {
+        guard !built else { return }
+        built = true
+        build()
+    }
 
     private func build() {
         card.isHidden = true

@@ -20,6 +20,10 @@ struct PaperList: UIViewRepresentable {
     static let space = "paperList"
 
     func makeUIView(context _: Context) -> LineListView {
+        PerfMeter.time("makeList") { make() }
+    }
+
+    private func make() -> LineListView {
         let list = LineListView(frame: .zero)
         list.spy = remote.spy
         remote.list = list
@@ -45,7 +49,7 @@ struct PaperList: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ list: LineListView, coordinator _: ()) {
-        list.dismantle()
+        PerfMeter.time("dismantle") { list.dismantle() }
     }
 
     /// 封面那一塊

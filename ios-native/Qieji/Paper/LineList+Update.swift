@@ -36,23 +36,16 @@ extension LineListView {
             return
         }
         let before = rows, oldSpots = spots, oldTops = tops, oldHeights = heights, oldTotal = total
-        let sameShape = before.count == next.count && zip(before, next).allSatisfy { $0.id == $1.id }
+        // 同樣的行、只有字或劃掉變了（打字每個字都走這條）：只動變的那幾行，不整張重排
+        if before.count == next.count, zip(before, next).allSatisfy({ $0.id == $1.id }) {
+            rows = next
+            redo(before, animated: animated)
+            return
+        }
         rows = next
         index()
         showEmpty(animated: animated && window != nil)
         rebuild(before: before, oldSpots: oldSpots, oldHeights: oldHeights)
-        if sameShape {
-            for (index, row) in next.enumerated() where row != before[index] {
-                if let seen = live[row.id] {
-                    seen.show(row, look: look)
-                    dress(seen, index)
-                }
-            }
-            if heights != oldHeights {
-                settleHeights(animated: animated)
-            }
-            return
-        }
         for (id, row) in live {
             if let index = spots[id] {
                 row.show(next[index], look: look)
@@ -77,7 +70,65 @@ extension LineListView {
             fill()
             return
         }
-        animateShape(oldSpots: oldSpots, oldTops: oldTops, oldHeights: oldHeights)
+        if flyFar(oldSpots: oldSpots, oldTops: oldTops) {
+            swapWhole()
+        } else {
+            animateShape(oldSpots: oldSpots, oldTops: oldTops, oldHeights: oldHeights)
+        }
+    }
+
+    /// 變完之後看得到的行裡，有從一個畫面以外滑過來的（上下順序反轉、一次清掉很多行）：滑的途中整個畫面會空掉一兩格
+    private func flyFar(oldSpots: [String: Int], oldTops: [CGFloat]) -> Bool {
+        window(from: min(max(0, contentOffset.y), maxOffset), spare: 0).contains { index in
+            guard let old = oldSpots[rows[index].id], old < oldTops.count else { return false }
+            return abs(tops[index] - oldTops[old]) > bounds.height
+        }
+    }
+
+    /// 整頁換：馬上排好新的，上面蓋一張剛才的樣子淡掉
+    private func swapWhole() {
+        let shot = snapshotView(afterScreenUpdates: false)
+        for (id, row) in live where spots[id] == nil {
+            live[id] = nil
+            recycle(row)
+        }
+        contentSize = wantedSize
+        contentOffset.y = min(max(0, contentOffset.y), maxOffset)
+        UIView.performWithoutAnimation {
+            placeAll()
+            fill()
+            layoutIfNeeded()
+        }
+        guard let shot else { return }
+        shot.frame = CGRect(origin: contentOffset, size: bounds.size)
+        shot.isUserInteractionEnabled = false
+        addSubview(shot)
+        UIView.animate(withDuration: Tok.Motion.rowShiftSeconds, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            shot.alpha = 0
+        } completion: { _ in shot.removeFromSuperview() }
+    }
+
+    private func redo(_ before: [LineItem], animated: Bool) {
+        var taller = false
+        for (index, row) in rows.enumerated() where row != before[index] {
+            if row.text != before[index].text {
+                let now = tall(row, exact: true)
+                taller = taller || now != heights[index]
+                heights[index] = now
+                measured[index] = true
+            }
+            if let seen = live[row.id] {
+                seen.show(row, look: look)
+                // 動作選單只看劃掉了沒、是不是空的
+                if row.done != before[index].done || row.text.isEmpty != before[index].text.isEmpty {
+                    dress(seen, index)
+                }
+            }
+        }
+        if taller {
+            stack()
+            settleHeights(animated: animated)
+        }
     }
 
     /// 正在打字的那行不見了（刪掉、被同步拿掉）：收掉打字

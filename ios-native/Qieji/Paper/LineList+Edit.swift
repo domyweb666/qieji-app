@@ -17,7 +17,7 @@ extension LineListView {
         let old = editingID == id ? nil : editingID.flatMap { live[$0] }
         editingID = id
         row.editing = true
-        row.field.becomeFirstResponder()
+        PerfMeter.time("become") { _ = row.field.becomeFirstResponder() }
         // 先接手再放開：上一行先關掉觸控的話系統會先收鍵盤，接著又升起來
         old?.editing = false
         let field = row.field
@@ -28,8 +28,8 @@ extension LineListView {
             spot = near
         }
         field.selectedTextRange = field.textRange(from: spot, to: spot)
-        onEditing(id)
-        showEditing(animated: true)
+        PerfMeter.time("onEditing") { onEditing(id) }
+        PerfMeter.time("showEditing") { showEditing(animated: true) }
     }
 
     func endEditingLine() {
@@ -111,6 +111,10 @@ extension LineListView {
     }
 
     private func keyboardMoved(_ note: Notification) {
+        PerfMeter.time("keyboardMoved") { followKeyboard(note) }
+    }
+
+    private func followKeyboard(_ note: Notification) {
         guard let window, let info = note.userInfo else { return }
         var overlap: CGFloat = 0
         let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
