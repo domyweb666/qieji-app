@@ -269,26 +269,14 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 游標在最前面按 Backspace（1.1 A5）：空的一行＝這行拿掉、游標回到上一行最後面；有字的行＝字接到上一行後面。
-    /// 劃掉的行不參與併行（多米定）：上一行或這一行是劃掉的，有字的行按了沒反應。
-    /// 回傳游標要去的那行 id 和位置（原本上一行有幾個字）；沒接手回 nil
+    /// 游標在最前面按 Backspace：空的一行＝這行拿掉、游標回到上一行最後面；有字的行＝沒反應，不併到別則（QC-0001，推翻 1.1 A5 的併行）。
+    /// 回傳游標要去的那行 id 和位置（上一行有幾個字）；沒接手回 nil
     func joinUp(_ itemID: String, text: String, in noteID: String? = nil) -> (id: String, at: Int)? {
         guard let note = (noteID ?? currentID).flatMap({ book.note($0) }), let at = note.items.firstIndex(where: { $0.id == itemID }),
-              at > 0 else { return nil }
-        let prev = note.items[at - 1], line = note.items[at]
-        let seam = (prev.text as NSString).length
-        if text.isEmpty {
-            editCurrent(note.id) { $0.items.remove(at: at) }
-            return (prev.id, seam)
-        }
-        if prev.done || line.done {
-            return nil
-        }
-        editCurrent(note.id) { note in
-            note.items[at - 1].text = prev.text + text
-            note.items.remove(at: at)
-        }
-        return (prev.id, seam)
+              at > 0, text.isEmpty else { return nil }
+        let prev = note.items[at - 1]
+        editCurrent(note.id) { $0.items.remove(at: at) }
+        return (prev.id, (prev.text as NSString).length)
     }
 
     // MARK: 存檔（稍後存：打字中每次改字都會叫到）

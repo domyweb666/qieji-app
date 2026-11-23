@@ -1,7 +1,7 @@
 @testable import Qieji
 import XCTest
 
-/// 紙上的規則照 1.1.1：行首 Backspace、空行刪除、離開一張紙時收尾。只測資料，不碰畫面、不讀不寫存檔。
+/// 紙上的規則：行首 Backspace（有字的不併到別則，QC-0001）、空行刪除、離開一張紙時收尾。只測資料，不碰畫面、不讀不寫存檔。
 final class PaperRulesTests: XCTestCase {
     private func store(_ lines: [Item], extra: [Note] = []) -> Store {
         var note = Note.blank(now: 1000)
@@ -16,13 +16,21 @@ final class PaperRulesTests: XCTestCase {
         store.current?.items.map(\.text) ?? []
     }
 
-    func testBackspaceJoinsIntoPreviousLine() {
+    func testBackspaceKeepsTextInItsOwnLine() {
         let first = Item(text: "買"), second = Item(text: "牛奶")
         let store = store([first, second])
-        let joined = store.joinUp(second.id, text: "牛奶")
-        XCTAssertEqual(joined?.id, first.id)
-        XCTAssertEqual(joined?.at, 1)
-        XCTAssertEqual(texts(store), ["買牛奶"])
+        XCTAssertNil(store.joinUp(second.id, text: "牛奶"))
+        XCTAssertEqual(texts(store), ["買", "牛奶"])
+        XCTAssertEqual(store.current?.items.map(\.id), [first.id, second.id])
+    }
+
+    func testBackspaceOnEmptyLineMovesToPreviousEnd() {
+        let first = Item(text: "買"), empty = Item(text: "")
+        let store = store([first, empty])
+        let back = store.joinUp(empty.id, text: "")
+        XCTAssertEqual(back?.id, first.id)
+        XCTAssertEqual(back?.at, 1)
+        XCTAssertEqual(texts(store), ["買"])
     }
 
     func testBackspaceDoesNotJoinStruckLines() {

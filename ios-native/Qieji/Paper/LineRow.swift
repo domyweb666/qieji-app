@@ -297,7 +297,7 @@ extension UIFont {
     }
 }
 
-/// 游標在最前面按 Backspace 時系統不會通知代理（沒有字可以刪），所以自己攔：跟上一行併在一起
+/// 游標在最前面按 Backspace 時系統不會通知代理（沒有字可以刪），所以自己攔：空的一行拿掉（有字的不動）
 final class LineTextView: UITextView {
     var onDeleteAtStart: (() -> Void)?
     /// 從另一行直接換過來：鍵盤沿用那一行正在用的（注音就還是注音）

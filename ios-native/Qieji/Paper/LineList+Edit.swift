@@ -9,7 +9,7 @@ extension LineListView {
     func beginEditing(_ id: String, point: CGPoint? = nil, caret: Int? = nil) {
         guard let index = spot(of: id) else { return }
         if live[id] == nil {
-            // 那一行捲遠了（併到上一行、上一行剛好不在畫面上）：先捲過去
+            // 那一行捲遠了（空行拿掉、上一行剛好不在畫面上）：先捲過去
             contentOffset.y = min(max(0, headHeight + tops[index] - bounds.height * Tok.Shape.seekAnchor.y), maxOffset)
             fill()
         }
@@ -39,7 +39,7 @@ extension LineListView {
         live[id]?.field.resignFirstResponder()
     }
 
-    /// 游標在最前面按 Backspace：空的一行拿掉、有字的接到上一行後面。鍵盤不收，游標直接跳到上一行
+    /// 游標在最前面按 Backspace：空的一行拿掉，鍵盤不收，游標直接跳到上一行；有字的沒反應
     /// 等這一下按鍵處理完才換（還在刪字的半路換輸入框，系統會把鍵盤收掉再升起來）
     func joinUp(_ row: LineRowView) {
         let id = row.id
@@ -51,10 +51,6 @@ extension LineListView {
 
     private func join(_ row: LineRowView) {
         guard let joined = onJoinUp(row.id, row.field.text ?? "") else { return }
-        // 上一行的字先換成接好的，再進去；這一行接著拿掉
-        if let item = source().first(where: { $0.id == joined.id }), let prev = live[joined.id] {
-            prev.show(item, look: look)
-        }
         beginEditing(joined.id, caret: joined.at)
         refresh()
     }
