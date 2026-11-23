@@ -52,6 +52,7 @@ final class ComposerView: UIView, UITextViewDelegate {
     private var opened = false
     private var rising = false // 框還在往上升，等鍵盤那段動畫一起走
     private var leaving = false // 要收了，等鍵盤一起走
+    private var hiding = false // 已經跟著鍵盤在往下走
     private var tokens: [NSObjectProtocol] = []
 
     override init(frame: CGRect) {
@@ -100,6 +101,7 @@ final class ComposerView: UIView, UITextViewDelegate {
 
     private func rise() {
         leaving = false
+        hiding = false
         field.text = ""
         hint.isHidden = false
         card.layer.removeAllAnimations()
@@ -124,17 +126,26 @@ final class ComposerView: UIView, UITextViewDelegate {
         CGAffineTransform(translationX: 0, y: max(0, bounds.height - card.center.y + card.bounds.height / 2) + Tok.Space.xl)
     }
 
+    /// 收的時候框釘著鍵盤線一起往下，自己再多沉「自己的高」就看不到了。
+    /// 沉太多會比鍵盤快一大截：一按 ✓ 框馬上鑽到鍵盤後面，像整個不見（2026-11-23）
+    private var sunk: CGAffineTransform {
+        CGAffineTransform(translationX: 0, y: card.bounds.height + safeAreaInsets.bottom + Tok.Space.xl)
+    }
+
     private func move(seconds: Double, curve: UInt) {
         rising = false
         let options = UIView.AnimationOptions(rawValue: curve << 16).union([.allowUserInteraction, .beginFromCurrentState])
-        UIView.animate(withDuration: calm ? Tok.Motion.fadeSeconds : seconds, delay: 0, options: options) {
-            self.card.transform = .identity
-            self.card.alpha = 1
+        UIView.lively {
+            UIView.animate(withDuration: calm ? Tok.Motion.fadeSeconds : seconds, delay: 0, options: options) {
+                self.card.transform = .identity
+                self.card.alpha = 1
+            }
         }
     }
 
     private func fall() {
         rising = false
+        guard !hiding else { return }
         leaving = true
         field.resignFirstResponder()
         // 鍵盤跟著收：框跟它一起下去（keyboardMoved）。鍵盤留著（換到紙上一行打字）：框直接淡掉
@@ -146,17 +157,21 @@ final class ComposerView: UIView, UITextViewDelegate {
 
     private func hide(seconds: Double, curve: UInt, slide: Bool) {
         leaving = false
+        hiding = true
         let options = UIView.AnimationOptions(rawValue: curve << 16).union([.allowUserInteraction, .beginFromCurrentState])
-        UIView.animate(withDuration: seconds, delay: 0, options: options) {
-            if slide, !self.calm {
-                self.card.transform = self.below
-            } else {
-                self.card.alpha = 0
+        UIView.lively {
+            UIView.animate(withDuration: seconds, delay: 0, options: options) {
+                if slide, !self.calm {
+                    self.card.transform = self.sunk
+                } else {
+                    self.card.alpha = 0
+                }
+            } completion: { _ in
+                guard !self.opened else { return }
+                self.hiding = false
+                self.card.isHidden = true
+                self.card.transform = .identity
             }
-        } completion: { _ in
-            guard !self.opened else { return }
-            self.card.isHidden = true
-            self.card.transform = .identity
         }
     }
 
@@ -244,6 +259,10 @@ final class ComposerView: UIView, UITextViewDelegate {
         field.textContainer.lineFragmentPadding = 0
         field.scrollsToTop = false
         field.delegate = self
+        if #available(iOS 17.0, *) {
+            // 系統的灰字預測會算進框裡的字：打 he 按 ✓ 會記成 hello
+            field.inlinePredictionType = .no
+        }
         field.accessibilityLabel = Words.composerField
         let pad = max(0, (Tok.Shape.hitMin - Tok.Font.lineUI.lineHeight) / 2)
         field.textContainerInset = UIEdgeInsets(top: pad, left: 0, bottom: pad, right: 0)

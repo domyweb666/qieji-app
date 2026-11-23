@@ -62,16 +62,14 @@ final class SoftBlurView: UIVisualEffectView {
     private func start() {
         runner?.stopAnimation(true)
         effect = nil
-        // SwiftUI 掛上原生畫面時把動畫關掉：那時候建這段動畫會直接跑完，霧就變成十成（2026-11-23 抓到）
-        let allowed = UIView.areAnimationsEnabled
-        UIView.setAnimationsEnabled(true)
-        defer { UIView.setAnimationsEnabled(allowed) }
-        let next = UIViewPropertyAnimator(duration: Tok.Motion.blurSpan, curve: .linear) { [weak self] in
-            self?.effect = UIBlurEffect(style: .regular)
+        UIView.lively {
+            let next = UIViewPropertyAnimator(duration: Tok.Motion.blurSpan, curve: .linear) { [weak self] in
+                self?.effect = UIBlurEffect(style: .regular)
+            }
+            next.pausesOnCompletion = true
+            next.fractionComplete = amount
+            runner = next
         }
-        next.pausesOnCompletion = true
-        next.fractionComplete = amount
-        runner = next
     }
 
     func stop() {

@@ -111,7 +111,7 @@ struct PaperView: View {
         .overlay {
             ComposerHost(
                 open: composing, text: $draft, tip: tip, topLimit: listTop,
-                onBlur: { closeComposer() }, onDone: doneComposer, onTipTap: { tip = false }
+                onBlur: { remote.recording ? () : closeComposer() }, onDone: doneComposer, onTipTap: { tip = false }
             )
             .ignoresSafeArea()
             .allowsHitTesting(composing)
@@ -349,10 +349,17 @@ struct PaperView: View {
         list.toTop(added)
     }
 
-    /// 輸入框的 ✓：記下來、收起，鍵盤一起收
+    /// 輸入框的 ✓：記下來、收起，鍵盤一起收。
+    /// 先收鍵盤，框才會跟它同一段動畫往下走（等畫面更新時才收，框會直接跳到底、看起來整個不見）。
+    /// 字先拿在手上：收鍵盤的時候系統會把建議的字補進來（打 he 變 hello），那不是他打的
     private func doneComposer() {
-        closeComposer()
+        guard composing else { return }
+        let text = store.takeDraft()
+        remote.recording = true
         KeyboardWatch.dismiss()
+        remote.recording = false
+        store.draft = text
+        closeComposer()
     }
 
     /// 從 1.0 更新上來的人第一次在輸入框按 Return：✓ 上面冒一張小卡（一輩子一次）

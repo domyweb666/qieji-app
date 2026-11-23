@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum Motions {
     /// 帶速度的彈簧要的速度：手指每秒幾點 ÷ 還要走幾點（每秒走幾個「全程」），夾在不會衝過頭的範圍裡
@@ -40,5 +41,16 @@ enum Motions {
             withAnimation(animation, body)
             DispatchQueue.main.asyncAfter(deadline: .now() + fallback, execute: done)
         }
+    }
+}
+
+extension UIView {
+    /// 在裡面開的動畫一定會跑。SwiftUI 更新原生畫面的那一刻會把動畫關掉：那時候叫的動畫直接跳到結尾
+    /// （輸入框按 ✓ 整個不見、霧面變十成，2026-11-23 抓到）
+    static func lively(_ body: () -> Void) {
+        let allowed = areAnimationsEnabled
+        setAnimationsEnabled(true)
+        body()
+        setAnimationsEnabled(allowed)
     }
 }

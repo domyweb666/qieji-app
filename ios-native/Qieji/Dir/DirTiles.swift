@@ -356,7 +356,7 @@ struct DirGrid: UIViewRepresentable {
         _ = typeSize
         let size = CGSize(width: cell, height: DirMetrics(cell: cell).tileHeight)
         PerfMeter.time("grid") {
-            view.show(slots, size: size, calm: calm, animated: !context.transaction.disablesAnimations)
+            UIView.lively { view.show(slots, size: size, calm: calm, animated: !context.transaction.disablesAnimations) }
         }
     }
 }

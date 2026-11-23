@@ -43,7 +43,9 @@ struct PaperList: UIViewRepresentable {
         _ = typeSize
         guard list.paperID == note.id else {
             PerfMeter.time("swap") {
-                list.swap(to: note.id, look: LineLook(key: note.color, scale: scale), wire: { wire(list) }, front: front)
+                UIView.lively {
+                    list.swap(to: note.id, look: LineLook(key: note.color, scale: scale), wire: { wire(list) }, front: front)
+                }
             }
             seek(list)
             return
@@ -52,7 +54,7 @@ struct PaperList: UIViewRepresentable {
         list.restyle(LineLook(key: note.color, scale: scale))
         list.setHead(front)
         // 看現在的資料，不看交下來的那份（那份可能慢一拍，會把剛打的字蓋回去）
-        list.refresh()
+        UIView.lively { list.refresh() }
         seek(list)
     }
 
