@@ -106,12 +106,14 @@ struct PaperHeader: View {
     }
 
     private var titleText: Binding<String> {
-        Binding(get: { note.title }, set: { value in
+        // 看現在的資料：交下來的 note 可能慢一拍，照它畫會把剛打的字蓋回去
+        Binding(get: { store.book.note(note.id)?.title ?? note.title }, set: { value in
+            let before = store.book.note(note.id)?.title ?? note.title
             guard value.contains("\n") else {
                 store.setTitle(note.id, value)
                 return
             }
-            let typedReturn = value.hasSuffix("\n") && (value as NSString).length == (note.title as NSString).length + 1
+            let typedReturn = value.hasSuffix("\n") && (value as NSString).length == (before as NSString).length + 1
             store.setTitle(note.id, typedReturn ? String(value.dropLast()) : value)
             if typedReturn {
                 titleFocused = false

@@ -66,9 +66,7 @@ struct RootView: View {
     private static func makeStore() -> Store {
         let info = ProcessInfo.processInfo
         if info.arguments.contains("-demo") || info.environment["QIEJI_DEMO"] == "1" {
-            let demo = Store(book: Demo.book())
-            demo.isFull = true
-            return demo
+            return Demo.store()
         }
         // 跑單元測試時 app 也會被啟動：不讀不寫，免得測試在機器上留下一份存檔
         if info.environment["XCTestConfigurationFilePath"] != nil {
@@ -107,6 +105,7 @@ struct RootView: View {
         // 外觀（跟隨系統／淺色／深色）：整個 app 連系統提示框、選單一起換
         .preferredColorScheme(look.scheme)
         .onAppear {
+            PerfMeter.shared.start()
             store.boot()
             TextSize.shared.load()
             look.load()
@@ -215,7 +214,7 @@ struct RootView: View {
             Tok.note(underKey).paper.ignoresSafeArea()
             if let note = store.current {
                 PaperView(
-                    store: store, note: note, onTitle: { go(.switcher) }, onRoute: go,
+                    store: store, given: note, onTitle: { go(.switcher) }, onRoute: go,
                     onMoveLine: { dir.open(move: $0) }
                 )
                 .id(note.id)
@@ -312,6 +311,36 @@ struct ToastBar: View {
 
 /// 假資料：模擬器看畫面、測手勢用
 enum Demo {
+    /// 平常不讀不寫。量流暢度（QIEJI_PERF=1）時接一個暫存資料夾的存檔，打字才會走到指紋與存檔；真的資料照樣不碰
+    static func store() -> Store {
+        let env = ProcessInfo.processInfo.environment
+        var made = Demo.book()
+        if let count = env["QIEJI_DEMO_ROWS"].flatMap(Int.init), count > 0 {
+            made.notes[0].items = rows(min(count, Lines.max))
+        }
+        let last = made.notes.first?.id
+        guard PerfMeter.on, let defaults = UserDefaults(suiteName: "qieji.perf") else {
+            let demo = Store(book: made)
+            demo.isFull = true
+            return demo
+        }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("qieji-perf")
+        let demo = Store(book: made, disk: Disk(dir: dir, legacyDirs: [], defaults: defaults))
+        demo.adopt(made, last: last)
+        demo.isFull = true
+        return demo
+    }
+
+    /// 長短混合的很多行（量千行紙用）
+    private static func rows(_ count: Int) -> [Item] {
+        let short = "第幾行", middle = "這一行中等長，會換成兩行左右，看捲動的時候高度對不對、有沒有跳一下"
+        let long = String(repeating: "這一則很長，寫了好幾段想法，看量高和捲動會不會卡。", count: 6)
+        return (1 ... count).map { index in
+            let body = index % 7 == 0 ? long : (index % 3 == 0 ? middle : short)
+            return Item(text: "\(index) \(body)", done: index % 11 == 0)
+        }
+    }
+
     /// 一張漸層圖存成封面檔，回傳代號
     static func cover() -> String? {
         let size = CGSize(width: Covers.width / 2, height: Covers.width / 4)

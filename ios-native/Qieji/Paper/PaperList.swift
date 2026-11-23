@@ -14,6 +14,8 @@ struct PaperList: UIViewRepresentable {
     var scale: CGFloat = 1
     /// 捲動內容最前面那一塊（有封面圖的清單：方磚、大字名字、時間列）
     var head: AnyView?
+    /// 系統字級在 app 開著時改了：讀著它，這裡才會跟著重量、重畫
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     static let space = "paperList"
 
@@ -24,7 +26,9 @@ struct PaperList: UIViewRepresentable {
         wire(list)
         list.restyle(LineLook(key: note.color, scale: scale))
         list.setHead(front)
+        list.setEmpty(AnyView(EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])))
         list.apply(LineListView.items(note), animated: false)
+        list.showEmpty(animated: false)
         seek(list)
         return list
     }
@@ -32,9 +36,11 @@ struct PaperList: UIViewRepresentable {
     func updateUIView(_ list: LineListView, context _: Context) {
         remote.list = list
         wire(list)
+        _ = typeSize
         list.restyle(LineLook(key: note.color, scale: scale))
         list.setHead(front)
-        list.apply(LineListView.items(note), animated: true)
+        // 看現在的資料，不看交下來的那份（那份可能慢一拍，會把剛打的字蓋回去）
+        list.refresh()
         seek(list)
     }
 
@@ -42,21 +48,9 @@ struct PaperList: UIViewRepresentable {
         list.dismantle()
     }
 
-    /// 封面那一塊；一行都沒有時再加兩行說明
+    /// 封面那一塊
     private var front: AnyView? {
-        let empty = note.items.isEmpty
-        guard head != nil || empty else { return nil }
-        return AnyView(
-            VStack(spacing: Tok.Space.zero) {
-                if let head {
-                    head
-                }
-                if empty {
-                    EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])
-                }
-            }
-            .coordinateSpace(name: PaperList.space)
-        )
+        head.map { AnyView($0.coordinateSpace(name: PaperList.space)) }
     }
 
     /// 從搜尋點一行過來（1.1 Paper seekRow）：換紙那一下清單還沒排好，晚一格再捲
@@ -70,12 +64,12 @@ struct PaperList: UIViewRepresentable {
         let id = note.id, store = store
         list.source = { [weak store] in store?.book.note(id).map(LineListView.items) ?? [] }
         list.onEditing = onEditing
-        list.onChange = { store.setText($0, $1) }
-        list.onEnd = { store.dropIfEmpty($0) }
-        list.onJoinUp = { store.joinUp($0, text: $1) }
-        list.onStrike = { store.toggle($0) }
-        list.onDelete = { store.binLine($0) }
-        list.onMove = { store.move($0, to: $1) }
+        list.onChange = { store.setText($0, $1, in: id) }
+        list.onEnd = { store.dropIfEmpty($0, in: id) }
+        list.onJoinUp = { store.joinUp($0, text: $1, in: id) }
+        list.onStrike = { store.toggle($0, in: id) }
+        list.onDelete = { store.binLine($0, in: id) }
+        list.onMove = { store.move($0, to: $1, in: id) }
         list.onMenu = onMenu
         // 點空白處：收鍵盤（打字中的行收起；輸入框開著就記下來再收）
         list.onBlank = { KeyboardWatch.dismiss() }

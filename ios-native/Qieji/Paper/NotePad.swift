@@ -11,7 +11,7 @@ struct NotePad: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: Binding(get: { note.body }, set: { store.setBody(note.id, $0) }))
+            TextEditor(text: Binding(get: { store.book.note(note.id)?.body ?? note.body }, set: { store.setBody(note.id, $0) }))
                 .font(Tok.Font.line(scale))
                 .lineSpacing(Tok.Font.padLineGap * scale)
                 .foregroundColor(Tok.Col.textPrimary)

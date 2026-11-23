@@ -24,7 +24,8 @@ extension LineListView {
 
     /// 照資料重排。stay＝最上面加了一行但看到的東西原地不動
     func refresh(animated: Bool = true, stay: Bool = false) {
-        apply(source(), animated: animated, stay: stay)
+        let next = PerfMeter.time("source") { source() }
+        PerfMeter.time("apply") { apply(next, animated: animated, stay: stay) }
     }
 
     func apply(_ next: [LineItem], animated: Bool, stay: Bool = false) {
@@ -38,6 +39,7 @@ extension LineListView {
         let sameShape = before.count == next.count && zip(before, next).allSatisfy { $0.id == $1.id }
         rows = next
         index()
+        showEmpty(animated: animated && window != nil)
         rebuild(before: before, oldSpots: oldSpots, oldHeights: oldHeights)
         if sameShape {
             for (index, row) in next.enumerated() where row != before[index] {
@@ -186,10 +188,30 @@ extension LineListView {
             }
             self.contentSize = self.wantedSize
             self.fill()
+            self.backInside()
         }
     }
 
+    /// 紙底變短時手指正碰著（沒有跟著捲上來）：放開後補捲，不准停在一片空白上
+    private func backInside() {
+        guard !isTracking, !isDecelerating, contentOffset.y > maxOffset + 1 else { return }
+        glider.go(self, to: maxOffset, seconds: Tok.Motion.seekSeconds)
+    }
+
     // MARK: 從外面叫的
+
+    /// 輸入框記下一行：捲回最上面、那行亮一下。已經捲下去的先原地補位再捲（行一邊讓位一邊捲，途中掛上的行會跟讓位中的疊在一起）
+    func toTop(_ added: String?) {
+        if contentOffset.y > Tok.Shape.rowMin, !calm {
+            refresh(animated: false, stay: true)
+        } else {
+            refresh()
+        }
+        if let added {
+            flash(added)
+        }
+        glider.toTop(self)
+    }
 
     /// 從選單刪的行：先淡出，淡完才真的拿掉
     func fadeOut(_ id: String, then: @escaping () -> Void) {
@@ -208,7 +230,12 @@ extension LineListView {
     }
 
     func flash(_ id: String) {
-        live[id]?.flash(wait: calm ? 0 : Tok.Motion.freshGlowDelay)
+        guard let row = live[id] else {
+            freshID = id
+            return
+        }
+        freshID = nil
+        row.flash(wait: calm ? 0 : Tok.Motion.freshGlowDelay)
     }
 
     /// 搜尋點過來的那行：捲到畫面三分之一高、亮一下。三個螢幕內用捲的，更遠直接跳過去

@@ -109,6 +109,9 @@ final class LineRowView: UIView {
         let typing = field.isFirstResponder
         let wordsMoved = field.text != item.text
         let styleMoved = restyle || shown?.done != item.done
+        if typing, wordsMoved {
+            PerfMeter.note("typing reset field=\(field.text ?? "") item=\(item.text)")
+        }
         if wordsMoved ? (!typing || field.markedTextRange == nil) : (styleMoved && field.markedTextRange == nil) {
             let spot = typing ? field.selectedRange : nil
             field.attributedText = NSAttributedString(string: item.text, attributes: attrs)
@@ -116,8 +119,11 @@ final class LineRowView: UIView {
                 field.selectedRange = spot
             }
         }
-        field.typingAttributes = attrs
-        field.accessibilityHint = item.done ? Words.struck : nil
+        // 沒變就不碰：打字中每個字都會走到這裡
+        if restyle || shown?.done != item.done {
+            field.typingAttributes = attrs
+            field.accessibilityHint = item.done ? Words.struck : nil
+        }
         shown = item
     }
 

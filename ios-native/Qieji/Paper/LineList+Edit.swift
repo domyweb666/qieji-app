@@ -138,7 +138,7 @@ extension LineListView: UITextViewDelegate {
 
     func textViewDidChange(_ field: UITextView) {
         guard let row = row(of: field) else { return }
-        onChange(row.id, field.text ?? "")
+        PerfMeter.time("setText") { onChange(row.id, field.text ?? "") }
         refresh()
         showEditing(animated: true)
     }

@@ -5,7 +5,13 @@ import UIKit
 /// 一張紙：最上面名字和 ⋯，下面一行一行。右下 ＋（畫在根畫面，換紙時不跟著閃）按了從底下升起輸入框。
 struct PaperView: View {
     @ObservedObject var store: Store
-    let note: Note
+    /// 根畫面交下來的那張。只拿來認是哪一張：字改了之後這個畫面可能比根畫面先重畫，這時它還是舊的，
+    /// 照它排會把剛打的字蓋回去（快打的字會掉、游標會跳，2026-11-23 模擬器抓到）。內容一律看 note
+    let given: Note
+    var note: Note {
+        store.book.note(given.id) ?? given
+    }
+
     var onTitle: () -> Void = {}
     var onRoute: (Route) -> Void = { _ in }
     var onMoveLine: (String) -> Void = { _ in }
@@ -307,11 +313,7 @@ struct PaperView: View {
             list.refresh(animated: false, stay: true)
             return
         }
-        list.refresh()
-        list.glider.toTop(list)
-        if let added {
-            list.flash(added)
-        }
+        list.toTop(added)
     }
 
     /// 輸入框的 ✓：記下來、收起，鍵盤一起收
@@ -361,11 +363,12 @@ struct PaperView: View {
 
     /// 從選單刪一行：先淡出（0.15 秒），淡完才拿掉
     private func fadeThenBin(_ id: String) {
+        let paper = note.id
         guard let list = remote.list else {
-            store.binLine(id)
+            store.binLine(id, in: paper)
             return
         }
-        list.fadeOut(id) { store.binLine(id) }
+        list.fadeOut(id) { store.binLine(id, in: paper) }
     }
 }
 

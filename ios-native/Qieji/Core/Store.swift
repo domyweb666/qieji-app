@@ -130,9 +130,10 @@ final class Store: ObservableObject {
         scheduleSave()
     }
 
-    /// 改現在這張紙。touch＝算不算「改過」（會動修改時間）
-    func editCurrent(touch: Bool = true, _ change: (inout Note) -> Void) {
-        guard let id = currentID, let idx = book.index(id) else { return }
+    /// 改一張紙（沒講就是現在這張）。touch＝算不算「改過」（會動修改時間）。
+    /// 紙上的行一律講明是哪一張：刪除的行滑出途中換了紙，也要刪到原本那張
+    func editCurrent(_ noteID: String? = nil, touch: Bool = true, _ change: (inout Note) -> Void) {
+        guard let id = noteID ?? currentID, let idx = book.index(id) else { return }
         change(&book.notes[idx])
         if touch {
             book.notes[idx].updated = Clock.now()
@@ -180,16 +181,16 @@ final class Store: ObservableObject {
         return item.id
     }
 
-    func setText(_ itemID: String, _ text: String) {
-        editCurrent { note in
+    func setText(_ itemID: String, _ text: String, in noteID: String? = nil) {
+        editCurrent(noteID) { note in
             guard let idx = note.items.firstIndex(where: { $0.id == itemID }), note.items[idx].text != text else { return }
             note.items[idx].text = text
         }
     }
 
-    func toggle(_ itemID: String) {
+    func toggle(_ itemID: String, in noteID: String? = nil) {
         var struck = false
-        editCurrent { note in
+        editCurrent(noteID) { note in
             guard let idx = note.items.firstIndex(where: { $0.id == itemID }),
                   !note.items[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             note.items[idx].done.toggle()
@@ -202,16 +203,23 @@ final class Store: ObservableObject {
     }
 
     /// 刪一行：進這張紙的最近刪除，跳一條可以復原的提示。空行直接拿掉，不進最近刪除、不提示（1.1 一樣）
-    func binLine(_ itemID: String) {
-        guard let note = current, let at = note.items.firstIndex(where: { $0.id == itemID }) else { return }
+    func binLine(_ itemID: String, in paper: String? = nil) {
+        guard let note = (paper ?? currentID).flatMap({ book.note($0) }),
+              let at = note.items.firstIndex(where: { $0.id == itemID }) else { return }
+        let noteID = note.id
         if Labels.trim(note.items[at].text).isEmpty {
-            editCurrent { $0.items.remove(at: at) }
+            editCurrent(noteID) { $0.items.remove(at: at) }
             return
         }
-        let noteID = note.id
-        editCurrent { _ = Lines.bin(&$0, itemID, now: Clock.now()) }
+        editCurrent(noteID) { _ = Lines.bin(&$0, itemID, now: Clock.now()) }
         toast = Toast(text: Words.movedToTrash) { [weak self] in
-            self?.edit { book in
+            guard let self else { return }
+            // 這幾秒內又記滿 1000 行：放不回去，行還在最近刪除（1.1 remove 的復原同一條）
+            guard book.note(noteID).map({ Lines.room($0) > 0 }) ?? false else {
+                DispatchQueue.main.async { self.toast = Toast(text: Words.full(Lines.max)) }
+                return
+            }
+            edit { book in
                 guard let idx = book.index(noteID) else { return }
                 _ = Lines.unbin(&book.notes[idx], itemID, at: at)
             }
@@ -219,14 +227,14 @@ final class Store: ObservableObject {
     }
 
     /// 打字打到空的就離開那一行：直接拿掉（沒有字，不進最近刪除）
-    func dropIfEmpty(_ itemID: String) {
-        guard let note = current, let item = note.items.first(where: { $0.id == itemID }),
+    func dropIfEmpty(_ itemID: String, in noteID: String? = nil) {
+        guard let note = (noteID ?? currentID).flatMap({ book.note($0) }), let item = note.items.first(where: { $0.id == itemID }),
               item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        editCurrent(touch: false) { $0.items.removeAll { $0.id == itemID } }
+        editCurrent(note.id, touch: false) { $0.items.removeAll { $0.id == itemID } }
     }
 
-    func move(_ itemID: String, to target: Int) {
-        editCurrent { note in
+    func move(_ itemID: String, to target: Int, in noteID: String? = nil) {
+        editCurrent(noteID) { note in
             guard let from = note.items.firstIndex(where: { $0.id == itemID }) else { return }
             let item = note.items.remove(at: from)
             note.items.insert(item, at: max(0, min(target, note.items.count)))
@@ -236,18 +244,18 @@ final class Store: ObservableObject {
     /// 游標在最前面按 Backspace（1.1 A5）：空的一行＝這行拿掉、游標回到上一行最後面；有字的行＝字接到上一行後面。
     /// 劃掉的行不參與併行（多米定）：上一行或這一行是劃掉的，有字的行按了沒反應。
     /// 回傳游標要去的那行 id 和位置（原本上一行有幾個字）；沒接手回 nil
-    func joinUp(_ itemID: String, text: String) -> (id: String, at: Int)? {
-        guard let note = current, let at = note.items.firstIndex(where: { $0.id == itemID }), at > 0 else { return nil }
+    func joinUp(_ itemID: String, text: String, in noteID: String? = nil) -> (id: String, at: Int)? {
+        guard let note = (noteID ?? currentID).flatMap({ book.note($0) }), let at = note.items.firstIndex(where: { $0.id == itemID }), at > 0 else { return nil }
         let prev = note.items[at - 1], line = note.items[at]
         let seam = (prev.text as NSString).length
         if text.isEmpty {
-            editCurrent { $0.items.remove(at: at) }
+            editCurrent(note.id) { $0.items.remove(at: at) }
             return (prev.id, seam)
         }
         if prev.done || line.done {
             return nil
         }
-        editCurrent { note in
+        editCurrent(note.id) { note in
             note.items[at - 1].text = prev.text + text
             note.items.remove(at: at)
         }
@@ -283,8 +291,8 @@ final class Store: ObservableObject {
         guard loaded, !frozen else { return false }
         saveTurn += 1
         var copy = book
-        let stamped = Sync.stampMods(&copy, now: Clock.now()) > 0
-        let moved = Seats.fixOrder(&copy)
+        let stamped = PerfMeter.time("stamp") { Sync.stampMods(&copy, now: Clock.now()) > 0 }
+        let moved = PerfMeter.time("fixOrder") { Seats.fixOrder(&copy) }
         if stamped || moved {
             quiet = !moved
             book = copy

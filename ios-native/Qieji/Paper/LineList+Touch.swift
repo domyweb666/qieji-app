@@ -166,8 +166,10 @@ extension LineListView: UIGestureRecognizerDelegate {
             }
             // 字一離開畫面就拿掉這一行、下面補上（不等彈簧看不見的尾巴）
             let gone = Motions.arrival(span, velocity: calm ? 0 : pace, over: goal - spot, near: Tok.Motion.goneNear)
+            // 滑出途中換了紙：清單已經拆了，資料照樣刪（刪到原本那張）
+            let delete = onDelete
             DispatchQueue.main.asyncAfter(deadline: .now() + gone) { [weak self] in
-                self?.onDelete(id)
+                delete(id)
                 self?.refresh()
             }
             return

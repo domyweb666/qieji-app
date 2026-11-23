@@ -27,6 +27,10 @@ final class LineListView: UIScrollView {
     // 捲動內容最前面那一塊（封面的方磚與大字、空白說明）
     private var headHost: UIHostingController<AnyView>?
     var headHeight: CGFloat = 0
+    /// 一行都沒有時的兩行說明：疊在行的位置上、不佔高，第一行記進來時不會先排在說明下面再跳上去
+    private var emptyHost: UIHostingController<AnyView>?
+    /// 剛記下、還沒捲到的那行：掛上的時候亮一下
+    var freshID: String?
 
     var spy = ScrollSpy()
     let glider = Glide()
@@ -155,7 +159,7 @@ final class LineListView: UIScrollView {
         laidWidth = bounds.width
         let sharp = LineListView.sharpRows
         measured = rows.indices.map { $0 < sharp }
-        heights = rows.enumerated().map { tall($1, exact: $0 < sharp) }
+        heights = PerfMeter.time("measure") { rows.enumerated().map { tall($1, exact: $0 < sharp) } }
         stack()
         sharpenSoon()
     }
@@ -168,17 +172,21 @@ final class LineListView: UIScrollView {
             : LineMeasure.guess(row.text, width: bounds.width, look: look)
     }
 
-    private func sharpenSoon() {
+    func sharpenSoon() {
         guard measured.contains(false) else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, drag == nil else { return }
-            var left = LineListView.sharpRows
-            for index in measured.indices where !measured[index] && left > 0 {
-                sharpen(index)
-                left -= 1
-            }
+            PerfMeter.time("sharpen") { self.sharpenSome() }
             keepingSight { self.stack() }
             sharpenSoon()
+        }
+    }
+
+    private func sharpenSome() {
+        var left = LineListView.sharpRows
+        for index in measured.indices where !measured[index] && left > 0 {
+            sharpen(index)
+            left -= 1
         }
     }
 
@@ -226,11 +234,13 @@ final class LineListView: UIScrollView {
         if resized {
             keepingSight { self.stack() }
         }
-        UIView.performWithoutAnimation {
-            for index in range where live[rows[index].id] == nil {
-                let row = mount(index)
-                row.frame = frame(at: index)
-                row.layoutIfNeeded()
+        PerfMeter.time("mount") {
+            UIView.performWithoutAnimation {
+                for index in range where live[rows[index].id] == nil {
+                    let row = mount(index)
+                    row.frame = frame(at: index)
+                    row.layoutIfNeeded()
+                }
             }
         }
         let keep = window(from: contentOffset.y, spare: LineListView.keepSpare)
@@ -257,6 +267,10 @@ final class LineListView: UIScrollView {
         dress(row, index)
         live[item.id] = row
         content.addSubview(row)
+        if item.id == freshID {
+            freshID = nil
+            row.flash(wait: calm ? 0 : Tok.Motion.freshGlowDelay)
+        }
         return row
     }
 
@@ -281,6 +295,7 @@ final class LineListView: UIScrollView {
 
     /// 這張紙收起來：行全部還回去，下一張直接拿來用（換紙不用重新做一批文字框）
     func dismantle() {
+        settleLanding()
         stopAutoScroll()
         glider.stop()
         for row in Array(live.values) + leavers {
@@ -309,6 +324,7 @@ final class LineListView: UIScrollView {
         if laidWidth != bounds.width {
             remeasureAll()
             layoutHead()
+            layoutEmpty()
             contentSize = wantedSize
             placeAll()
         }
@@ -344,6 +360,7 @@ final class LineListView: UIScrollView {
             headHost?.view.removeFromSuperview()
             headHost = nil
             headHeight = 0
+            layoutEmpty()
             contentSize = wantedSize
             placeAll()
             return
@@ -366,8 +383,45 @@ final class LineListView: UIScrollView {
         host.view.frame = CGRect(x: 0, y: 0, width: bounds.width, height: size.height)
         guard headHeight != size.height else { return }
         headHeight = size.height
+        layoutEmpty()
         contentSize = wantedSize
         placeAll()
+    }
+
+    // MARK: 一行都沒有的說明
+
+    func setEmpty(_ view: AnyView) {
+        let host = UIHostingController(rootView: view)
+        host.view.backgroundColor = .clear
+        host.safeAreaRegions = []
+        host.view.isUserInteractionEnabled = false // 點說明＝點空白處
+        host.view.alpha = 0
+        insertSubview(host.view, at: 0)
+        emptyHost = host
+        layoutEmpty()
+    }
+
+    private func layoutEmpty() {
+        guard let host = emptyHost, bounds.width > 0 else { return }
+        let size = host.sizeThatFits(in: CGSize(width: bounds.width, height: .greatestFiniteMagnitude))
+        host.view.frame = CGRect(x: 0, y: headHeight, width: bounds.width, height: size.height)
+    }
+
+    /// 刪到一行都不剩：最後那行淡完說明才淡進來（疊在一起看不清楚）；記下第一行：馬上拿掉
+    func showEmpty(animated: Bool) {
+        guard let view = emptyHost?.view else { return }
+        let want: CGFloat = rows.isEmpty ? 1 : 0
+        view.accessibilityElementsHidden = want == 0
+        guard view.alpha != want else { return }
+        guard animated, want == 1 else {
+            view.layer.removeAllAnimations()
+            view.alpha = want
+            return
+        }
+        layoutEmpty()
+        UIView.animate(withDuration: Tok.Motion.fadeSeconds, delay: Tok.Motion.rowShiftSeconds, options: .allowUserInteraction) {
+            view.alpha = self.rows.isEmpty ? 1 : 0
+        }
     }
 
     func inHead(_ view: UIView?) -> Bool {

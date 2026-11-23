@@ -179,6 +179,15 @@ extension LineListView {
         finishLanding()
     }
 
+    /// 換紙了、還在滑進落點：資料照樣換（畫面已經要拆了，不動畫面）
+    func settleLanding() {
+        guard let now = drag else { return }
+        drag = nil
+        guard now.landing, now.to != now.from else { return }
+        let move = onMove
+        DispatchQueue.main.async { move(now.id, now.to) }
+    }
+
     private func finishLanding() {
         guard let now = drag else { return }
         drag = nil
@@ -189,6 +198,7 @@ extension LineListView {
         refresh(animated: false)
         placeAll()
         fill()
+        sharpenSoon()
     }
 
     private func landingShift(_ now: LineDrag) -> CGFloat {
