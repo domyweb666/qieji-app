@@ -41,6 +41,13 @@ final class DirModel: ObservableObject {
         var frame: CGRect
     }
 
+    /// 現在這張是從目錄哪裡點進來的：哪一張、目錄第幾頁、打開著哪個資料夾
+    struct Origin: Equatable {
+        var id: String
+        var page: Int
+        var folder: String?
+    }
+
     struct Hit {
         var id: String
         var isFolder: Bool
@@ -76,6 +83,8 @@ final class DirModel: ObservableObject {
     @Published var scene = Scene() {
         didSet { pagesSeen = nil }
     }
+
+    var origin: Origin?
 
     private var pagesSeen: [[Seats.Entry]]?
     private var pagesSize = 0
@@ -128,7 +137,9 @@ final class DirModel: ObservableObject {
         folderTouch.model = self
         store.onBook = { [weak self] in self?.bookChanged() }
         store.onCurrent = { [weak self] in
-            if let self, shown {
+            guard let self else { return }
+            forgetOrigin()
+            if shown {
                 objectWillChange.send()
             }
         }
@@ -257,11 +268,12 @@ final class DirModel: ObservableObject {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    /// 打開目錄。move＝搬行模式要搬的那一行
-    func open(move: String? = nil) {
+    /// 打開目錄。move＝搬行模式要搬的那一行；spot＝回到原本那一頁、那個資料夾（沒講就是第一頁）
+    func open(move: String? = nil, at spot: Origin? = nil) {
         guard !shown else { return }
         endKeyboard()
-        let ready = stage == DirModel.stages
+        // 刪完一張回來的（spot）：同一刻剛改過資料，那次重畫沒帶動畫，晚一格才滑，不然面板直接出現在定位
+        let ready = stage == DirModel.stages && spot == nil
         measure()
         moveLine = move
         moveHeld = movingItem
@@ -274,7 +286,10 @@ final class DirModel: ObservableObject {
         fading = calm
         progress = 0
         scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
-        gridTouch.scroll(toPage: 0, animated: false)
+        if let spot {
+            stand(at: spot)
+        }
+        gridTouch.scroll(toPage: page, animated: false)
         stage = DirModel.stages
         shown = true
         guard !ready else {
@@ -382,6 +397,7 @@ final class DirModel: ObservableObject {
             }
             return
         }
+        markOrigin(id)
         // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
         guard !calm, let frame, line == nil else {
             if let line {
@@ -427,6 +443,7 @@ final class DirModel: ObservableObject {
             pick(id)
             return
         }
+        markOrigin(id)
         store.open(id)
         store.requestCompose()
         close()
@@ -450,6 +467,7 @@ final class DirModel: ObservableObject {
 
     /// VoiceOver 的「改名字」（1.1）：目錄收起、換到那張，清單名變成可以打字
     func renameNote(_ id: String) {
+        markOrigin(id)
         close { [weak self] in
             guard let self else { return }
             if store.currentID != id {

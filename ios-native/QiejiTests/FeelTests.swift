@@ -119,6 +119,61 @@ final class FeelTests: XCTestCase {
         XCTAssertEqual(store.book.note(id)?.deleted, false)
     }
 
+    // MARK: 刪除這張回到哪（QC-0002）
+
+    /// 從目錄點進來的：刪除回到目錄，復原時人留在目錄
+    func testTrashFromDirReturnsToDir() {
+        let store = Store()
+        let keep = store.makeNote(hole: nil, after: nil), gone = store.makeNote(hole: nil, after: nil)
+        store.setTitle(keep, "留著")
+        store.setTitle(gone, "要刪的")
+        store.open(keep)
+        let model = DirModel(store: store)
+        model.pick(gone)
+        XCTAssertFalse(model.shown)
+        model.trashPaper(gone)
+        XCTAssertTrue(model.shown)
+        XCTAssertEqual(store.book.note(gone)?.deleted, true)
+        XCTAssertEqual(store.currentID, keep)
+        store.toast?.undo?()
+        XCTAssertEqual(store.book.note(gone)?.deleted, false)
+        XCTAssertEqual(store.currentID, keep)
+    }
+
+    /// 不是從目錄點進來的（目錄點過、後來又用別的路打開也算）：目錄不升起
+    func testTrashAfterSwitchingDoesNotOpenDir() {
+        let store = Store()
+        let keep = store.makeNote(hole: nil, after: nil), gone = store.makeNote(hole: nil, after: nil)
+        store.setTitle(keep, "留著")
+        store.setTitle(gone, "要刪的")
+        let model = DirModel(store: store)
+        model.pick(gone)
+        store.open(keep)
+        store.open(gone)
+        model.trashPaper(gone)
+        XCTAssertFalse(model.shown)
+        XCTAssertEqual(store.currentID, keep)
+    }
+
+    /// 從資料夾裡點進來的：回到那個打開的資料夾
+    func testTrashFromFolderReturnsToFolder() throws {
+        let store = Store()
+        let keep = store.makeNote(hole: nil, after: nil), gone = store.makeNote(hole: nil, after: nil)
+        store.setTitle(keep, "留著")
+        store.setTitle(gone, "要刪的")
+        let model = DirModel(store: store)
+        model.open()
+        model.makeFolder(for: keep)
+        let folder = try XCTUnwrap(model.openFolder?.id)
+        model.moveInto(gone, folder: folder)
+        model.pick(gone)
+        model.shown = false // 收完了
+        model.openFolder = nil
+        model.trashPaper(gone)
+        XCTAssertTrue(model.shown)
+        XCTAssertEqual(model.openFolder?.id, folder)
+    }
+
     // MARK: 換紙
 
     func testSwapShowsOnlyTheNewPaper() {

@@ -153,6 +153,29 @@ final class PaperRulesTests: XCTestCase {
         XCTAssertEqual(store.currentID, list[0].id)
     }
 
+    /// 刪除這張（QC-0002）：換到上一張看的，不是最近改過的；上一張也刪了就再往前找
+    func testDeleteThisNoteGoesBackToPreviousOne() throws {
+        let name = "qieji.back.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var list = notes(4)
+        list[3].updated = 9000 // 最近改過的，沒看過
+        var book = Notebook()
+        book.notes = list
+        let store = Store(book: book, disk: Disk(dir: dir, legacyDirs: [], defaults: defaults))
+        for spot in 0 ..< 3 {
+            store.open(list[spot].id)
+        }
+        store.trashNote(list[2].id, reopen: true)
+        XCTAssertEqual(store.currentID, list[1].id)
+        store.trashNote(list[1].id, reopen: true)
+        XCTAssertEqual(store.currentID, list[0].id)
+        store.trashNote(list[0].id, reopen: true)
+        XCTAssertEqual(store.currentID, list[3].id)
+    }
+
     func testDeletingBlankNoteDropsItWithoutToast() {
         var list = notes(2)
         list[0].title = ""

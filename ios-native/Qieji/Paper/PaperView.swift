@@ -15,6 +15,7 @@ struct PaperView: View {
     var onTitle: () -> Void = {}
     var onRoute: (Route) -> Void = { _ in }
     var onMoveLine: (String) -> Void = { _ in }
+    var onTrash: (String) -> Void
 
     @State private var remote = ListRemote()
     @StateObject private var keyboard = KeyboardWatch()
@@ -141,7 +142,7 @@ struct PaperView: View {
         }
         // 刪除這張：先問一次，跟目錄的「−」同一個框（2026-11-24 芹查 #1）
         .alert(Words.deleteTitle(deleting.map { Labels.label($0) } ?? ""), isPresented: deleteAsking, presenting: deleting) { gone in
-            Button(Words.delete, role: .destructive) { store.trashNote(gone.id, reopen: true) }
+            Button(Words.delete, role: .destructive) { onTrash(gone.id) }
             Button(Words.cancel, role: .cancel) {}
         }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }

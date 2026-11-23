@@ -56,6 +56,15 @@ extension Store {
         }
     }
 
+    /// 換到上一張看的（最近開過、還在的）；沒有紀錄就換到最近改過的那張
+    func openPrevious() {
+        if let back = disk?.recent.first(where: { $0 != currentID && book.note($0)?.deleted == false }) {
+            open(back)
+        } else {
+            openLatest()
+        }
+    }
+
     // MARK: 一張紙
 
     /// 開新的一張（預設玉米黃），放進目錄第一個空位，沒有空位就排最後。compose＝打開後直接升起輸入框。回傳新紙的 id
@@ -217,7 +226,7 @@ extension Store {
     }
 
     /// 刪除這張（1.1 del、目錄的「−」）：進最近刪除、目錄那格留空位、順便取消釘選、空行拿掉；整張空白就直接拿掉、不提示。
-    /// 刪的是現在這張就換到最近改過的那張。reopen＝復原時回到這張（從紙的 ⋯ 刪的）
+    /// 刪的是現在這張就換到上一張看的（QC-0002，推翻 1.1 換到最近改過的那張）。reopen＝復原時回到這張
     func trashNote(_ id: String, reopen: Bool = false) {
         guard let note = book.note(id), !note.deleted else { return }
         let wasPinned = note.pinned
@@ -234,7 +243,7 @@ extension Store {
             }
         }
         if currentID == id {
-            openLatest()
+            openPrevious()
         }
         guard book.note(id) != nil else { return }
         toast = Toast(text: Words.movedToTrash) { [weak self] in

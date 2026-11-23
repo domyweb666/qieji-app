@@ -212,7 +212,7 @@ struct RootView: View {
                 // 換紙時同一個紙面換內容（不整個重做），新的那張自己淡入：見 PaperView
                 PaperView(
                     store: store, given: note, onTitle: { go(.switcher) }, onRoute: go,
-                    onMoveLine: { dir.open(move: $0) }
+                    onMoveLine: { dir.open(move: $0) }, onTrash: { dir.trashPaper($0) }
                 )
             }
         }
