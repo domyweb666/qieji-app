@@ -20,7 +20,10 @@ struct Frost<S: Shape>: ViewModifier {
                     radius: Tok.Shape.shadowRadius, x: 0, y: Tok.Shape.shadowY
                 )
         } else if #available(iOS 26.0, *) {
-            content.glassEffect(glass, in: shape)
+            // 玻璃自己不收觸控：不補這個形狀的話，圓鈕只有中間那個圖示點得到，點在圈裡別的地方會穿到後面那一行
+            content
+                .glassEffect(glass, in: shape)
+                .contentShape(shape)
         } else {
             content
                 .background(ZStack {

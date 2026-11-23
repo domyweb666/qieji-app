@@ -264,6 +264,7 @@ struct RootView: View {
             KeyboardWatch.dismiss()
             openSwitcher()
         case .trash:
+            KeyboardWatch.dismiss()
             path.append(.trash)
         case .settings:
             KeyboardWatch.dismiss()

@@ -73,6 +73,52 @@ final class FeelTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
+    // MARK: 排順序
+
+    /// 前緣蓋過別行一半，那行就讓開；不用等中心對中心
+    func testDragPassesAtHalfOfTheNeighbour() throws {
+        var note = paper("排", lines: 4)
+        note.items[2].text = "高\n的\n一\n行"
+        let list = LineListView(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        let window = UIWindow(frame: list.frame)
+        window.addSubview(list)
+        window.isHidden = false
+        list.source = { LineListView.items(note) }
+        list.apply(LineListView.items(note), animated: false)
+        list.layoutIfNeeded()
+        func spot(_ from: Int, _ shift: CGFloat) throws -> Int {
+            let row = try XCTUnwrap(list.live[note.items[from].id])
+            var drag = LineDrag(
+                id: row.id, row: row, from: from, to: from, height: list.heights[from], top: list.headHeight + list.tops[from],
+                startY: 0, startOffset: 0, fingerY: 0
+            )
+            drag.shift = shift
+            return list.targetIndex(drag)
+        }
+        let short = list.heights[0], tall = list.heights[2]
+        XCTAssertGreaterThan(tall, short)
+        XCTAssertEqual(try spot(0, 0), 0)
+        XCTAssertEqual(try spot(0, short / 2 - 1), 0)
+        XCTAssertEqual(try spot(0, short / 2 + 1), 1)
+        XCTAssertEqual(try spot(0, short + tall / 2 + 1), 2)
+        XCTAssertEqual(try spot(0, 5000), 3)
+        XCTAssertEqual(try spot(3, 1 - tall / 2), 3)
+        XCTAssertEqual(try spot(3, -tall / 2 - 1), 2)
+        XCTAssertEqual(try spot(3, -5000), 0)
+    }
+
+    // MARK: 刪除先問
+
+    /// 目錄長按選單的「刪除」：先問，按了才刪
+    func testDirDeleteAsksFirst() {
+        let store = Store()
+        let id = store.makeNote(hole: nil, after: nil)
+        let model = DirModel(store: store)
+        model.confirmDelete(id)
+        XCTAssertEqual(model.askDelete, id)
+        XCTAssertEqual(store.book.note(id)?.deleted, false)
+    }
+
     // MARK: 換紙
 
     func testSwapShowsOnlyTheNewPaper() {

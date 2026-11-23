@@ -187,7 +187,7 @@ extension DirModel {
         } else {
             acts.append(VoiceAct(name: Words.putIn) { [weak self] in self?.putIn(id) })
         }
-        acts.append(VoiceAct(name: Words.delete) { [weak self] in self?.delete(id) })
+        acts.append(VoiceAct(name: Words.delete) { [weak self] in self?.confirmDelete(id) })
         if !inFolder {
             acts.append(VoiceAct(name: Words.moveForward) { [weak self] in self?.moveBy(id, -1) })
             acts.append(VoiceAct(name: Words.moveBack) { [weak self] in self?.moveBy(id, 1) })

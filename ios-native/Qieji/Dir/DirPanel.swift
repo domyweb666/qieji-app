@@ -69,14 +69,15 @@ struct DirPanel: View {
             }
     }
 
-    /// 整層釘在螢幕左上角：量自己現在被放在螢幕的哪裡，再扣回去。
-    /// 鍵盤升起時外面那層會變矮、被往上推，目錄不能跟著動（搜尋列會跑到狀態列底下）
+    /// 整層釘在螢幕最上面：量自己現在被放在螢幕的多高，再扣回去。
+    /// 鍵盤升起時外面那層會變矮、被往上推，目錄不能跟著動（搜尋列會跑到狀態列底下）。
+    /// 左右不扣：推進設定、最近刪除時目錄要跟紙一起往左讓，扣了會整塊往右彈一下
     private var pinned: some View {
         GeometryReader { proxy in
-            let origin = proxy.frame(in: .global).origin
+            let origin = proxy.frame(in: .global).minY
             layers
                 .frame(width: model.screen.width, height: model.screen.height, alignment: .topLeading)
-                .offset(x: -origin.x, y: -origin.y)
+                .offset(y: -origin)
         }
     }
 
@@ -309,14 +310,14 @@ struct DirPanel: View {
         }
     }
 
-    /// 最近刪除、設定：固定在格子下面，每一頁都看得到；等面板收完再推進去
+    /// 最近刪除、設定：固定在格子下面，每一頁都看得到。頁面蓋在目錄上面推進來，目錄不收：按返回就回到目錄（2026-11-24 芹查 #5、#6）
     private var rows: some View {
         VStack(spacing: Tok.Space.zero) {
             if model.trashed > 0 {
-                row("trash", Words.trash, count: model.trashed) { model.close { onRoute(.trash) } }
+                row("trash", Words.trash, count: model.trashed) { onRoute(.trash) }
                     .accessibilityLabel(Words.trashVoice(model.trashed))
             }
-            row("gearshape", Words.settings, count: nil) { model.close { onRoute(.settings) } }
+            row("gearshape", Words.settings, count: nil) { onRoute(.settings) }
         }
         .padding(.horizontal, Tok.Space.lg)
         .disabled(model.editing)

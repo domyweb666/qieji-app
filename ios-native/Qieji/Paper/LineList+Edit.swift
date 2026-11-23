@@ -161,6 +161,8 @@ extension LineListView: UITextViewDelegate {
     func textViewDidChangeSelection(_ field: UITextView) {
         guard field.isFirstResponder, let id = editingID, let frame = restFrame(id), frame.height > bounds.height - keyboardOverlap
         else { return }
+        // 打字造成的不算，等 textViewDidChange：這時新的一行還沒排好，按 Return 問到的游標在最上面，整張紙會先跳到這一則的頂端再捲回來
+        guard let index = spots[id], rows[index].text == field.text else { return }
         showEditing(animated: false)
     }
 

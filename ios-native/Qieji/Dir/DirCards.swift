@@ -77,7 +77,7 @@ struct DirMenuView: View {
             line
             item(note.pinned ? Words.unpin : Words.pin, note.pinned ? "pin.slash" : "pin") { model.togglePin(note.id) }
             line
-            item(Words.delete, "trash", danger: true) { model.delete(note.id) }
+            item(Words.delete, "trash", danger: true) { model.confirmDelete(note.id) }
         }
         .frost(RoundedRectangle(cornerRadius: Tok.Shape.radiusLg), thick: true)
     }

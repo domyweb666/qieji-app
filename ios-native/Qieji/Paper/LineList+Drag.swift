@@ -67,21 +67,27 @@ extension LineListView {
         if calm {
             place()
         } else {
+            // 不從「現在看到的位置」重新起步：讓到一半又要讓回去時，兩段疊在一起接得上速度，不會先停一下
             UIView.animate(
                 withDuration: Tok.Motion.dragShiftSeconds, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0,
-                options: [.allowUserInteraction, .beginFromCurrentState], animations: place
+                options: .allowUserInteraction, animations: place
             )
         }
     }
 
-    /// 拖著的那行現在的中心，排在其他行的第幾個
-    private func targetIndex(_ now: LineDrag) -> Int {
-        let mid = now.top - headHeight + now.height / 2 + now.shift
-        var slot = 0
-        for (index, row) in rows.enumerated() where row.id != now.id && tops[index] + heights[index] / 2 < mid {
+    /// 拖著的那行現在該排在第幾個：它的前緣蓋過別行一半，那行就讓開。
+    /// 以前要中心對中心，那行整個被蓋住了才從底下竄出來（2026-11-24 芹查 #4）
+    func targetIndex(_ now: LineDrag) -> Int {
+        let top = now.top - headHeight + now.shift, bottom = top + now.height
+        var slot = now.from
+        while slot + 1 < rows.count, tops[slot + 1] + heights[slot + 1] / 2 < bottom {
             slot += 1
         }
-        return min(slot, max(0, rows.count - 1))
+        guard slot == now.from else { return slot }
+        while slot > 0, tops[slot - 1] + heights[slot - 1] / 2 > top {
+            slot -= 1
+        }
+        return slot
     }
 
     /// 排順序時，別的行要讓多少

@@ -49,6 +49,8 @@ targets:
           - UIInterfaceOrientationPortrait
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # 120Hz 的 iPhone 上，沒寫這個的話自己做的動畫最多 60 格（1.1 的 Expo 版有，搬過來時漏了）
+        CADisableMinimumFrameDurationOnPhone: true
         # 「檔案 › iCloud 雲碟」裡看得到「茄記」資料夾（網頁版的備份丟進去會被合併進來）
         NSUbiquitousContainers:
           iCloud.org.domyweb.qieji:

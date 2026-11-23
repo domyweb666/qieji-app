@@ -23,6 +23,7 @@ struct PaperView: View {
     @ObservedObject private var locks = Locks.shared
     @State private var lockAsk = false
     @State private var cantLock = false
+    @State private var deleting: Note? // 按了「刪除這張」，問著要不要刪（有值＝問著）
     @State private var pickingCover = false
     @State private var coverPick: PhotosPickerItem?
     @Environment(\.scenePhase) private var phase
@@ -138,6 +139,11 @@ struct PaperView: View {
         } message: {
             Text(Words.cantLockBody)
         }
+        // 刪除這張：先問一次，跟目錄的「−」同一個框（2026-11-24 芹查 #1）
+        .alert(Words.deleteTitle(deleting.map { Labels.label($0) } ?? ""), isPresented: deleteAsking, presenting: deleting) { gone in
+            Button(Words.delete, role: .destructive) { store.trashNote(gone.id, reopen: true) }
+            Button(Words.cancel, role: .cancel) {}
+        }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
         .onChange(of: store.plusAsk) { _ in addLine() }
         .onChange(of: store.renameAsk) { _ in renameIfAsked() }
@@ -205,6 +211,7 @@ struct PaperView: View {
                 pickingCover = true
             },
             onLock: toggleLock,
+            onDelete: askDelete,
             lockedNow: lockedNow,
             cover: cover
         )
@@ -213,6 +220,20 @@ struct PaperView: View {
     /// 上鎖、還沒驗過（這次打開 app 驗過就不算）
     private var lockedNow: Bool {
         note.locked && !locks.isOpen(note.id)
+    }
+
+    /// ⋯「刪除這張」
+    private func askDelete() {
+        closeComposer(stay: true)
+        deleting = note
+    }
+
+    private var deleteAsking: Binding<Bool> {
+        Binding(get: { deleting != nil }, set: {
+            if !$0 {
+                deleting = nil
+            }
+        })
     }
 
     /// ⋯「上鎖／解除上鎖」：解除要先驗、不看買了沒；上鎖要完整版、手機要能驗，先問一次

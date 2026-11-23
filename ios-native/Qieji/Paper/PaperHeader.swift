@@ -16,6 +16,7 @@ struct PaperHeader: View {
     let onPinFull: ([Note]) -> Void
     var onCover: () -> Void = {}
     var onLock: () -> Void = {}
+    var onDelete: () -> Void = {}
     /// 上鎖、還沒驗過：⋯ 裡拿不到內容的項目都不列
     var lockedNow = false
     /// 封面圖：沒有／清單的矮橫幅（標題列的底與小膠囊隨捲動淡進來，時間列在捲動內容裡）／記事本的固定大圖（標題列疊在圖上）
@@ -43,7 +44,7 @@ struct PaperHeader: View {
                 Menu {
                     PaperMenu(
                         store: store, note: note, onRoute: onRoute, onRename: onRename, onPinFull: onPinFull,
-                        onCover: onCover, onLock: onLock, lockedNow: lockedNow
+                        onCover: onCover, onLock: onLock, onDelete: onDelete, lockedNow: lockedNow
                     )
                 } label: {
                     Image(systemName: "ellipsis")
@@ -164,6 +165,7 @@ struct PaperMenu: View {
     let onPinFull: ([Note]) -> Void
     var onCover: () -> Void = {}
     var onLock: () -> Void = {}
+    var onDelete: () -> Void = {}
     var lockedNow = false
 
     var body: some View {
@@ -209,7 +211,7 @@ struct PaperMenu: View {
             }
         }
         Button { onRoute(.settings) } label: { Label(Words.settings, systemImage: "gearshape") }
-        Button(role: .destructive) { store.trashNote(note.id, reopen: true) } label: { Label(Words.deleteNote, systemImage: "trash") }
+        Button(role: .destructive, action: onDelete) { Label(Words.deleteNote, systemImage: "trash") }
     }
 
     private var anyDone: Bool {

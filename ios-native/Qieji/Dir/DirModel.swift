@@ -459,6 +459,12 @@ final class DirModel: ObservableObject {
         }
     }
 
+    /// 長按選單、VoiceOver 的「刪除」：跟「−」一樣先問一次（2026-11-24 芹查 #1）
+    func confirmDelete(_ id: String) {
+        menu = nil
+        askDelete = id
+    }
+
     func delete(_ id: String) {
         menu = nil
         store.trashNote(id)

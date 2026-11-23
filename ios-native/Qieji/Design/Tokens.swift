@@ -374,7 +374,7 @@ enum Tok {
         static let toTopSeconds: Double = 0.3 // 記下新的一則捲回最上面（1.1 toTop，跟 freshGlowDelay 對齊）
         static let dragLiftScale: CGFloat = 1.02
         static let dragLiftSeconds: Double = 0.15
-        static let dragShiftSeconds: Double = 0.2
+        static let dragShiftSeconds: Double = 0.35 // 這裡是整段時間；1.1 的 0.2 是感知時長，換成整段約 0.3
         static let swipeLabelSeconds: Double = 0.25
         static let swipeLabelDamping: CGFloat = 0.6
         static let rowShiftSeconds: Double = 0.18 // 補位（1.1 rowShift）
