@@ -264,7 +264,8 @@ final class Store: ObservableObject {
     /// 劃掉的行不參與併行（多米定）：上一行或這一行是劃掉的，有字的行按了沒反應。
     /// 回傳游標要去的那行 id 和位置（原本上一行有幾個字）；沒接手回 nil
     func joinUp(_ itemID: String, text: String, in noteID: String? = nil) -> (id: String, at: Int)? {
-        guard let note = (noteID ?? currentID).flatMap({ book.note($0) }), let at = note.items.firstIndex(where: { $0.id == itemID }), at > 0 else { return nil }
+        guard let note = (noteID ?? currentID).flatMap({ book.note($0) }), let at = note.items.firstIndex(where: { $0.id == itemID }),
+              at > 0 else { return nil }
         let prev = note.items[at - 1], line = note.items[at]
         let seam = (prev.text as NSString).length
         if text.isEmpty {

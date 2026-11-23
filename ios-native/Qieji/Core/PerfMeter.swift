@@ -31,7 +31,12 @@ final class PerfMeter: NSObject {
             self?.woke = CACurrentMediaTime()
             self?.parts = []
         }
-        let sleep = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, CFIndex.max) { [weak self] _, _ in
+        let sleep = CFRunLoopObserverCreateWithHandler(
+            nil,
+            CFRunLoopActivity.beforeWaiting.rawValue,
+            true,
+            CFIndex.max
+        ) { [weak self] _, _ in
             self?.fellAsleep()
         }
         CFRunLoopAddObserver(CFRunLoopGetMain(), wake, .commonModes)
@@ -75,10 +80,11 @@ final class PerfMeter: NSObject {
         let wall = CACurrentMediaTime()
         guard wall - since >= PerfMeter.reportSeconds else { return }
         if dropped > 0 || stalls > 0 {
-            PerfMeter.log.notice("""
-            2s dropped=\(self.dropped, privacy: .public) gap=\(self.worstGap, format: .fixed(precision: 0), privacy: .public)ms \
-            stalls=\(self.stalls, privacy: .public) worst=\(self.worstStall, format: .fixed(precision: 1), privacy: .public)ms
-            """)
+            let words = [
+                "2s dropped=\(dropped)", String(format: "gap=%.0fms", worstGap),
+                "stalls=\(stalls)", String(format: "worst=%.1fms", worstStall),
+            ].joined(separator: " ")
+            PerfMeter.log.notice("\(words, privacy: .public)")
         }
         since = wall
         dropped = 0
