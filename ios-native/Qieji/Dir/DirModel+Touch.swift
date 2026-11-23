@@ -215,4 +215,34 @@ extension DirModel {
             pick(entry.id)
         }
     }
+
+    // MARK: 面板收起的手勢
+
+    /// 點露出的紙、點頂端把手：選單開著只收選單；抖動中只結束抖動；不然收起
+    func tapOut() {
+        if menu != nil {
+            menu = nil
+        } else if editing {
+            editing = false
+        } else {
+            close()
+        }
+    }
+
+    /// 把手往下拉：面板跟著手指
+    func pull(_ distance: CGFloat) {
+        guard !editing, menu == nil, drag == nil else { return }
+        progress = min(1, max(0, 1 - distance / travel))
+    }
+
+    /// 放手：拉過一成五或往下甩（每秒 550 點）就收，不然彈回全開；兩種都接著手指的速度走（1.1 settle 帶 velocity）
+    func pullEnd(_ distance: CGFloat, velocity: CGFloat) {
+        guard !editing, menu == nil, drag == nil else { return }
+        if distance > travel * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
+            close(velocity: velocity)
+        } else {
+            let speed = Motions.speed(-velocity, over: travel * (1 - progress))
+            withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanelSpring(velocity: speed)) { progress = 1 }
+        }
+    }
 }

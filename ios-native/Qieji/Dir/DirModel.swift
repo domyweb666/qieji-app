@@ -77,6 +77,7 @@ final class DirModel: ObservableObject {
 
     private var pagesSeen: [[Seats.Entry]]?
     private var pagesSize = 0
+    private var moveHeld: Item?
     private var holding = false // 正在改資料，等一起換
 
     var drag: DirDrag? {
@@ -232,7 +233,8 @@ final class DirModel: ObservableObject {
     /// 搬行模式要搬的那一行（行已經不在了就當普通目錄用）
     var movingItem: Item? {
         guard let moveLine, let note = store.current else { return nil }
-        return note.items.first { $0.id == moveLine }
+        // 搬完面板往下滑的途中照樣拿著它：不然那行說明先不見，底下的磚往上跳一下
+        return note.items.first { $0.id == moveLine } ?? (isOpen ? nil : moveHeld)
     }
 
     // MARK: 面板開關
@@ -256,6 +258,7 @@ final class DirModel: ObservableObject {
         screen = window?.bounds.size ?? UIScreen.main.bounds.size
         safeBottom = window?.safeAreaInsets.bottom ?? 0
         moveLine = move
+        moveHeld = movingItem
         query = ""
         page = 0
         editing = false
@@ -286,6 +289,18 @@ final class DirModel: ObservableObject {
         if soft {
             fading = true
         }
+        guard velocity == 0, !soft else {
+            sink(soft: soft, velocity: velocity, then: then)
+            return
+        }
+        // 晚一格才滑：同一刻剛改過資料（搬一行、開新的一張）的話，那次重畫沒帶動畫，面板會整個直接不見
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !isOpen else { return }
+            sink(soft: false, velocity: 0, then: then)
+        }
+    }
+
+    private func sink(soft: Bool, velocity: CGFloat, then: (() -> Void)?) {
         let slide = velocity == 0 ? Tok.Motion.dirPanel : Tok.Motion.dirPanelSpring(velocity: Motions.speed(
             velocity,
             over: travel * progress
@@ -300,34 +315,6 @@ final class DirModel: ObservableObject {
             menu = nil
             openFolder = nil
             then?()
-        }
-    }
-
-    /// 點露出的紙、點頂端把手：選單開著只收選單；抖動中只結束抖動；不然收起
-    func tapOut() {
-        if menu != nil {
-            menu = nil
-        } else if editing {
-            editing = false
-        } else {
-            close()
-        }
-    }
-
-    /// 把手往下拉：面板跟著手指
-    func pull(_ distance: CGFloat) {
-        guard !editing, menu == nil, drag == nil else { return }
-        progress = min(1, max(0, 1 - distance / travel))
-    }
-
-    /// 放手：拉過一成五或往下甩（每秒 550 點）就收，不然彈回全開；兩種都接著手指的速度走（1.1 settle 帶 velocity）
-    func pullEnd(_ distance: CGFloat, velocity: CGFloat) {
-        guard !editing, menu == nil, drag == nil else { return }
-        if distance > travel * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
-            close(velocity: velocity)
-        } else {
-            let speed = Motions.speed(-velocity, over: travel * (1 - progress))
-            withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanelSpring(velocity: speed)) { progress = 1 }
         }
     }
 
