@@ -2,68 +2,86 @@ import SwiftUI
 
 /// 選單卡裡的一項
 struct MenuItem: Identifiable {
+    /// 選了之後浮起的那一行怎麼收：縮回去、拍一張新的樣子再縮回去（字變了）、留在原地淡掉（要刪了）
+    enum After {
+        case home, redraw, fade
+    }
+
     let id = UUID()
     let label: String
     let icon: String
     var destructive = false
+    var after = After.home
     let run: () -> Void
 }
 
-/// 按住一行跳的選單（照 1.1 PopMenu）：卡片接在那一行正下方、靠右，放不下就往上收；後面輕輕霧掉、點外面收起。
-/// 卡片從右上角放大彈出（0.17 秒）、收起縮回去（0.12 秒）；減少動態改成淡入淡出
-struct RowMenu: View {
+/// 按住了哪一行。exit 有值＝正在收（收的途中碰不到）
+struct RowMenuAsk {
+    let grab: RowGrab
+    /// 打開那一刻的項目
     let items: [MenuItem]
-    /// 那一行在螢幕上的底邊（視窗座標）
-    let rowBottom: CGFloat
+    /// 選好一項了：卡片上的字不再跟著資料換（不然收的途中「劃掉」會變成「恢復」）
+    var picked = false
+    var exit: RowExit?
+    let token = UUID()
+}
+
+/// 按住一行跳的選單：那一行浮在霧上面（RowLift），卡片接在下面、放不下就上面，靠右；點外面收起。
+/// 卡片從靠近那一行的角放大彈出（0.17 秒）、收起縮回去（0.12 秒）；減少動態改成淡入淡出
+struct RowMenu: View {
+    let ask: RowMenuAsk
+    let items: [MenuItem]
+    let pick: (MenuItem) -> Void
     let close: () -> Void
+    @State private var popped = false
     @Environment(\.accessibilityReduceMotion) private var calm
     @Environment(\.displayScale) private var scale
 
     var body: some View {
+        let closing = ask.exit != nil
+        let shown = popped && !closing
         GeometryReader { geo in
-            let frame = geo.frame(in: .global)
-            let height = RowMenu.height(items.count)
-            let top = max(Tok.Space.zero, min(rowBottom - frame.minY, frame.height - height))
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .topLeading) {
                 MenuVeil()
                     .contentShape(Rectangle())
                     .onTapGesture(perform: close)
                     .accessibilityLabel(Words.closeMenu)
                     .accessibilityAddTraits(.isButton)
-                    .transition(.opacity.animation(Tok.Motion.menuBackdrop))
-                card
-                    .frame(width: Tok.Shape.menuW)
-                    .padding(.top, top)
-                    .padding(.trailing, Tok.Space.md)
-                    .transition(cardMotion)
+                    .opacity(shown ? 1 : 0)
+                    .animation(closing ? Tok.Motion.menuPopOut : Tok.Motion.menuBackdrop, value: shown)
+                RowLiftHost(ask: ask, calm: calm)
+                    .accessibilityHidden(true)
+                RowMenuLayout(place: ask.grab.place, origin: geo.frame(in: .global).origin) {
+                    card
+                        .opacity(closing || (calm && !popped) ? 0 : 1)
+                        .modifier(PopCorner(grow: shown || calm ? 1 : Tok.Motion.menuPopFrom, place: ask.grab.place))
+                        .animation(cardMotion(closing), value: shown)
+                }
             }
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(!closing)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, close)
+        .onAppear { popped = true }
     }
 
-    private var cardMotion: AnyTransition {
+    private func cardMotion(_ closing: Bool) -> Animation {
         if calm {
-            return .opacity.animation(Tok.Motion.fade)
+            return Tok.Motion.fade
         }
-        return .asymmetric(
-            insertion: .scale(scale: Tok.Motion.menuPopFrom, anchor: .topTrailing).animation(Tok.Motion.menuPopIn),
-            removal: .scale(scale: Tok.Motion.menuPopFrom, anchor: .topTrailing).combined(with: .opacity).animation(Tok.Motion.menuPopOut)
-        )
+        return closing ? Tok.Motion.menuPopOut : Tok.Motion.menuPopIn
     }
 
     private var card: some View {
         VStack(spacing: Tok.Space.zero) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 if index > 0 {
                     Tok.Col.menuSep
                         .frame(height: 1 / scale)
                         .padding(.leading, Tok.Space.lg)
                 }
-                Button {
-                    close()
-                    item.run()
-                } label: {
+                Button { pick(item) } label: {
                     HStack(spacing: Tok.Space.md) {
                         Text(item.label)
                             .font(Tok.Font.body)
@@ -79,12 +97,50 @@ struct RowMenu: View {
                 .buttonStyle(MenuRowPress())
             }
         }
+        // 按住最上、最下那一項的灰底照圓角裁（玻璃自己不裁）
+        .clipShape(RoundedRectangle(cornerRadius: Tok.Shape.radiusLg))
         .frost(RoundedRectangle(cornerRadius: Tok.Shape.radiusLg), thick: true)
     }
+}
 
-    /// 估卡片多高（放不下就往上收用）：照 1.1 的算法，幾個項目、項目之間的縫、上下內距
-    static func height(_ count: Int) -> CGFloat {
-        CGFloat(count) * Tok.Shape.menuRow + CGFloat(max(0, count - 1)) * Tok.Space.xs + Tok.Space.sm * 2
+/// 卡片照實際的高擺（系統字放大時一列會比 48 高）：同一趟排版就量好、擺好，不會先出現再跳
+struct RowMenuLayout: Layout {
+    let place: RowMenuPlace
+    /// 這一層的左上角在螢幕上的位置
+    let origin: CGPoint
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews _: Subviews, cache _: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        for card in subviews {
+            let want = ProposedViewSize(width: Tok.Shape.menuW, height: nil)
+            let tall = card.sizeThatFits(want).height
+            let corner = CGPoint(
+                x: bounds.maxX - Tok.Space.md - Tok.Shape.menuW,
+                y: bounds.minY + place.spot(tall).top - origin.y
+            )
+            card.place(at: corner, anchor: .topLeading, proposal: want)
+        }
+    }
+}
+
+/// 從靠近那一行、靠右的角放大（卡在行下面＝上緣那角，在上面＝下緣那角）
+struct PopCorner: GeometryEffect {
+    var grow: CGFloat
+    let place: RowMenuPlace
+
+    var animatableData: CGFloat {
+        get { grow }
+        set { grow = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let y = place.spot(size.height).below ? 0 : size.height
+        return ProjectionTransform(
+            CGAffineTransform(translationX: size.width, y: y).scaledBy(x: grow, y: grow).translatedBy(x: -size.width, y: -y)
+        )
     }
 }
 

@@ -8,8 +8,8 @@ struct PaperList: UIViewRepresentable {
     let note: Note
     /// 進到哪一行打字（nil＝沒有）
     let onEditing: (String?) -> Void
-    /// 按住一行：id 和那一行在螢幕上的底邊
-    var onMenu: (String, CGFloat) -> Void = { _, _ in }
+    /// 按住一行：浮起的那一份和它在螢幕上的位置
+    var onMenu: (RowGrab) -> Void = { _ in }
     /// 紙上的字級（完整版）
     var scale: CGFloat = 1
     /// 捲動內容最前面那一塊（有封面圖的清單：方磚、大字名字、時間列）

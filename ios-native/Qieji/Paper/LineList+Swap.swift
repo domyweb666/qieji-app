@@ -149,6 +149,7 @@ extension LineListView {
     private func leavePaper() -> [LineRowView] {
         settleLanding()
         stopAutoScroll()
+        pressUp()
         glider.stop()
         let old = Array(live.values) + leavers
         for row in old {

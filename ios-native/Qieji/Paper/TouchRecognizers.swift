@@ -130,3 +130,54 @@ final class SwipePan: UIGestureRecognizer {
         speedX = 0
     }
 }
+
+/// 按住變暗用的：只看觸控，永遠不成立、不擋別的手勢（點、捲動、左右滑、把手、按住都照舊）。
+/// 別的手勢一成立，系統會叫它收（reset），手指放開、移太遠它自己放棄，最後都走 onUp
+final class PressWatch: UIGestureRecognizer {
+    var onDown: () -> Void = {}
+    var onUp: () -> Void = {}
+    private var start: CGPoint = .zero
+
+    init() {
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesEnded = false
+    }
+
+    override func canPrevent(_: UIGestureRecognizer) -> Bool {
+        false
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard numberOfTouches == 1, let touch = touches.first else {
+            state = .failed
+            return
+        }
+        start = touch.location(in: nil)
+        onDown()
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first else { return }
+        if PressRule.strayed(from: start, to: touch.location(in: nil)) {
+            state = .failed
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        state = .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = .failed
+    }
+
+    override func reset() {
+        super.reset()
+        onUp()
+    }
+}

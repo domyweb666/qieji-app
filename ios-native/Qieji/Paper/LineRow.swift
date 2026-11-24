@@ -23,10 +23,11 @@ final class LineRowView: UIView {
     private let pitch = LinePitch()
     private let under = UIView()
     private let underLabel = UILabel()
-    private let grip = GripDotsView()
+    let grip = GripDotsView()
     private let rule = UIView()
     private let fill = UIView() // 打字中整行提亮
     private let glow = UIView() // 剛記下的那行亮一下
+    private let shade = UIView() // 按住變暗
     private var shown: LineItem?
     private var look: LineLook?
     private(set) var slide: CGFloat = 0
@@ -57,7 +58,9 @@ final class LineRowView: UIView {
         fill.alpha = 0
         glow.backgroundColor = UIColor(Tok.Col.rowEditingFill)
         glow.alpha = 0
-        for part in [fill, glow, rule, grip] {
+        shade.backgroundColor = UIColor(Tok.Col.pressedFill)
+        shade.alpha = 0
+        for part in [fill, glow, shade, rule, grip] {
             part.isUserInteractionEnabled = false
             part.isAccessibilityElement = false
         }
@@ -69,7 +72,7 @@ final class LineRowView: UIView {
         field.textContainerInset = UIEdgeInsets(top: Tok.Space.md, left: 0, bottom: Tok.Space.md, right: 0)
         field.isUserInteractionEnabled = false
         field.tintColor = UIColor(Tok.Col.accent)
-        for part in [fill, glow, field, grip, rule] {
+        for part in [fill, glow, shade, field, grip, rule] {
             card.addSubview(part)
         }
         card.layer.shadowColor = UIColor(Tok.Col.shadow).cgColor
@@ -86,6 +89,7 @@ final class LineRowView: UIView {
         card.center = CGPoint(x: size.width / 2, y: size.height / 2)
         fill.frame = card.bounds
         glow.frame = card.bounds
+        shade.frame = card.bounds
         let textHeight = max(0, size.height - Tok.Shape.borderCard)
         field.frame = CGRect(x: Tok.Space.gutter, y: 0, width: LineMeasure.textWidth(size.width), height: textHeight)
         grip.frame = CGRect(x: size.width - Tok.Shape.hitMin, y: 0, width: Tok.Shape.hitMin, height: Tok.Shape.rowMin)
@@ -139,6 +143,21 @@ final class LineRowView: UIView {
         UIView.animate(withDuration: Tok.Motion.freshGlowSeconds, delay: wait, options: [.curveEaseOut, .allowUserInteraction]) {
             self.glow.alpha = 0
         }
+    }
+
+    // MARK: 按住
+
+    /// 按住變暗：慢慢暗下來；退掉快一點，從現在看到的深淺接著走
+    func press(_ down: Bool) {
+        UIView.animate(
+            withDuration: down ? Tok.Motion.rowPressInSeconds : Tok.Motion.rowPressOutSeconds, delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, down ? .curveLinear : .curveEaseOut]
+        ) { self.shade.alpha = down ? 1 : 0 }
+    }
+
+    /// 現在畫面上看到的深淺
+    var seenShade: CGFloat {
+        CGFloat(shade.layer.presentation()?.opacity ?? 0)
     }
 
     // MARK: 左右滑
@@ -229,6 +248,8 @@ final class LineRowView: UIView {
         card.alpha = 1
         glow.layer.removeAllAnimations()
         glow.alpha = 0
+        shade.layer.removeAllAnimations()
+        shade.alpha = 0
         layer.zPosition = 0
         card.layer.shadowOpacity = 0
         settle()
@@ -302,6 +323,17 @@ final class LineTextView: UITextView {
     var onDeleteAtStart: (() -> Void)?
     /// 從另一行直接換過來：鍵盤沿用那一行正在用的（注音就還是注音）
     static var carried: UITextInputMode?
+
+    /// 照現在排好的字畫一份（不重新排）：沒有游標、沒有選取，字剛改完也畫得到
+    var drawn: UIView {
+        let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+            traitCollection.performAsCurrent {
+                let spot = CGPoint(x: textContainerInset.left, y: textContainerInset.top)
+                layoutManager.drawGlyphs(forGlyphRange: layoutManager.glyphRange(for: textContainer), at: spot)
+            }
+        }
+        return UIImageView(image: image)
+    }
 
     override var textInputMode: UITextInputMode? {
         LineTextView.carried ?? super.textInputMode

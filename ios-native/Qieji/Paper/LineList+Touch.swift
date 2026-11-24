@@ -16,6 +16,7 @@ extension LineListView: UIGestureRecognizerDelegate {
             gesture.delegate = self
             addGestureRecognizer(gesture)
         }
+        wirePress()
     }
 
     // MARK: 誰可以開始
@@ -43,6 +44,9 @@ extension LineListView: UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if gesture === press {
+            return pressable(touch)
+        }
         guard [swipePan, gripPan, tap, hold].contains(gesture) else { return true }
         if inHead(touch.view) {
             return false
@@ -66,7 +70,7 @@ extension LineListView: UIGestureRecognizerDelegate {
         return row
     }
 
-    // MARK: 點、按住
+    // MARK: 點（按住在 LineList+Press）
 
     @objc private func onTapped(_ gesture: UITapGestureRecognizer) {
         guard gesture.state == .ended, !touchStopped else { return }
@@ -77,12 +81,6 @@ extension LineListView: UIGestureRecognizerDelegate {
         }
         let local = convert(point, to: row.field)
         beginEditing(row.id, point: local)
-    }
-
-    @objc private func onHeld(_ gesture: UILongPressGestureRecognizer) {
-        guard gesture.state == .began, let row = row(at: touchStart) else { return }
-        Haptic.menu()
-        onMenu(row.id, row.convert(CGPoint(x: 0, y: row.bounds.maxY), to: nil).y)
     }
 
     // MARK: 左右滑

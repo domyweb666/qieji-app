@@ -52,6 +52,10 @@ final class LineListView: UIScrollView {
     let gripPan = GripPan()
     let tap = UITapGestureRecognizer()
     let hold = UILongPressGestureRecognizer()
+    let press = PressWatch()
+    var pressNext: String? // 這一下碰到哪一行
+    var pressedID: String? // 手指按著哪一行（變暗用）
+    var pressTurn = 0
     var touchStart: CGPoint = .zero
     var touchStopped = false // 這一下是按停還在捲的紙，不算點
     var swiping: LineRowView?
@@ -70,7 +74,7 @@ final class LineListView: UIScrollView {
     var onStrike: (String) -> Void = { _ in }
     var onDelete: (String) -> Void = { _ in }
     var onMove: (String, Int) -> Void = { _, _ in }
-    var onMenu: (String, CGFloat) -> Void = { _, _ in }
+    var onMenu: (RowGrab) -> Void = { _ in }
     var onBlank: () -> Void = {}
     var voice: (LineItem, Int, Int) -> [VoiceAct] = { _, _, _ in [] }
 

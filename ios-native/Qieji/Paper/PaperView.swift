@@ -17,7 +17,7 @@ struct PaperView: View {
     var onMoveLine: (String) -> Void = { _ in }
     var onTrash: (String) -> Void
 
-    @State private var remote = ListRemote()
+    @State var remote = ListRemote()
     @StateObject private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
     @ObservedObject private var covers = Covers.shared
@@ -30,7 +30,7 @@ struct PaperView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(\.accessibilityReduceMotion) private var calm
     @State private var editingID: String?
-    @State private var rowMenu: RowMenuAsk?
+    @State var rowMenu: RowMenuAsk?
     @State private var composing = false
     @State private var tip = false // ✓ 的單點提示開著
     @State private var listTop: CGFloat = 0
@@ -63,7 +63,7 @@ struct PaperView: View {
                 } else {
                     PaperList(
                         store: store, remote: remote, note: note, onEditing: { editingID = $0 },
-                        onMenu: { openRowMenu($0, bottom: $1) }, scale: size.scale,
+                        onMenu: { openRowMenu($0) }, scale: size.scale,
                         head: float ? AnyView(CoverHead(note: note, colors: colors, spy: remote.spy, onTitle: onTitle)) : nil
                     )
                     // 清單換清單：同一個清單自己換內容、自己淡（LineListView.swap）
@@ -119,7 +119,17 @@ struct PaperView: View {
         }
         .overlay {
             if let ask = rowMenu {
-                RowMenu(items: rowItems(ask.id), rowBottom: ask.bottom, close: closeRowMenu)
+                RowMenu(
+                    ask: ask, items: ask.picked || ask.exit != nil ? ask.items : rowItems(ask.grab.id),
+                    pick: pickRowMenu, close: { closeRowMenu() }
+                )
+                .id(ask.token)
+                .transition(.opacity)
+            }
+        }
+        .onChange(of: rowMenuLost) { lost in
+            if lost {
+                closeRowMenu(.fade)
             }
         }
         // 換一張紙：新的內容淡入、舊的淡出，底色一起變過去，⋯ 停在原地（1.1 S2）
@@ -307,7 +317,7 @@ struct PaperView: View {
 
     /// ＋ 要不要畫：鍵盤升起、輸入框開著、長按選單開著、記事本都不畫
     private var fabWanted: Bool {
-        !keyboard.up && !composing && rowMenu == nil && !note.isText && !lockedNow
+        !keyboard.up && !composing && !rowMenuOpen && !note.isText && !lockedNow
     }
 
     private func updateFab() {
@@ -396,47 +406,6 @@ struct PaperView: View {
         tip = true
         UIAccessibility.post(notification: .announcement, argument: Words.returnTip)
     }
-
-    // MARK: 按住一行的選單
-
-    /// 按住一行：先收鍵盤，選單卡接在那一行下面（1.1 openRowMenu）
-    private func openRowMenu(_ id: String, bottom: CGFloat) {
-        KeyboardWatch.dismiss()
-        withAnimation(Tok.Motion.menuPopIn) { rowMenu = RowMenuAsk(id: id, bottom: bottom) }
-    }
-
-    private func closeRowMenu() {
-        withAnimation(Tok.Motion.menuPopOut) { rowMenu = nil }
-    }
-
-    /// 項目照 1.1 rowActs：劃掉／恢復、搬到…、複製、刪除；空行只剩刪除
-    private func rowItems(_ id: String) -> [MenuItem] {
-        guard let item = note.items.first(where: { $0.id == id }) else { return [] }
-        let remove = MenuItem(label: Words.delete, icon: "trash", destructive: true) { fadeThenBin(id) }
-        guard !Labels.trim(item.text).isEmpty else { return [remove] }
-        return [
-            MenuItem(label: item.done ? Words.unstrike : Words.strike, icon: item.done ? "arrow.uturn.backward" : "strikethrough") {
-                store.toggle(id)
-                Haptic.tick()
-            },
-            MenuItem(label: Words.moveTo, icon: "arrow.turn.up.right") { onMoveLine(id) },
-            MenuItem(label: Words.copy, icon: "doc.on.doc") {
-                UIPasteboard.general.string = item.text
-                store.toast = Store.Toast(text: Words.copied)
-            },
-            remove,
-        ]
-    }
-
-    /// 從選單刪一行：先淡出（0.15 秒），淡完才拿掉
-    private func fadeThenBin(_ id: String) {
-        let paper = note.id
-        guard let list = remote.list else {
-            store.binLine(id, in: paper)
-            return
-        }
-        list.fadeOut(id) { store.binLine(id, in: paper) }
-    }
 }
 
 /// 換紙時這一塊換一份：新的淡進來、舊的同時淡出（底色是同一片，先拿掉會空白一格）
@@ -448,10 +417,4 @@ struct FreshPaper: ViewModifier {
             .id(id)
             .transition(.opacity)
     }
-}
-
-/// 按住了哪一行、那一行在螢幕上的底邊
-struct RowMenuAsk: Equatable {
-    let id: String
-    let bottom: CGFloat
 }
