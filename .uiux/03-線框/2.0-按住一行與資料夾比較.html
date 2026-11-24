@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>茄記：按住一行與開資料夾</title>
+<style>
+/* 版面：一欄。每題＝可以玩的手機＋切換選項＋並排靜止圖＋代價表；最下面一句話帶走選擇 */
+:root {
+  --page: #FBF3E7; --card: #FFFCF6; --line: #EADFCF; --ink: #2E2233; --soft: #75677A; --accent: #7D467F; --onaccent: #FFFFFF;
+  --danger: #C83C32; --press: rgba(125,70,127,.13); --sep: rgba(46,34,51,.12); --veil: rgba(0,0,0,.06); --fveil: rgba(0,0,0,.12);
+  --paper: #F4EEF2; --rule: #E4D7E3; --strike: rgba(46,34,51,.38); --menu: rgba(252,247,250,.92); --glass: rgba(255,252,246,.72);
+  --edge: rgba(255,255,255,.7); --shadow: rgba(59,32,80,.2); --field: rgba(46,34,51,.07); --bezel: #D9CBBB; --tileink: #2B2230;
+  --body: -apple-system, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --num: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #211A27; --card: #2B2231; --line: #41364A; --ink: #F2EAF1; --soft: #B5A6BB; --accent: #CDA3D0; --onaccent: #2E2233;
+    --danger: #E9837A; --press: rgba(205,163,208,.18); --sep: rgba(242,234,241,.18); --veil: rgba(0,0,0,.18); --fveil: rgba(0,0,0,.25);
+    --paper: #3F3245; --rule: #4F3E55; --strike: rgba(242,234,241,.45); --menu: rgba(70,57,78,.94); --glass: rgba(60,48,68,.72);
+    --edge: rgba(255,255,255,.12); --shadow: rgba(0,0,0,.45); --field: rgba(242,234,241,.14); --bezel: #55465F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #211A27; --card: #2B2231; --line: #41364A; --ink: #F2EAF1; --soft: #B5A6BB; --accent: #CDA3D0; --onaccent: #2E2233;
+  --danger: #E9837A; --press: rgba(205,163,208,.18); --sep: rgba(242,234,241,.18); --veil: rgba(0,0,0,.18); --fveil: rgba(0,0,0,.25);
+  --paper: #3F3245; --rule: #4F3E55; --strike: rgba(242,234,241,.45); --menu: rgba(70,57,78,.94); --glass: rgba(60,48,68,.72);
+  --edge: rgba(255,255,255,.12); --shadow: rgba(0,0,0,.45); --field: rgba(242,234,241,.14); --bezel: #55465F; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.65 var(--body); }
+main {
+  max-width: 980px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px;
+}
+h1 { font-size: 26px; line-height: 1.3; margin: 0 0 6px; text-wrap: balance; }
+h2 { font-size: 21px; line-height: 1.35; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; color: var(--soft); font-weight: 600; }
+p { margin: 0; max-width: 62ch; }
+.soft { color: var(--soft); font-size: 14px; }
+section { display: flex; flex-direction: column; gap: 18px; border-top: 1px solid var(--line); padding-top: 28px; }
+.lab { display: grid; grid-template-columns: minmax(0, 402px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+button { font: inherit; color: inherit; }
+.opt {
+  min-height: 48px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  text-align: left; line-height: 1.35; cursor: pointer; display: flex; flex-direction: column; justify-content: center;
+}
+.opt small { color: var(--soft); font-size: 12px; }
+.opt[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--onaccent); }
+.opt[aria-pressed="true"] small { color: inherit; opacity: .85; }
+button:focus-visible, .ph :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.say { min-height: 5.2em; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.tools label { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 15px; }
+.tools input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* 手機：裡面照 402 點寬畫，外面縮放 */
+.fit { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--bezel); background: var(--paper); width: 100%; max-width: 402px; }
+.ph { position: absolute; left: 0; top: 0; width: 402px; height: 700px; transform-origin: 0 0; overflow: hidden; background: var(--paper);
+  font-size: 17px; line-height: 26px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.under, .over { position: absolute; inset: 0; }
+.over { pointer-events: none; }
+.over.on { pointer-events: auto; }
+.bar { position: absolute; left: 20px; top: 26px; height: 44px; padding: 0 12px 0 8px; border: 1.5px solid var(--accent); border-radius: 22px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.bar i { width: 22px; height: 22px; border-radius: 5px; background: #A985AE; }
+.time { position: absolute; left: 20px; right: 20px; top: 78px; font-size: 13px; line-height: 18px; color: var(--soft); display: flex; justify-content: space-between; }
+.rows { position: absolute; left: 0; right: 0; top: 110px; border-top: 1px solid var(--rule); }
+.row { position: relative; padding: 13px 56px 13px 20px; border-bottom: 1px solid var(--rule); touch-action: pan-y; cursor: pointer; background: transparent; transition: background .12s, transform .12s; }
+.row.done span { text-decoration: line-through; color: var(--strike); }
+.row::after { content: ""; position: absolute; right: 17px; top: 18px; width: 10px; height: 17px; opacity: .55;
+  background: radial-gradient(circle, var(--soft) 1.5px, transparent 1.8px) 0 0 / 7px 7px; }
+.hold-dark .row.holding { background: var(--press); transition: background .3s linear .2s; }
+.hold-shrink .row.holding { transform: scale(.97); transition: transform .3s cubic-bezier(.3,0,.6,1) .2s; }
+.veil { position: absolute; inset: 0; background: var(--veil); opacity: 0; }
+.copy { position: absolute; left: 0; width: 402px; background: var(--paper); }
+.copy .row { border-bottom: 0; transition: none; }
+.copy.card { left: 8px; width: 386px; border-radius: 14px; box-shadow: 0 8px 24px var(--shadow); }
+.copy.card .row { padding-left: 12px; padding-right: 48px; }
+.copy.card .row::after { right: 9px; }
+.menu { position: absolute; right: 12px; width: 260px; background: var(--menu); border-radius: 24px; overflow: hidden; box-shadow: 0 8px 28px var(--shadow); }
+.menu button { display: flex; align-items: center; width: 100%; height: 48px; padding: 0 16px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.menu button + button { border-top: 1px solid var(--sep); }
+.menu button:active { background: var(--sep); }
+.menu .red { color: var(--danger); }
+
+/* 目錄 */
+.dir { background: var(--paper); }
+.panel { position: absolute; left: 0; right: 0; top: 60px; bottom: -24px; border-radius: 24px; background: var(--card); }
+.panel::before { content: ""; position: absolute; left: 182px; top: 20px; width: 38px; height: 5px; border-radius: 3px; background: var(--soft); opacity: .3; }
+.find { position: absolute; left: 20px; right: 78px; top: 44px; height: 44px; border-radius: 10px; background: var(--field); color: var(--soft); display: flex; align-items: center; padding: 0 14px; }
+.plus { position: absolute; right: 20px; top: 44px; width: 44px; height: 44px; border-radius: 50%; background: var(--field); display: grid; place-items: center; font-size: 24px; font-weight: 300; }
+.tile { position: absolute; width: 92px; height: 86px; border: 0; background: none; padding: 0; text-align: center; }
+.tile b, .tile .fold { position: absolute; left: 14px; top: 0; width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; font-size: 27px; font-weight: 600; color: var(--tileink); }
+.tile .fold { grid-template-columns: repeat(3, 14.6px); grid-auto-rows: 14.6px; gap: 3px; padding: 7px; place-content: start; background: var(--page); border: 1px solid var(--line); }
+.fold i { width: 14.6px; height: 14.6px; border-radius: 3.2px; font: 600 7px/14.6px var(--body); text-align: center; color: var(--tileink); }
+.tile em { position: absolute; left: 4px; right: 4px; top: 70px; font: 500 12px/16px var(--body); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+button.tile { cursor: pointer; }
+.fveil { position: absolute; inset: 0; background: var(--fveil); opacity: 0; }
+.ftitle { position: absolute; left: 77px; top: 150px; font-size: 28px; line-height: 40px; font-weight: 700; }
+.box { position: absolute; left: 47px; top: 198px; width: 308px; height: 330px; background: var(--glass); border: 1px solid var(--edge); overflow: hidden; box-shadow: 0 8px 24px var(--shadow); }
+
+.stills { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figcaption { font-size: 13px; line-height: 1.45; }
+.still { border-radius: 14px; }
+.strip { overflow-x: auto; }
+.strip table { border-collapse: separate; border-spacing: 4px 6px; table-layout: fixed; width: 100%; max-width: 620px; }
+.strip th { font: 600 13px/1.4 var(--num); text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.strip thead th { color: var(--soft); font-weight: 500; text-align: center; }
+.strip .still { border-radius: 9px; }
+.costs { overflow-x: auto; }
+.costs table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14px; line-height: 1.5; }
+.costs th, .costs td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-top: 1px solid var(--line); }
+.costs thead th { border-top: 0; color: var(--soft); font-weight: 500; }
+.rec { color: var(--accent); font-weight: 600; }
+.end output { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.go { align-self: flex-start; min-height: 48px; padding: 0 22px; border: 0; border-radius: 24px; background: var(--accent); color: var(--onaccent); font-weight: 600; cursor: pointer; }
+@media (max-width: 760px) { .lab { grid-template-columns: minmax(0, 1fr); gap: 16px; } .lab .fit { justify-self: center; } .side { order: -1; } .say { min-height: 0; }
+  .costs table { min-width: 0; } .costs thead { display: none; }
+  .costs table, .costs tbody, .costs tr, .costs th, .costs td { display: block; }
+  .costs tr { border-top: 1px solid var(--line); padding-block: 10px; }
+  .costs th, .costs td { border: 0; padding: 1px 0; }
+  .costs td { display: grid; grid-template-columns: 8em minmax(0, 1fr); gap: 10px; }
+  .costs td::before { content: attr(data-l); color: var(--soft); } }
+</style>
+
+<main>
+<header>
+  <h1>茄記：按住一行與開資料夾</h1>
+  <p>三題，用手指玩過再選。尺寸、顏色、秒數照 2.0 的程式，畫面高度縮成 700 點。網頁沒有震動，順不順要等做進 app 用真機試。</p>
+</header>
+
+<section id="q1">
+  <h2>第一題　按住一行，那一行要怎麼露出來</h2>
+  <div class="lab">
+    <div class="fit" id="play1"></div>
+    <div class="side">
+      <div class="group"><h3>按住手機裡任何一行半秒，記得試最下面幾行</h3><div class="opts" id="o-row"></div></div>
+      <p class="say" id="s-row"></p>
+    </div>
+  </div>
+  <h3>按住最下面一行時，四種並排</h3>
+  <div class="stills" id="stills1"></div>
+  <div class="costs"><table>
+    <thead><tr><th>選項</th><th>那一行看得到嗎</th><th>卡片放不下時</th><th>要付的代價</th></tr></thead>
+    <tbody>
+      <tr><th>現在</th><td>整張紙一起霧掉</td><td>往上收，蓋住那一行</td><td>不用改</td></tr>
+      <tr><th class="rec">A 浮起（推薦）</th><td>浮在霧上面，跟目錄的磚同一套</td><td>改放到那一行上面</td><td>行的左右各縮 8 點，字不重排；要另外畫一份那一行</td></tr>
+      <tr><th>B 原地亮著</th><td>留在原位，不放大、沒有影子</td><td>改放到那一行上面</td><td>最省；跟目錄的磚還是兩種樣子</td></tr>
+      <tr><th>C 讓位</th><td>浮起</td><td>行往上移，卡片永遠在下面</td><td>下半部的行會離開手指，最下面一行移約 200 點</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="q2">
+  <h2>第二題　按住的那半秒，那一行要不要有反應</h2>
+  <p>在上面的手機裡按住試。反應從第 0.2 秒開始，所以一般的點和捲動看不到；中途放手照舊算點一下。</p>
+  <div class="opts" id="o-hold"></div>
+  <p class="say" id="s-hold"></p>
+</section>
+
+<section id="q3">
+  <h2>第三題　資料夾怎麼打開、怎麼收</h2>
+  <div class="lab">
+    <div class="fit" id="play2"></div>
+    <div class="side">
+      <div class="group"><h3>點「工作」或「旅行」打開，點框外面收起</h3><div class="opts" id="o-fold"></div></div>
+      <p class="say" id="s-fold"></p>
+      <div class="tools">
+        <label for="slow"><input type="checkbox" id="slow">放慢五倍看</label>
+        <label for="stall"><input type="checkbox" id="stall">開頭先卡 60 毫秒</label>
+      </div>
+      <p class="soft">2.0 第一次打開資料夾在模擬器量到卡 45–69 毫秒，之後約 26。勾起來就是沒先處理這個卡頓的樣子。</p>
+    </div>
+  </div>
+  <h3>打開「旅行」之後第幾毫秒的畫面</h3>
+  <div class="strip" id="strip"></div>
+  <div class="costs"><table>
+    <thead><tr><th>選項</th><th>看得出從哪來嗎</th><th>多久</th><th>要付的代價</th></tr></thead>
+    <tbody>
+      <tr><th>現在</th><td>看不出</td><td>0</td><td>不用改</td></tr>
+      <tr><th class="rec">A 從磚放大（推薦）</th><td>看得出，收起縮回那塊磚</td><td>約 0.34 秒，不過頭</td><td>最大：框要先做好藏著，不然開頭會卡；霧要跟著一格一格變濃</td></tr>
+      <tr><th>B 小小放大</th><td>方向看得出一點</td><td>開 0.2、收 0.15 秒</td><td>中等；開頭的卡頓也要處理</td></tr>
+      <tr><th>C 只淡入淡出</th><td>看不出</td><td>0.15 秒</td><td>最小；開了「減少動態」的人也是看到這個</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="end">
+  <h2>你現在選的</h2>
+  <output id="sum"></output>
+  <button class="go" id="copy" type="button">複製我的選擇</button>
+  <p class="soft" id="copied" aria-live="polite"></p>
+</section>
+</main>
+
+<script>
+(function () {
+  var H = 700, W = 402, SAFE = 34;
+  var LINES = ['茄記改成 SwiftUI，先看紙面順不順', '這一行比較長，用來看換行之後行高對不對，浮起來的時候字會不會重排', '買牛奶', '回信給出版社', '週四錄影前把稿子再念一遍', '問一下那家咖啡的豆子', '電話費', '下一集的書名', '行李箱的輪子', '晚上倒垃圾'];
+  var ITEMS = [['劃掉'], ['搬到…'], ['複製'], ['刪除', 'red']];
+  var OPTS = {
+    row: [['now', '現在', '照 2.0', '整張紙霧掉，看不清是哪一行。按最下面幾行，卡片會蓋住它。'],
+      ['A', 'A 浮起', '推薦', '那一行浮在霧上面，卡片接在下面；下面放不下就放到上面。手指按的地方不動。'],
+      ['B', 'B 原地亮著', '最省', '那一行沒被霧蓋住，其他都霧掉。沒有浮起的感覺。'],
+      ['C', 'C 讓位', '像系統選單', '卡片永遠在下面。按下半部的行時，那一行會往上移開。']],
+    hold: [['none', '沒反應', '照 2.0', '時間到了才一次跳出來。'],
+      ['dark', '慢慢變暗', '推薦', '第 0.2 秒開始變暗，到 0.5 秒浮起。行的邊界和字都不動。'],
+      ['shrink', '微微縮小', '像系統選單', '縮到 97%，到 0.5 秒浮起。行跟行之間會露出一點縫。']],
+    fold: [['now', '現在', '照 2.0', '框和霧直接出現、直接消失。'],
+      ['A', 'A 從磚放大', '推薦', '從那塊磚長出來，收起縮回同一塊磚。開到一半點外面會從那裡折回去。'],
+      ['B', 'B 小小放大', '中間', '九成大開始放大，邊放大邊出現。'],
+      ['C', 'C 只淡入淡出', '最省', '框和霧一起淡進來、淡出去。']]
+  };
+  var TITLE = { row: '第一題', hold: '第二題', fold: '第三題' };
+  var pick = { row: 'A', hold: 'dark', fold: 'A' };
+  try { var old = JSON.parse(localStorage.getItem('qieji-compare') || '{}'); Object.keys(pick).forEach(function (k) { if (OPTS[k].some(function (o) { return o[0] === old[k]; })) pick[k] = old[k]; }); } catch (e) {}
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, parent, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; if (parent) parent.appendChild(n); return n; }
+  function px(n) { return n + 'px'; }
+
+  /* 縮放 */
+  function phone(fit, from, to) {
+    var top = from || 0, tall = (to || H) - top, ph = el('div', 'ph', fit);
+    function size() { var s = fit.clientWidth / W; if (!s) return; fit.style.height = px(tall * s); ph.style.transform = 'scale(' + s + ') translateY(' + -top + 'px)'; }
+    if (window.ResizeObserver) new ResizeObserver(size).observe(fit); else window.addEventListener('resize', size);
+    size();
+    return ph;
+  }
+
+  /* 第一、二題：紙 */
+  function paper(ph) {
+    var under = el('div', 'under', ph), over = el('div', 'over', ph), bar = el('div', 'bar', under);
+    el('i', '', bar); el('span', '', bar, '今天想到的');
+    var time = el('div', 'time', under); el('span', '', time, '剛剛'); el('span', '', time, '11/25 18:09');
+    var list = el('div', 'rows', under);
+    LINES.forEach(function (t) { var r = el('div', 'row', list); el('span', '', r, t); });
+    return { under: under, over: over, rows: Array.prototype.slice.call(list.children), list: list };
+  }
+  function openMenu(p, row, mode, still, close) {
+    var top = p.list.offsetTop + row.offsetTop, tall = row.offsetHeight, bottom = top + tall, card = 195, gap = 8;
+    var fits = bottom + gap + card <= H - SAFE - gap, y, copy = null, shift = 0, up = false;
+    if (mode === 'now') { y = Math.min(bottom, H - SAFE - 220); }
+    else if (mode === 'C') { shift = fits ? 0 : (H - SAFE - gap - card - gap) - bottom; y = bottom + shift + gap; }
+    else { up = !fits; y = fits ? bottom + gap : top - gap - card; }
+    var dur = still ? 0 : 150;
+    p.over.textContent = ''; p.over.className = 'over on';
+    var veil = el('div', 'veil', p.over); veil.onclick = close;
+    if (mode !== 'now') {
+      copy = el('div', 'copy' + (mode === 'B' ? '' : ' card'), p.over); copy.style.top = px(top); copy.appendChild(row.cloneNode(true)); copy.firstChild.classList.remove('holding');
+      copy.style.height = px(tall); copy.firstChild.style.height = px(tall);
+    }
+    var menu = el('div', 'menu', p.over); menu.style.top = px(y);
+    ITEMS.forEach(function (it) { var b = el('button', it[1] || '', menu, it[0] === '劃掉' && row.classList.contains('done') ? '恢復' : it[0]); b.type = 'button'; if (still) b.tabIndex = -1; b.onclick = function () { if (it[0] === '劃掉') row.classList.toggle('done'); close(); }; });
+    function anim(n, a, b, ms, ease) { if (!n) return; if (still) { Object.keys(b).forEach(function (k) { n.style[k] = b[k]; }); return; } n.animate([a, b], { duration: ms, easing: ease, fill: 'forwards' }); }
+    anim(p.under, { filter: 'blur(0px)' }, { filter: 'blur(5px)' }, dur, 'ease-in-out');
+    anim(veil, { opacity: 0 }, { opacity: 1 }, dur, 'ease-in-out');
+    var start = pick.hold === 'shrink' && !still ? .97 : 1;
+    if (copy && mode !== 'B') anim(copy, { transform: 'scale(' + start + ')' }, { transform: 'translateY(' + shift + 'px) scale(1.02)' }, shift ? 260 : 180, 'cubic-bezier(.2,.8,.2,1)');
+    menu.style.transformOrigin = up ? '100% 100%' : '100% 0';
+    anim(menu, { transform: 'scale(.01)' }, { transform: 'scale(1)' }, 170, 'ease-out');
+    return function () {
+      p.over.className = 'over';
+      var left = [[p.under, { filter: 'blur(0px)' }], [veil, { opacity: 0 }], [menu, { transform: 'scale(.01)', opacity: 0 }]];
+      if (copy) left.push([copy, mode === 'B' ? { opacity: 0 } : { transform: 'none' }]);
+      left.forEach(function (x) { x[0].animate([x[1]], { duration: 120, easing: 'ease-in', fill: 'forwards' }); });
+      setTimeout(function () { p.over.textContent = ''; p.under.getAnimations().forEach(function (a) { a.cancel(); }); }, 130);
+    };
+  }
+  var ph1 = phone($('play1')), p1 = paper(ph1), shut = null, timer = 0, held = null, at = null, long = false;
+  function close1() { if (shut) { var s = shut; shut = null; s(); } }
+  function drop() { clearTimeout(timer); if (held) held.classList.remove('holding'); held = null; }
+  p1.list.addEventListener('pointerdown', function (e) {
+    var row = e.target.closest('.row'); if (!row || shut || p1.over.firstChild) return;
+    held = row; at = [e.clientX, e.clientY]; row.classList.add('holding');
+    timer = setTimeout(function () { drop(); shut = openMenu(p1, row, pick.row, false, close1); long = true; }, 500);
+  });
+  p1.list.addEventListener('pointermove', function (e) { if (held && Math.hypot(e.clientX - at[0], e.clientY - at[1]) > 10) drop(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { p1.list.addEventListener(n, drop); });
+  /* 按住跳出選單後放手，那一下不要被當成點外面 */
+  ph1.addEventListener('click', function (e) { if (long) { long = false; if (e.target.closest('.veil')) { e.stopPropagation(); e.preventDefault(); } } }, true);
+  window.addEventListener('pointerup', function () { setTimeout(function () { long = false; }, 60); });
+  $('play1').addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  OPTS.row.forEach(function (o) {
+    var f = el('figure', '', $('stills1')), fit = el('div', 'fit still', f), p = paper(phone(fit, 330, H));
+    fit.setAttribute('aria-hidden', 'true');
+    el('figcaption', '', f, o[1]);
+    openMenu(p, p.rows[LINES.length - 1], o[0], true, function () {});
+    p.over.className = 'over';
+  });
+
+  /* 第三題：目錄 */
+  var C = { p: '#A985AE', y: '#E8C468', o: '#E8945C', r: '#D97C6C', b: '#8E9BC6', g: '#9DAF6A', n: '#BFA88E', w: '#EDE3D2' };
+  var GRID = [['從', '從這裡開始', 'y'], ['今', '今天想到的', 'p'], ['記', '記事本', 'b'], ['買', '買菜', 'g'],
+    ['想', '想讀的書', 'p'], ['影', '影片點子', 'y'], { name: '工作', list: [['這', '這週', 'o'], ['週', '週報', 'r'], ['京', '京都稿', 'b'], ['課', '課程', 'g']] }, ['會', '會議', 'n'],
+    ['要', '要催的', 'w'], ['報', '報帳', 'p'], ['食', '食譜', 'y'], ['禮', '禮物', 'o'],
+    { name: '旅行', list: [['機', '機票', 'b'], ['住', '住宿', 'p'], ['帶', '要帶的', 'y'], ['吃', '吃什麼', 'r'], ['車', '車票', 'g'], ['買', '要買的', 'o'], ['店', '店家', 'n'], ['照', '照片', 'w'], ['錢', '花費', 'y']] }, ['健', '健身', 'r'], ['電', '電影', 'b'], ['播', '播客', 'g']];
+  function tile(parent, t, x, y, live) {
+    var n = el(live ? 'button' : 'div', 'tile', parent); n.style.left = px(x); n.style.top = px(y);
+    if (live) n.type = 'button';
+    if (t.list) { var f = el('span', 'fold', n); t.list.forEach(function (m) { var i = el('i', '', f, m[0]); i.style.background = C[m[2]]; }); el('em', '', n, t.name); }
+    else { var b = el('b', '', n, t[0]); b.style.background = C[t[2]]; el('em', '', n, t[1]); }
+    return n;
+  }
+  function dir(ph, live) {
+    ph.classList.add('dir');
+    var under = el('div', 'under', ph), over = el('div', 'over', ph), bar = el('div', 'bar', under); bar.style.top = '8px';
+    el('i', '', bar); el('span', '', bar, '今天想到的');
+    var panel = el('div', 'panel', under); el('div', 'find', panel, '搜尋'); el('div', 'plus', panel, '＋').setAttribute('aria-hidden', 'true');
+    var d = { under: under, over: over, folders: {} };
+    GRID.forEach(function (t, i) {
+      var x = 17 + (i % 4) * 92, y = 116 + Math.floor(i / 4) * 106, n = tile(panel, t, x, y, live && !!t.list);
+      if (t.list) d.folders[t.name] = { t: t, n: n, cx: x + 46, cy: 60 + y + 32 };
+    });
+    d.mount = function (name) {
+      var f = d.folders[name]; over.textContent = ''; d.f = f;
+      d.veil = el('div', 'fveil', over); d.title = el('div', 'ftitle', over, name); d.box = el('div', 'box', over);
+      d.names = f.t.list.map(function (t, i) { return tile(d.box, t, 15 + (i % 3) * 92, 15 + Math.floor(i / 3) * 106).querySelector('em'); });
+    };
+    d.draw = function (p, mode) {
+      var f = d.f, s = d.box.style, mix = function (a, b) { return a + (b - a) * p; };
+      d.veil.style.opacity = p; under.style.filter = p > .004 ? 'blur(' + (9 * p).toFixed(2) + 'px)' : 'none';
+      if (mode === 'A') {
+        var late = Math.max(0, Math.min(1, (p - .35) / .65)), sx = mix(64 / 308, 1), sy = mix(64 / 330, 1);
+        s.transform = 'translate(' + mix(f.cx - 201, 0) + 'px,' + mix(f.cy - 363, 0) + 'px) scale(' + sx + ',' + sy + ')';
+        s.borderRadius = px(mix(14 * 308 / 64, 24)); s.opacity = 1;
+        d.title.style.opacity = late; d.names.forEach(function (n) { n.style.opacity = late; });
+        f.n.style.visibility = p > 0 ? 'hidden' : '';
+      } else {
+        var k = mode === 'B' ? mix(.9, 1) : 1;
+        s.borderRadius = '24px'; s.transformOrigin = (f.cx - 47) + 'px ' + (f.cy - 198) + 'px'; s.transform = 'scale(' + k + ')';
+        s.opacity = p; d.title.style.opacity = p; f.n.style.visibility = '';
+      }
+    };
+    d.gone = function () { if (d.f) d.f.n.style.visibility = ''; over.textContent = ''; under.style.filter = 'none'; over.className = 'over'; d.f = null; };
+    return d;
+  }
+  var d2 = dir(phone($('play2')), true), now = 0, vel = 0, goal = 0, run = 0, mode2 = 'A', last = 0, tween = null, w = 2 * Math.PI / .34;
+  function frame(t) {
+    var dt = Math.min(.05, (t - last) / 1000) * ($('slow').checked ? .2 : 1); last = t;
+    if (mode2 === 'A') {
+      var x = now - goal, c = vel + w * x, e = Math.exp(-w * dt);
+      now = goal + (x + c * dt) * e; vel = (c - w * (x + c * dt)) * e;
+      if (Math.abs(now - goal) < .002 && Math.abs(vel) < .02) { now = goal; vel = 0; }
+    } else {
+      tween.t = Math.min(1, tween.t + dt / tween.s); now = tween.a + (goal - tween.a) * (1 - Math.pow(1 - tween.t, 2));
+      if (tween.t >= 1) now = goal;
+    }
+    d2.draw(Math.max(0, now), mode2);
+    if (now === goal && vel === 0) { run = 0; if (!goal) d2.gone(); return; }
+    run = requestAnimationFrame(frame);
+  }
+  function go(to) {
+    goal = to;
+    if ($('stall').checked && to) { var until = performance.now() + 60; while (performance.now() < until) {} }
+    if (mode2 === 'now') { now = to; vel = 0; d2.draw(to, 'now'); if (!to) d2.gone(); return; }
+    tween = { a: now, t: 0, s: mode2 === 'C' ? .15 : (to ? .2 : .15) };
+    if (!run) { last = performance.now(); run = requestAnimationFrame(frame); }
+  }
+  function stop2() { cancelAnimationFrame(run); run = 0; now = 0; vel = 0; goal = 0; d2.gone(); }
+  Object.keys(d2.folders).forEach(function (name) {
+    d2.folders[name].n.onclick = function () {
+      stop2(); mode2 = pick.fold; d2.mount(name); d2.over.className = 'over on'; d2.draw(0, mode2 === 'now' ? 'C' : mode2);
+      d2.veil.onclick = function () { go(0); };
+      go(1);
+    };
+  });
+
+  var TIMES = [0, 60, 120, 200, 340];
+  function pAt(m, ms) { var t = ms / 1000; if (m === 'now') return 1; if (m === 'A') return 1 - Math.exp(-w * t) * (1 + w * t); var k = Math.min(1, t / (m === 'B' ? .2 : .15)); return 1 - (1 - k) * (1 - k); }
+  var table = el('table', '', $('strip')), hr = el('tr', '', el('thead', '', table));
+  TIMES.forEach(function (t) { el('th', '', hr, String(t)); });
+  var tb = el('tbody', '', table);
+  OPTS.fold.forEach(function (o) {
+    var name = el('th', '', el('tr', '', tb), o[1]), tr = el('tr', '', tb); name.colSpan = TIMES.length;
+    TIMES.forEach(function (t) {
+      var fit = el('div', 'fit still', el('td', '', tr)), d = dir(phone(fit), false); fit.setAttribute('aria-hidden', 'true');
+      d.mount('旅行'); var p = pAt(o[0], t);
+      if (o[0] !== 'now' && t === 0) d.gone(); else d.draw(p, o[0]);
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.costs table'), function (t) {
+    var heads = t.querySelectorAll('thead th');
+    Array.prototype.forEach.call(t.querySelectorAll('tbody tr'), function (r) { Array.prototype.forEach.call(r.cells, function (c, i) { c.setAttribute('data-l', heads[i].textContent); }); });
+  });
+
+  /* 選項 */
+  function sum() {
+    return Object.keys(pick).map(function (k) { return TITLE[k] + '：' + OPTS[k].filter(function (o) { return o[0] === pick[k]; })[0][1]; }).join('；');
+  }
+  function show() {
+    Object.keys(pick).forEach(function (k) {
+      Array.prototype.forEach.call($('o-' + k).children, function (b, i) { b.setAttribute('aria-pressed', String(OPTS[k][i][0] === pick[k])); });
+      $('s-' + k).textContent = OPTS[k].filter(function (o) { return o[0] === pick[k]; })[0][3];
+    });
+    ph1.className = 'ph hold-' + pick.hold; $('sum').textContent = sum(); $('copied').textContent = '';
+    try { localStorage.setItem('qieji-compare', JSON.stringify(pick)); } catch (e) {}
+  }
+  Object.keys(pick).forEach(function (k) {
+    OPTS[k].forEach(function (o) {
+      var b = el('button', 'opt', $('o-' + k)); b.type = 'button'; b.id = 'b-' + k + '-' + o[0]; el('span', '', b, o[1]); el('small', '', b, o[2]);
+      b.onclick = function () { pick[k] = o[0]; if (k === 'fold') stop2(); else close1(); show(); };
+    });
+  });
+  $('copy').onclick = function () {
+    var said = function (t) { $('copied').textContent = t; };
+    var hand = function () { var r = document.createRange(); r.selectNodeContents($('sum')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); said('這裡不能自動複製，已經幫你選起來，長按複製就好。'); };
+    try { navigator.clipboard.writeText(sum()).then(function () { said('複製好了，貼回對話就行。'); }, hand); } catch (e) { hand(); }
+  };
+  show();
+})();
+</script>
+</body></html>
