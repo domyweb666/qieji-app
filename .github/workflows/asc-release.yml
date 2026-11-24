@@ -1,0 +1,23 @@
+name: App Store Connect（送審）
+
+# 只讀：推 asc-status- 開頭的 tag，印出後台現況。不寫入、不送審。
+on:
+  push:
+    tags: ['asc-status-*']
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 查後台現況
+        run: |
+          pip install -q pyjwt cryptography requests
+          python3 -I .aso/asc_release.py status
