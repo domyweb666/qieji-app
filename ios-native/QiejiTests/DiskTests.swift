@@ -66,6 +66,11 @@ final class DiskTests: XCTestCase {
     func testFreshInstallGetsTutorial() {
         let found = disk().load(now: 5000)
         XCTAssertEqual(found.source, .fresh)
+        // 新裝的下次打開不准踩到「寬磚空位清一次」：那會把排列時間改成現在、蓋掉 iCloud 的排列
+        var book = found.book
+        let layoutBefore = book.orderMod
+        XCTAssertFalse(Seats.packGrid(&book, now: 9_999_999))
+        XCTAssertEqual(book.orderMod, layoutBefore)
         XCTAssertEqual(found.book.notes.count, 1)
         XCTAssertTrue(Tutorial.isUntouched(found.book.notes[0]))
         XCTAssertEqual(found.last, found.book.notes[0].id)

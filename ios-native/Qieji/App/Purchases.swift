@@ -123,7 +123,11 @@ final class Purchases: ObservableObject {
         busy = true
         defer { busy = false }
         do {
-            guard let product = try await Product.products(for: [FullRule.productID]).first else { return .fail }
+            // 付款框跳出來之後不設時限（使用者在按），只有跟 Apple 要商品這一步設
+            let found = try await Timeout.run(Tok.Timing.priceLimit) {
+                try await Product.products(for: [FullRule.productID])
+            }
+            guard let product = found.first else { return .fail }
             switch try await product.purchase() {
             case let .success(.verified(deal)):
                 await deal.finish()
@@ -141,7 +145,7 @@ final class Purchases: ObservableObject {
             }
         } catch {
             Purchases.log.error("buy failed: \(String(describing: type(of: error)), privacy: .public)")
-            return Purchases.failure(error)
+            return error is Timeout.Expired ? .offline : Purchases.failure(error)
         }
     }
 
@@ -182,20 +186,43 @@ final class Purchases: ObservableObject {
     }
 }
 
-/// 等一件事最多幾秒，超過就當失敗
+/// 等一件事最多幾秒，超過就當失敗。StoreKit 不理會取消，不能用 task group（group 結束前會等它跑完，等於沒設時限，
+/// 豆鍵 2026-11-11 在審查的 iPad 上就是這樣一直轉圈被退）；改成兩個各自跑的工作搶著回覆，先到的算數，晚到的丟掉
 enum Timeout {
     struct Expired: Error {}
 
     static func run<T: Sendable>(_ seconds: Double, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await work() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw Expired()
+        try await withCheckedThrowingContinuation { continuation in
+            let reply = ReplyOnce(continuation)
+            Task {
+                do {
+                    try await reply.send(.success(work()))
+                } catch {
+                    reply.send(.failure(error))
+                }
             }
-            guard let first = try await group.next() else { throw Expired() }
-            group.cancelAll()
-            return first
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                reply.send(.failure(Expired()))
+            }
         }
+    }
+}
+
+/// 只讓第一個回覆送出去，第二個直接丟掉（continuation 回覆兩次會閃退）
+private final class ReplyOnce<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+
+    init(_ continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    func send(_ result: Result<T, Error>) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(with: result)
     }
 }

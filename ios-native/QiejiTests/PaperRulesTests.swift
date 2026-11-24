@@ -215,6 +215,29 @@ final class PaperRulesTests: XCTestCase {
         XCTAssertNotNil(store.book.note(blank.id))
     }
 
+    // MARK: 時限
+
+    /// 不理會取消的工作（StoreKit 就是）：時間到照樣要回來，不准等它跑完
+    func testTimeoutReturnsEvenIfWorkIgnoresCancel() async {
+        let start = Date()
+        do {
+            _ = try await Timeout.run(0.2) {
+                await withCheckedContinuation { (done: CheckedContinuation<Int, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 4) { done.resume(returning: 1) }
+                }
+            }
+            XCTFail("應該逾時")
+        } catch {
+            XCTAssertTrue(error is Timeout.Expired)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+    }
+
+    func testTimeoutPassesResultThrough() async throws {
+        let value = try await Timeout.run(5) { 7 }
+        XCTAssertEqual(value, 7)
+    }
+
     /// 搜尋點一行（1.1 openAt／takeSeek）：換到那張；只有那張紙拿得到要捲去的那行，拿一次就清掉
     func testSearchLineIsTakenOnceByItsNote() {
         let here = Item(text: "這一張")

@@ -4,7 +4,9 @@
   Privacy Manifest（2026-11-21）。茄記沒有帳號、不裝第三方 SDK：不追蹤、不收集任何資料（iCloud 同步走使用者自己的 iCloud 雲碟）。
   理由代碼照 Apple「NSPrivacyAccessedAPITypeReasons」文件：
   C617.1 讀 App 自己資料夾裡檔案的資訊（存檔、舊版留下的存檔）；
-  CA92.1 只讀寫 App 自己的設定（上次開的那張紙、最近開過的紙）。
+  CA92.1 只讀寫 App 自己的設定（上次開的那張紙、最近開過的紙）；
+  1C8F.1 用 App Group 跟自己的小工具交資料；
+  35F9.1 量 App 裡兩件事隔多久（趁手指沒碰著時先做事）。
   送審前照當時的 Apple 文件再對一次代碼。
 -->
 <plist version="1.0">
@@ -31,6 +33,15 @@
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
                 <string>CA92.1</string>
+                <string>1C8F.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>35F9.1</string>
             </array>
         </dict>
     </array>

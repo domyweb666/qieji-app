@@ -81,6 +81,7 @@ final class Disk {
             return loadLegacy(found.raw, old: found.old)
         }
         var book = Notebook()
+        book.grid = Seats.gridCols // 新裝的沒有寬磚時期的空位：下次打開不准清、不准把排列時間改成現在（會蓋掉 iCloud 的排列）
         let first = Tutorial.note(now: now)
         book.notes.append(first)
         return Loaded(book: book, source: .fresh, last: first.id, recent: [], unreadable: false, legacy: [:])

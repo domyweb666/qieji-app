@@ -473,7 +473,7 @@ enum Tok {
         static let saveDebounce: Double = 0.25
         static let cloudOffGrace: Double = 10
         static let cloudPushWait: Double = 2
-        static let priceLimit: Double = 15 // 讀價格最多等這麼久，超過就照實說讀不到
+        static let priceLimit: Double = 10 // 讀價格最多等這麼久，超過就照實說讀不到
         static let widgetPushDelay: Double = 0.8 // 換紙之後停這麼久才通知桌面小工具
         static let reviewDelay: Double = 1 // 劃掉一行之後停這麼久才看要不要跳系統評分框
         // 目錄拖曳（數值照 Expo 版 tokens.ts 的 timing，換成秒）

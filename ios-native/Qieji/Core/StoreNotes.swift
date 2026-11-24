@@ -112,6 +112,7 @@ extension Store {
     func wipe() -> Bool {
         guard loaded, let disk, !frozen, disk.wipe() else { return false }
         var fresh = Notebook()
+        fresh.grid = Seats.gridCols // 跟新裝的一樣（見 Disk）
         let first = Tutorial.note(now: Clock.now())
         fresh.notes = [first]
         Seats.fixOrder(&fresh)
