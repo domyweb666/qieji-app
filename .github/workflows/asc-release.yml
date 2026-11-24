@@ -1,15 +1,21 @@
 name: App Store Connect（送審）
 
-# 只讀：推 asc-status- 開頭的 tag，印出後台現況。不寫入、不送審。
+# 只在推 tag 時跑，推一般 commit 不會觸發：
+#   asc-status-<編號>  只讀，印出後台現況
+#   asc-write-<編號>   建草稿、寫文案、讀回比對，不送審
+#   asc-submit-<build 號>  寫文案、比對全對，選那個 build 提交審查（多米點頭才推）
 on:
   push:
-    tags: ['asc-status-*']
+    tags: ['asc-status-*', 'asc-write-*', 'asc-submit-*']
 
 permissions:
   contents: read
 
+concurrency:
+  group: asc-release
+
 jobs:
-  status:
+  asc:
     runs-on: ubuntu-latest
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -17,7 +23,11 @@ jobs:
       ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: 查後台現況
+      - name: 跑送審工具
         run: |
           pip install -q pyjwt cryptography requests
-          python3 -I .aso/asc_release.py status
+          case "$GITHUB_REF_NAME" in
+            asc-status-*) python3 -I .aso/asc_release.py status ;;
+            asc-write-*) python3 -I .aso/asc_release.py write ;;
+            asc-submit-*) python3 -I .aso/asc_release.py submit "${GITHUB_REF_NAME#asc-submit-}" ;;
+          esac
