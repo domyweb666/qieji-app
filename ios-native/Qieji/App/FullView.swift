@@ -38,7 +38,7 @@ struct FullView: View {
                             .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
                             .frost(Circle(), interactive: true)
                     }
-                    .buttonStyle(PressDim())
+                    .buttonStyle(FrostPress())
                     .accessibilityLabel(Words.close)
                     Spacer()
                     Text(Words.fullName)

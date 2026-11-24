@@ -50,6 +50,29 @@ extension View {
     }
 }
 
+/// 會反應的玻璃鈕（＋、✓、×）：iOS 26 的玻璃按下去自己會鼓起、亮一下，不再變淡；沒有玻璃的時候（iOS 26 以下、減少透明度）照舊變淡
+struct FrostPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Press(configuration: configuration)
+    }
+
+    private struct Press: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.accessibilityReduceTransparency) private var solid
+
+        var body: some View {
+            configuration.label.opacity(configuration.isPressed && dims ? Tok.Motion.pressDim : 1)
+        }
+
+        private var dims: Bool {
+            if #available(iOS 26.0, *) {
+                return solid
+            }
+            return true
+        }
+    }
+}
+
 /// 按住效果統一：變淡到 pressDim（1.1 tokens motion.pressDim）
 struct PressDim: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

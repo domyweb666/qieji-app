@@ -66,6 +66,8 @@ final class DirModel: ObservableObject {
     @Published var stage = 0
     @Published var progress: CGFloat = 0 // 0＝收起、1＝全開
     @Published var fading = false // 這次用淡的不用滑的
+    var grabbing = false // 手指正在拉把手（不是點）
+    @Published var pulled: CGFloat = 0 // 用淡的那次，把手把面板往下拉了多少（收起時留在那裡淡掉）
     @Published var isOpen = false // 停在全開
     @Published var moveLine: String? // 搬行模式：要搬的那一行
 
@@ -284,6 +286,7 @@ final class DirModel: ObservableObject {
         menu = nil
         launch = nil
         fading = calm
+        pulled = 0
         progress = 0
         scene = Scene(entries: Seats.seatedLayout(store.book), drag: nil)
         if let spot {

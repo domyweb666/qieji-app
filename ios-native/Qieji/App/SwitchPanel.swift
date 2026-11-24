@@ -38,7 +38,7 @@ private struct SwitchHost: UIViewRepresentable {
 /// 切換清單（照 1.1 SwitchPanel，2026-11-04 多米換掉系統的半高面板）：點紙左上的清單名，從螢幕下面升起、貼齊底部（下面不是圓角）。
 /// 跟 ⋯ 選單同一種玻璃，排法照系統選單：左邊小方磚、右邊名字，組跟組之間一條線，小字標組名。
 /// 內容：新的一張、新的記事本（買了才有）；釘選的、這台手機最近開過的，正在看的打勾；最下面「管理所有清單」＝收的同時打開目錄。
-/// 收起：點上面露出的紙、往下撥上緣那條、點一張。點一張時面板馬上讓開、紙同時換（2026-11-04 多米真機：要延遲一下才切換）。減少動態：淡入淡出不滑。
+/// 收起：點上面露出的紙、往下撥上緣那條、點一張。點一張時面板馬上讓開、紙同時換（2026-11-04 多米真機：要延遲一下才切換）。減少動態：自動的升起、收起換成淡入淡出；手指往下撥照樣跟手。
 /// 2026-11-23 從 SwiftUI 換成原生：以前每次開都要重建整個面板，主執行緒一次卡 40–90 毫秒
 final class SwitchPanelView: UIView {
     /// 開一次要的東西
@@ -230,39 +230,39 @@ final class SwitchPanelView: UIView {
         }
     }
 
-    /// 往下撥：跟著手指；撥過面板高的一成五或往下甩就收起，不然彈回
+    /// 往下撥：跟著手指；放手看 Motions.pullCloses，收起、彈回都接著手指的速度
     @objc private func onPull(_ gesture: UIPanGestureRecognizer) {
-        guard !closing, !calm else { return }
+        guard !closing else { return }
         let moved = gesture.translation(in: self).y
         switch gesture.state {
         case .began:
             motion?.stopAnimation(true)
             pullFrom = sheet.transform.ty - moved
+            // 升到一半就被拉住：還沒亮完的照樣亮完
+            UIView.animate(withDuration: Tok.Motion.fadeSeconds, delay: 0, options: [
+                .allowUserInteraction,
+                .beginFromCurrentState,
+            ]) { [self] in
+                sheet.alpha = 1
+                scrim.alpha = 1
+            }
         case .changed:
             let spot = CGAffineTransform(translationX: 0, y: max(0, pullFrom + moved))
             sheet.transform = spot
             grabArea.transform = spot
         case .ended, .cancelled, .failed:
             let speed = gesture.state == .ended ? gesture.velocity(in: self).y : 0
-            if gesture.state == .ended, moved > sheet.bounds.height * Tok.Gesture.pushCloseRatio || speed > Tok.Gesture.flick {
-                dismiss(speed: speed)
+            if gesture.state == .ended, Motions.pullCloses(moved, speed: speed, over: sheet.bounds.height) {
+                dismiss(speed: max(0, speed))
             } else {
-                run(Tok.Motion.spring(Tok.Motion.dirPanelSeconds, velocity: 0)) { [self] in
+                let pace = Motions.speed(-speed, over: sheet.transform.ty)
+                run(Tok.Motion.spring(Tok.Motion.dirPanelSeconds, velocity: pace)) { [self] in
                     sheet.transform = .identity
                     grabArea.transform = .identity
                 }
             }
         default: break
         }
-    }
-
-    /// 減少動態時撥了不跟手，往下撥一段就收
-    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        if calm, gesture is UIPanGestureRecognizer {
-            dismiss()
-            return false
-        }
-        return true
     }
 
     // MARK: 內容

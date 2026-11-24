@@ -93,7 +93,7 @@ struct DirPanel: View {
             if model.stage > 1 {
                 sheet
                     .coordinateSpace(name: DirPanel.space)
-                    .offset(y: model.fading ? 0 : model.travel * (1 - model.progress))
+                    .offset(y: model.fading ? model.pulled : model.travel * (1 - model.progress))
                     // 整塊當成一張淡出：不這樣的話裡面每一層各自變透明，點磚打開時底下那一面磚會透出來閃一下
                     .compositingGroup()
                     .opacity(model.fading ? Double(model.progress) : 1)
@@ -183,14 +183,15 @@ struct DirPanel: View {
             .frame(maxWidth: .infinity)
             .frame(height: Tok.Shape.hitMin)
             .contentShape(Rectangle())
-            .onTapGesture { model.tapOut() }
+            // 點和拉用同一個手勢分：另外掛一個點的話，拉要等點放棄（走約 45 點）才成立，拉不到那麼遠就放會被當成點、直接收掉
             .gesture(
-                DragGesture(minimumDistance: Tok.Gesture.pullActivate, coordinateSpace: .global)
-                    .onChanged { model.pull($0.translation.height) }
-                    .onEnded { model.pullEnd($0.translation.height, velocity: Motions.downSpeed($0)) }
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { model.grabMoved($0.translation) }
+                    .onEnded { model.grabEnded($0.translation, velocity: Motions.downSpeed($0)) }
             )
             .accessibilityLabel(model.editing ? Words.doneEditing : Words.closeDir)
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction { model.tapOut() }
     }
 
     /// 搜尋列＋新的一張；抖動中右邊那顆換成「完成」

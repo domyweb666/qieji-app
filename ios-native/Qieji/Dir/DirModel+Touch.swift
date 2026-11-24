@@ -229,17 +229,47 @@ extension DirModel {
         }
     }
 
-    /// 把手往下拉：面板跟著手指
-    func pull(_ distance: CGFloat) {
-        guard !editing, menu == nil, drag == nil else { return }
-        progress = min(1, max(0, 1 - distance / travel))
+    /// 手指在把手上：走不到 10 點是點一下，走過了就是拉（拉回原點放手也還是拉）
+    func grabMoved(_ move: CGSize) {
+        if move == .zero {
+            grabbing = false // 新的一下：上一下被系統打斷的話收不到放手
+        }
+        if hypot(move.width, move.height) >= Tok.Gesture.pullActivate {
+            grabbing = true
+        }
+        if grabbing {
+            pull(move.height)
+        }
     }
 
-    /// 放手：拉過一成五或往下甩（每秒 550 點）就收，不然彈回全開；兩種都接著手指的速度走（1.1 settle 帶 velocity）
+    func grabEnded(_ move: CGSize, velocity: CGFloat) {
+        guard grabbing else {
+            tapOut()
+            return
+        }
+        grabbing = false
+        pullEnd(move.height, velocity: velocity)
+    }
+
+    /// 把手往下拉：面板跟著手指。走了 10 點才算拉，扣掉那一段，面板從手指底下 0 開始跟（不先跳一格）；門檻仍照手指走的距離判。
+    /// 減少動態只換掉自動的升起、收起，手指拉著照樣跟手
+    func pull(_ distance: CGFloat) {
+        guard !editing, menu == nil, drag == nil else { return }
+        let shift = min(travel, max(0, distance - Tok.Gesture.pullActivate))
+        if fading {
+            pulled = shift
+        } else {
+            progress = 1 - shift / travel
+        }
+    }
+
+    /// 放手：看 Motions.pullCloses；收起、彈回都接著手指的速度走（1.1 settle 帶 velocity）
     func pullEnd(_ distance: CGFloat, velocity: CGFloat) {
         guard !editing, menu == nil, drag == nil else { return }
-        if distance > travel * Tok.Gesture.pushCloseRatio || velocity > Tok.Gesture.flick {
-            close(velocity: velocity)
+        if Motions.pullCloses(distance, speed: velocity, over: travel) {
+            close(velocity: max(0, velocity))
+        } else if fading {
+            withAnimation(Tok.Motion.dirFade) { pulled = 0 }
         } else {
             let speed = Motions.speed(-velocity, over: travel * (1 - progress))
             withAnimation(calm ? Tok.Motion.dirFade : Tok.Motion.dirPanelSpring(velocity: speed)) { progress = 1 }

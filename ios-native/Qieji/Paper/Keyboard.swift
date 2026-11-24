@@ -40,7 +40,7 @@ struct DoneButton: View {
                 .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
                 .frost(Circle(), tint: Tok.Col.accent, interactive: true)
         }
-        .buttonStyle(PressDim())
+        .buttonStyle(FrostPress())
         .accessibilityLabel(Words.doneKeyboard)
     }
 }

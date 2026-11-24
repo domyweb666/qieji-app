@@ -174,6 +174,83 @@ final class FeelTests: XCTestCase {
         XCTAssertEqual(model.openFolder?.id, folder)
     }
 
+    // MARK: 面板往下拉（2026-11-25 手感審查 #2、#6）
+
+    /// 放手：拉夠了或往下甩才收；往上甩回去，拉再多也不收；手指停住放開的小晃不算往上甩
+    func testPullCloses() {
+        XCTAssertTrue(Motions.pullCloses(61, speed: 0, over: 400))
+        XCTAssertFalse(Motions.pullCloses(59, speed: 0, over: 400))
+        XCTAssertTrue(Motions.pullCloses(20, speed: 600, over: 400))
+        XCTAssertFalse(Motions.pullCloses(300, speed: -600, over: 400))
+        XCTAssertTrue(Motions.pullCloses(300, speed: -20, over: 400))
+    }
+
+    private func openDir() -> DirModel {
+        let model = DirModel(store: Store())
+        model.open()
+        model.progress = 1
+        model.isOpen = true
+        return model
+    }
+
+    /// 目錄的把手：起動的 10 點扣掉，不先跳一格；往上拉停在全開
+    func testDirPullSkipsTheSlop() {
+        let model = openDir()
+        model.fading = false
+        model.pull(Tok.Gesture.pullActivate)
+        XCTAssertEqual(model.progress, 1)
+        model.pull(Tok.Gesture.pullActivate + 50)
+        XCTAssertEqual((1 - model.progress) * model.travel, 50, accuracy: 0.01)
+        model.pull(-80)
+        XCTAssertEqual(model.progress, 1)
+    }
+
+    func testDirPullEndLooksAtTheWayTheFingerGoes() {
+        let model = openDir()
+        model.fading = false
+        model.pull(model.travel / 2)
+        model.pullEnd(model.travel / 2, velocity: -600)
+        XCTAssertTrue(model.isOpen)
+        XCTAssertEqual(model.progress, 1)
+        model.pull(model.travel / 2)
+        model.pullEnd(model.travel / 2, velocity: 0)
+        XCTAssertFalse(model.isOpen)
+    }
+
+    /// 把手：走不到 10 點放手是點一下、收起；拉了一小段放手、拉出去又拉回原點放手都彈回
+    func testDirGrabTellsTapFromPull() {
+        let model = openDir()
+        model.fading = false
+        model.grabMoved(.zero)
+        model.grabMoved(CGSize(width: 0, height: 40))
+        model.grabEnded(CGSize(width: 0, height: 40), velocity: 0)
+        XCTAssertTrue(model.isOpen)
+        model.grabMoved(.zero)
+        model.grabMoved(CGSize(width: 0, height: 60))
+        model.grabMoved(CGSize(width: 0, height: 2))
+        model.grabEnded(CGSize(width: 0, height: 2), velocity: 0)
+        XCTAssertTrue(model.isOpen)
+        model.grabMoved(.zero)
+        model.grabEnded(CGSize(width: 0, height: 4), velocity: 0)
+        XCTAssertFalse(model.isOpen)
+    }
+
+    /// 減少動態（用淡的那次）：面板照樣跟手、不變淡；彈回歸零，收起留在拉到的地方淡掉
+    func testDirPullFollowsWhenFading() {
+        let model = openDir()
+        model.fading = true
+        model.pull(Tok.Gesture.pullActivate + 50)
+        XCTAssertEqual(model.progress, 1)
+        XCTAssertEqual(model.pulled, 50)
+        model.pullEnd(60, velocity: 0)
+        XCTAssertTrue(model.isOpen)
+        XCTAssertEqual(model.pulled, 0)
+        model.pull(Tok.Gesture.pullActivate + 300)
+        model.pullEnd(Tok.Gesture.pullActivate + 300, velocity: 0)
+        XCTAssertFalse(model.isOpen)
+        XCTAssertEqual(model.pulled, 300)
+    }
+
     // MARK: 換紙
 
     func testSwapShowsOnlyTheNewPaper() {

@@ -428,7 +428,8 @@ enum Tok {
         static let launchSeconds: Double = 0.26
         static let dragLandSeconds: Double = 0.25
         /// 拿起時磚補上手指已經走的那段（手勢要走一段才啟動），補完磚的位置就是手指的位置
-        static let dragCatch = Animation.easeInOut(duration: 0.12)
+        /// 快起慢停：慢起的話頭幾格磚幾乎不動，手指已經在十幾點外
+        static let dragCatch = Animation.easeOut(duration: 0.12)
     }
 
     // MARK: 手勢門檻
@@ -457,6 +458,7 @@ enum Tok {
         static let pullActivate: CGFloat = 10
         static let pushCloseRatio: CGFloat = 0.15
         static let flick: CGFloat = 550 // 目錄、切換清單往下拉：放手時往下每秒這麼多點就算甩（1.1 flick）
+        static let pullBack: CGFloat = 100 // 放手時往上每秒這麼多點就算往回甩（手指停住放開量到的會小小上下晃，不算）
         static let flickPredict: CGFloat = 4 // iOS 16 量不到手指速度：拿「放手後還會走多遠」乘這個估
         static let editLift: CGFloat = 12 // 抖動中手指在磚上移超過這麼多才拿起（1.1）
         static let speedWindow: Double = 0.1 // 算放手速度只看最後這麼多秒

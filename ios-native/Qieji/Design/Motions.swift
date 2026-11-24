@@ -25,6 +25,12 @@ enum Motions {
         return last
     }
 
+    /// 面板往下拉，放手要不要收：往上甩回去一律不收（手指想留著它）；不然拉過面板的一成五、或往下甩就收
+    static func pullCloses(_ moved: CGFloat, speed: CGFloat, over span: CGFloat) -> Bool {
+        guard speed > -Tok.Gesture.pullBack else { return false }
+        return moved > span * Tok.Gesture.pushCloseRatio || speed > Tok.Gesture.flick
+    }
+
     /// 放手時手指往下每秒幾點；iOS 16 量不到，拿「放手後還會走多遠」估
     static func downSpeed(_ value: DragGesture.Value) -> CGFloat {
         if #available(iOS 17.0, *) {

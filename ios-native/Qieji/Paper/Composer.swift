@@ -363,7 +363,7 @@ struct PlusButton: View {
                         .frame(width: Tok.Shape.fab, height: Tok.Shape.fab)
                         .frost(Circle(), tint: Tok.Col.accent, interactive: true)
                 }
-                .buttonStyle(PressDim())
+                .buttonStyle(FrostPress())
                 .accessibilityLabel(Words.addLine)
                 .transition(.opacity)
             }
