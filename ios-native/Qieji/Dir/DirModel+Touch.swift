@@ -129,7 +129,11 @@ extension DirModel {
     func pressDown(_ zone: Zone, at point: CGPoint) {
         guard drag == nil, !busy, menu == nil else { return }
         Haptic.prepare()
-        heldID = hit(zone, point)?.id
+        let found = hit(zone, point)
+        heldID = found?.id
+        if let found, found.isFolder {
+            folderStage?.pressed(found.id)
+        }
     }
 
     func pressUp() {

@@ -24,6 +24,18 @@ extension DirModel {
         }
     }
 
+    /// 長按選單、VoiceOver 的「刪除」：跟「−」一樣先問一次（2026-11-24 芹查 #1）
+    func confirmDelete(_ id: String) {
+        menu = nil
+        askDelete = id
+    }
+
+    func delete(_ id: String) {
+        menu = nil
+        store.trashNote(id)
+        Haptic.land()
+    }
+
     /// 紙的 ⋯「刪除這張」：從目錄點進來的回到目錄（復原也留在目錄，跟在目錄裡刪一樣）；不是的換到上一張看的
     func trashPaper(_ id: String) {
         let spot = origin?.id == id ? origin : nil

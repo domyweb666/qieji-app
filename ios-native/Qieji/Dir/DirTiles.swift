@@ -43,8 +43,24 @@ final class DirFaceView: UIView {
     /// 準備疊上去時名字先收起來
     var nameHidden = false {
         didSet {
-            label.alpha = nameHidden ? 0 : 1
+            label.alpha = nameHidden || covered ? 0 : 1
         }
+    }
+
+    /// 打開的資料夾就是這塊磚放大的：方磚先不見，名字淡掉；收完方磚馬上出現，名字淡回來
+    var covered = false {
+        didSet {
+            guard covered != oldValue else { return }
+            square.isHidden = covered
+            UIView.animate(
+                withDuration: Tok.Motion.folderNameSeconds, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]
+            ) { self.label.alpha = self.nameHidden || self.covered ? 0 : 1 }
+        }
+    }
+
+    /// 名字那一層（資料夾放大時晚一點才出現）
+    var nameLayer: CALayer {
+        label.layer
     }
 
     override func layoutSubviews() {
@@ -100,6 +116,7 @@ struct DirSlot {
     var pop = false // 剛有東西縮進來
     var held = false // 手指按著
     var inFolder = false
+    var covered = false // 資料夾正開著
 }
 
 /// 目錄或資料夾裡的一塊磚，帶各種狀態：抖動、按著變淡／放大、被瞄著要疊、剛有東西縮進來、拖走了先藏起來。
@@ -143,6 +160,7 @@ final class DirTileView: UIView {
         let moves = animated && !calm
         // 每次都看（封面圖晚到時紙本身沒變）：裡面自己比，沒變就不重畫
         face.show(next.entry, current: next.current, font: font)
+        face.covered = next.covered
         if old?.hidden != next.hidden {
             alpha = next.hidden ? 0 : 1
         }
@@ -292,6 +310,15 @@ final class DirGridView: UIView {
         nil
     }
 
+    /// 每塊磚的名字那一層
+    var names: [CALayer] {
+        tiles.values.map(\.face.nameLayer)
+    }
+
+    func cover(_ id: String, _ on: Bool) {
+        tiles[id]?.face.covered = on
+    }
+
     func show(_ slots: [DirSlot], size: CGSize, calm: Bool, animated: Bool) {
         var gone = Set(tiles.keys)
         let font = Tok.Font.labelUI()
@@ -349,6 +376,7 @@ struct DirGrid: UIViewRepresentable {
     func makeUIView(context _: Context) -> DirGridView {
         let view = DirGridView(frame: .zero)
         view.model = model
+        model.pageGrids.add(view)
         return view
     }
 
@@ -387,7 +415,7 @@ struct DirPageView: View {
             DirSlot(
                 entry: entry, index: index, spot: metrics.slot(index), current: isCurrent(entry), editing: model.editing,
                 hidden: model.drag?.id == entry.id, target: model.stackOn == entry.id, pop: model.popID == entry.id,
-                held: model.heldID == entry.id
+                held: model.heldID == entry.id, covered: model.folderCovers.contains(entry.id)
             )
         }
     }

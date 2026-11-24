@@ -40,6 +40,7 @@ extension DirModel {
     func dragBegin(_ zone: Zone, start: CGPoint, finger: CGPoint) -> Bool {
         guard drag == nil, !landing, !searching, let hit = hit(zone, start) else { return false }
         touchStart = start
+        folderStage?.giveWay()
         menu = nil
         heldID = nil
         editing = true

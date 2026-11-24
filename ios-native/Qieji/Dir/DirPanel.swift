@@ -155,8 +155,15 @@ struct DirPanel: View {
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(model.shown ? .isModal : [])
             .accessibilityAction(.escape) { model.tapOut() }
-            if let entry = model.openEntry {
-                DirFolderView(model: model, entry: entry, currentID: store.currentID)
+            if model.stage >= DirModel.folderStep {
+                DirFolderLayer(model: model)
+                    .frame(width: model.screen.width, height: model.screen.height)
+                    .allowsHitTesting(model.openFolder != nil && !model.folderHidden)
+                    // VoiceOver 鎖在打開的資料夾裡；兩指 Z 字收起（1.1 accessibilityViewIsModal、onAccessibilityEscape）
+                    .accessibilityElement(children: .contain)
+                    .accessibilityAddTraits(model.openFolder == nil ? [] : .isModal)
+                    .accessibilityAction(.escape) { model.closeFolder() }
+                    .accessibilityHidden(model.openFolder == nil)
             }
             DirGhostView(ghost: model.ghost)
             // 選單淡入淡出（動畫只包這一層，不牽連磚的換位與抖動）

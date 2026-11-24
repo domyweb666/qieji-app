@@ -106,6 +106,9 @@ final class DirTouch: NSObject, UIGestureRecognizerDelegate {
     @objc private func onPaging(_ gesture: UIPanGestureRecognizer) {
         if gesture.state == .began {
             model?.pressUp()
+            if zone == .grid {
+                model?.folderStage?.giveWay()
+            }
         }
     }
 

@@ -94,14 +94,20 @@ final class TileSquare: UIView {
         TileSquare.stroke(bounds, UIColor(face.current ? Tok.Col.accent : colors.rule), edge)
     }
 
+    /// 資料夾磚裡一小塊多大。扣掉選中框的寬（1.1：正在看的紙在裡面時框變粗，小方塊不能被蓋到）
+    static func miniSide(_ side: CGFloat) -> CGFloat {
+        let count = CGFloat(Tok.Shape.folderMinis)
+        let room = side - Tok.Shape.folderMiniPad * 2 - Tok.Shape.folderMiniGap * (count - 1) - Tok.Shape.borderSelected * 2
+        return (room / count).rounded(.down)
+    }
+
     /// 資料夾磚：方磚裡 3×3 小方塊，每塊是裡面一張紙的顏色和字
     private func drawFolder(_ minis: [TileFace.Paper], current: Bool) {
         let side = bounds.width, count = Tok.Shape.folderMinis
         UIColor(Tok.Col.page).setFill()
         TileSquare.shape(bounds).fill()
         let gap = Tok.Shape.folderMiniGap, pad = Tok.Shape.folderMiniPad
-        // 扣掉選中框的寬（1.1：正在看的紙在裡面時框變粗，小方塊不能被蓋到）
-        let size = ((side - pad * 2 - gap * CGFloat(count - 1) - Tok.Shape.borderSelected * 2) / CGFloat(count)).rounded(.down)
+        let size = TileSquare.miniSide(side)
         for (index, paper) in minis.enumerated() {
             let spot = CGPoint(
                 x: pad + CGFloat(index % count) * (size + gap), y: pad + CGFloat(index / count) * (size + gap)

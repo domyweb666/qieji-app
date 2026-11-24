@@ -62,7 +62,7 @@ final class DirModel: ObservableObject {
 
     /// 面板
     @Published var shown = false
-    /// 掛到第幾步：0＝還沒、1＝後面的霧、2＝面板和底下兩列、3＝搜尋列、4＝全部（方磚）
+    /// 掛到第幾步：0＝還沒、1＝後面的霧、2＝面板和底下兩列、3＝搜尋列、4＝方磚、5＝打開的資料夾、6＝它的第二份框
     @Published var stage = 0
     @Published var progress: CGFloat = 0 // 0＝收起、1＝全開
     @Published var fading = false // 這次用淡的不用滑的
@@ -98,7 +98,13 @@ final class DirModel: ObservableObject {
         set { scene.drag = newValue }
     }
 
-    @Published var openFolder: OpenFolder?
+    @Published var openFolder: OpenFolder? {
+        didSet { folderStage?.sync() }
+    }
+
+    weak var folderStage: FolderStage?
+    var folderCovers: Set<String> = [] // 哪幾塊資料夾磚先藏著（框就是它放大的）
+    let pageGrids = NSHashTable<DirGridView>.weakObjects()
     @Published var folderPage = 0
     @Published var menu: Menu?
     @Published var stackOn: String? // 準備疊上去的那一格是誰
@@ -110,7 +116,6 @@ final class DirModel: ObservableObject {
     @Published var putInFor: String?
     @Published var pinSwapFor: String? // 釘滿 5 張再釘：問要換掉哪一張
     @Published var gridFrame: CGRect = .zero // 格子區在螢幕上的位置
-    var folderBox: CGRect = .zero // 打開的資料夾那個框
     var screen: CGSize = .zero
     var safeBottom: CGFloat = 0
 
@@ -308,7 +313,8 @@ final class DirModel: ObservableObject {
         isOpen = true
     }
 
-    static let stages = 4
+    static let stages = 6
+    static let folderStep = 5
 
     private func measure() {
         let window = DirModel.window()
@@ -478,17 +484,5 @@ final class DirModel: ObservableObject {
             }
             store.requestRename(id)
         }
-    }
-
-    /// 長按選單、VoiceOver 的「刪除」：跟「−」一樣先問一次（2026-11-24 芹查 #1）
-    func confirmDelete(_ id: String) {
-        menu = nil
-        askDelete = id
-    }
-
-    func delete(_ id: String) {
-        menu = nil
-        store.trashNote(id)
-        Haptic.land()
     }
 }
