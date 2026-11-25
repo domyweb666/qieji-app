@@ -7,7 +7,7 @@
 
 **C1 分享進來（3D＋5B）程式做完了，等多米真機與三個決定。** 規格、實測數字、知道沒修的都在 `.vibe/規格-分享進來-2026-11-25.md` 檔尾。
 
-1. 等多米回三件：(a) 分享進來的行跟著上 iCloud；(b) Apple 後台多開 `org.domyweb.qieji.share`；(c) `Disk.swift:69`、`:106` 修不修。**(a)(b) 沒拿到點頭不准打包**
+1. (a) 分享進來的行跟著上 iCloud：**多米 11/25 點頭**（「可以上 iCloud」）。還等兩件：(b) Apple 後台多開 `org.domyweb.qieji.share`；(c) `Disk.swift:69`、`:106` 修不修。**(b) 沒拿到點頭不准打包**
 2. 打包前：版本號 2.1.0、README、描述、支援頁；`testflight-native.yml` 是自動簽章（`-allowProvisioningUpdates`），**一推 tag 就會自己在 Apple 後台開 `org.domyweb.qieji.share`**，所以 (b) 沒點頭前不准推 tag；App Group 會不會自動掛上還沒驗
 3. 真機待驗見「待驗」T8～T15
 
