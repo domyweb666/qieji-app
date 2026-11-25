@@ -133,6 +133,7 @@ enum Words {
     static let startOverBody = "原本那份會移到旁邊留著，不刪，但 app 裡看不到那些紙。先別刪 app，寫信給我們想辦法救。開著 iCloud 的話，傳過的紙會自己回來；上鎖的、沒傳過的不會"
     static let startOverDo = "移開，從空的開始"
     static let startedOver = "從空的開始了，原本那份還留著"
+    static let startedOverSyncOff = "從空的開始了，iCloud 同步先關著，可以到設定打開"
     static let startOverFailTitle = "沒有移成"
     static let startOverFailBody = "原本那份沒有動到。清出一點空間，回主畫面再打開茄記，會再問一次"
     static let typedKept = "紙讀到了，剛才記的放在目錄最後面"

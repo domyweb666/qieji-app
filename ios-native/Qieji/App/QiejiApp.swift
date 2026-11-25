@@ -146,6 +146,7 @@ struct RootView: View {
             Text(Words.fullNoticeBody)
         }
         .modifier(UnreadAlerts(store: store) {
+            thawed()
             store.takeInbox(after: cloud)
             cloud.pull()
         })
@@ -163,6 +164,7 @@ struct RootView: View {
                 if store.frozen {
                     KeyboardWatch.dismiss() // 先收鍵盤：打到一半的字要落在現在這張，不准跑到讀回來的紙上
                     store.thaw() // 打開時讀不到存檔：再讀一次
+                    thawed()
                 }
                 store.purgeTrash()
                 if !RootView.offline {
@@ -214,6 +216,14 @@ struct RootView: View {
                 break
             }
         }
+    }
+
+    /// 打開時讀不到、後來讀到了：1.1 的設定可能這時才搬過來，重看一次（先看同步開關，才准去 iCloud）
+    private func thawed() {
+        guard !store.frozen, !RootView.offline else { return }
+        TextSize.shared.load()
+        look.load()
+        allowSync(full: shop.full)
     }
 
     /// iCloud 同步是完整版功能：買了而且開著才同步。手機上沒記過買了沒、Apple 也還沒回：先不當成「沒在同步」

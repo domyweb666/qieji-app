@@ -38,17 +38,35 @@ final class Prefs {
         }
     }
 
-    /// 打開 app 讀完資料後叫一次。old＝1.1 的舊檔（這次沒讀到就傳 nil，會自己去找）；fresh＝手機上完全沒有茄記的資料
-    func start(old: [String: String]?, fresh: Bool, bundleID: String) {
+    /// 打開 app 讀完資料後叫一次（原本讀不到、後來讀到了再叫一次）。old＝1.1 的舊檔（這次沒讀到就傳 nil，會自己去找）；
+    /// fresh＝手機上完全沒有茄記的資料。舊檔在但現在讀不到：這次不搬，也不記成搬過了
+    func start(old: [String: String]?, fresh: Bool, dirs: [URL]) {
         firstRun = fresh
         guard !defaults.bool(forKey: Prefs.importedKey) else { return }
-        let source = old ?? LegacyStore.readFirst(bundleID: bundleID) ?? [:]
+        var source = old ?? [:]
+        if old == nil {
+            switch LegacyStore.find(dirs, needBook: false) {
+            case .none: break
+            case let .got(found): source = found.values
+            case .blocked: return
+            }
+        }
         for key in Prefs.legacyKeys where defaults.object(forKey: key) == nil {
             if let value = source[key] {
                 defaults.set(value, forKey: key)
             }
         }
         defaults.set(true, forKey: Prefs.importedKey)
+    }
+
+    /// 1.1 的設定讀不到、使用者決定從空的開始：不知道他以前有沒有關同步，當成關著（他可以到設定打開），之後也不再搬。
+    /// 回傳同步是不是因為這樣才關的
+    func giveUpImport() -> Bool {
+        guard !defaults.bool(forKey: Prefs.importedKey) else { return false }
+        defaults.set(true, forKey: Prefs.importedKey)
+        guard string(LegacyStore.syncOffKey) == nil else { return false }
+        set(LegacyStore.syncOffKey, "1")
+        return true
     }
 
     /// ✓ 的單點提示：剛裝好的人不用（他沒有「Return 會記下來」的舊習慣）；其他人一輩子一次

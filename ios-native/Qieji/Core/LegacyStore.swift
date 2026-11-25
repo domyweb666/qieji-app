@@ -36,28 +36,69 @@ enum LegacyStore {
         return out
     }
 
-    /// 讀出整個資料夾的鍵值。沒有 manifest（沒裝過舊版）回 nil
-    static func read(dir: URL) -> [String: String]? {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent(manifest)),
-              let dict = JSONValue.parse(data)?.objectValue else { return nil }
-        var out: [String: String] = [:]
-        for (key, val) in dict {
-            if let text = val.stringValue {
-                out[key] = text
-            } else if let big = try? String(contentsOf: dir.appendingPathComponent(md5(key)), encoding: .utf8) {
-                out[key] = big
-            }
-        }
-        return out
+    struct Old {
+        var values: [String: String]
+        var book: Data? // 紙那一份的原文，一個位元都沒動過
     }
 
-    /// 找第一個讀得到東西的位置
-    static func readFirst(bundleID: String) -> [String: String]? {
-        for dir in candidates(bundleID: bundleID) {
-            if let found = read(dir: dir) {
-                return found
+    enum Found {
+        case none // 沒裝過舊版
+        case got(Old)
+        case blocked // 檔在，現在讀不到、或 manifest 壞了看不懂。不准當成沒有
+    }
+
+    /// 讀出整個資料夾的鍵值。只有系統明講「沒有這個檔」才算沒裝過舊版。
+    /// needBook＝要紙：紙那一份讀不到就整個算讀不到。不要紙的（只搬設定）不受那個大檔影響。其他值讀不到就跳過
+    static func read(dir: URL, needBook: Bool) -> Found {
+        let data: Data
+        do {
+            data = try Data(contentsOf: dir.appendingPathComponent(manifest))
+        } catch CocoaError.fileReadNoSuchFile {
+            return .none
+        } catch {
+            Disk.log.error("legacy manifest not read: \((error as NSError).code, privacy: .public)")
+            return .blocked
+        }
+        guard let dict = JSONValue.parse(data)?.objectValue else {
+            Disk.log.error("legacy manifest broken")
+            return .blocked
+        }
+        var out = Old(values: [:], book: nil)
+        for (key, val) in dict {
+            if let text = val.stringValue {
+                out.values[key] = text
+                if key == bookKey {
+                    out.book = Data(text.utf8)
+                }
+                continue
+            }
+            guard key != bookKey else { continue }
+            out.values[key] = try? String(contentsOf: dir.appendingPathComponent(md5(key)), encoding: .utf8)
+        }
+        guard needBook, out.book == nil, dict[bookKey] != nil else { return .got(out) }
+        do {
+            out.book = try Data(contentsOf: dir.appendingPathComponent(md5(bookKey)))
+        } catch CocoaError.fileReadNoSuchFile {
+            return .got(out)
+        } catch {
+            Disk.log.error("legacy book not read: \((error as NSError).code, privacy: .public)")
+            return .blocked
+        }
+        return .got(out)
+    }
+
+    /// 找第一個有的位置（要紙的，沒有紙的位置跳過）。前面的讀不到就停，不退去讀更舊的
+    static func find(_ dirs: [URL], needBook: Bool) -> Found {
+        for dir in dirs {
+            switch read(dir: dir, needBook: needBook) {
+            case .none: continue
+            case .blocked: return .blocked
+            case let .got(old):
+                if !needBook || old.book != nil {
+                    return .got(old)
+                }
             }
         }
-        return nil
+        return .none
     }
 }

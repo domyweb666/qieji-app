@@ -8,12 +8,17 @@ extension Store {
     func boot() {
         guard !loaded, let disk else { return }
         let found = disk.load()
-        Prefs.shared.start(
-            old: found.source == .legacy ? found.legacy : nil, fresh: found.source == .fresh,
-            bundleID: Bundle.main.bundleIdentifier ?? "org.domyweb.qieji"
-        )
-        unreadTries = disk.tally(unread: found.frozen && found.source == .native)
+        startPrefs(found, with: disk)
+        unreadTries = disk.tally(unread: found.canStartOver)
         start(found, with: disk)
+    }
+
+    /// 1.1 的設定照抄一次。1.1 的舊檔讀不到的時候沒有東西可抄：傳 nil，Prefs 自己會再找、找不到就下次
+    private func startPrefs(_ found: Disk.Loaded, with disk: Disk) {
+        Prefs.shared.start(
+            old: found.source == .legacy && !found.legacy.isEmpty ? found.legacy : nil,
+            fresh: found.source == .fresh, dirs: disk.legacyDirs
+        )
     }
 
     /// 讀不到、這次不准寫檔的時候：回到前景再讀一次。讀到了，中間記的字跟著帶過去一起存
@@ -38,8 +43,8 @@ extension Store {
         }
         var next = found
         next.book.notes = takeTyped()
-        // 從 1.1 搬來的那份沒有 state.json 可移，原檔也一直在：不走這條
-        guard found.source == .native, disk.setAside(for: next.book) else {
+        // 1.1 的舊檔讀得到、只是備份不成（多半是空間不夠）：清出空間就搬得了，不走這條
+        guard found.canStartOver, disk.setAside(for: next.book) else {
             notice = Notice(title: Words.startOverFailTitle, body: Words.startOverFailBody)
             return false
         }
@@ -48,7 +53,9 @@ extension Store {
         unreadTries = disk.tally(unread: false)
         start(next, with: disk)
         notice = nil
-        toast = Toast(text: Words.startedOver)
+        // 1.1 的設定也讀不到的：同步先關著
+        let syncOff = found.source == .legacy && Prefs.shared.giveUpImport()
+        toast = Toast(text: syncOff && isFull ? Words.startedOverSyncOff : Words.startedOver)
         return true
     }
 
@@ -59,6 +66,7 @@ extension Store {
         toast = nil
         notice = nil
         startOverAsk = false // 問到一半就讀到了：不用問了
+        startPrefs(found, with: disk)
         start(found, with: disk, adding: typed)
         if !typed.isEmpty, !found.unreadable {
             toast = Toast(text: Words.typedKept)
@@ -94,7 +102,7 @@ extension Store {
     private func tellUnread(_ found: Disk.Loaded) {
         // 正在問要不要從空的開始：不疊一個上去
         guard found.unreadable, !(found.frozen && startOverAsk) else { return }
-        let offer = found.source == .native && unreadTries >= Disk.offerAfter
+        let offer = found.canStartOver && unreadTries >= Disk.offerAfter
         notice = found.frozen
             ? Notice(title: Words.unreadTitle, body: offer ? Words.unreadOfferBody : Words.unreadBody, offer: offer)
             : Notice(title: Words.unreadableTitle, body: Words.unreadableBody)
