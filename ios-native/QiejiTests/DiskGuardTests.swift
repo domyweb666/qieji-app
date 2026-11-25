@@ -214,4 +214,159 @@ final class DiskGuardTests: XCTestCase {
         XCTAssertNil(bytes("unreadable.json"))
         XCTAssertNil(bytes("unreadable-2.json"))
     }
+
+    // MARK: 永久讀不到的出路
+
+    private func boot() -> Store {
+        let store = Store(disk: disk())
+        store.boot()
+        return store
+    }
+
+    /// 第三次冷啟動還讀不到才給；回到前景再試不算一次；讀到一次就歸零
+    func testOfferOnlyAfterThirdLaunch() throws {
+        try lockedState(sample("原本的紙"))
+        for _ in 1 ..< Disk.offerAfter {
+            let store = boot()
+            XCTAssertEqual(store.notice?.offer, false)
+            for _ in 0 ..< 5 {
+                store.thaw()
+            }
+            XCTAssertEqual(store.notice?.offer, false)
+        }
+        let third = boot()
+        XCTAssertEqual(third.notice?.offer, true)
+        third.notice = nil
+        third.thaw()
+        XCTAssertEqual(third.notice?.offer, true)
+        try mode(0o644, state)
+        third.thaw()
+        XCTAssertNil(third.notice)
+        try mode(0, state)
+        XCTAssertEqual(boot().notice?.offer, false)
+    }
+
+    /// 原檔一個位元都沒變、換了名字留著；中間記的字存進新的；重開還在；不會再跳
+    func testStartOverKeepsTheOriginalAside() throws {
+        let raw = sample("原本的紙")
+        try lockedState(raw)
+        let store = boot()
+        XCTAssertNotNil(store.addTop("讀不到的時候記的"))
+        XCTAssertTrue(store.startOver())
+        XCTAssertFalse(store.frozen)
+        XCTAssertEqual(store.toast?.text, Words.startedOver)
+        XCTAssertNil(store.notice)
+        XCTAssertNil(store.book.orderMod) // 空的這份不准認領排列：比 iCloud 的新就會蓋過去
+        XCTAssertTrue(disk().hasAside)
+        XCTAssertNotNil(store.addTop("之後記的"))
+        store.flush()
+        let aside = dir.appendingPathComponent("unreadable.json")
+        try mode(0o644, aside)
+        XCTAssertEqual(bytes("unreadable.json"), Data(raw.utf8))
+        let again = boot()
+        XCTAssertNil(again.notice)
+        XCTAssertEqual(texts(again), ["之後記的", "讀不到的時候記的"])
+        XCTAssertTrue(again.book.gone.isEmpty) // 不准立墓碑：會把 iCloud 的也刪掉
+    }
+
+    /// 什麼都沒記也能從空的開始
+    func testStartOverWithNothingTyped() throws {
+        try lockedState(sample("原本的紙"))
+        let store = boot()
+        XCTAssertTrue(store.startOver())
+        XCTAssertNotNil(store.current)
+        XCTAssertNotNil(store.addTop("之後記的"))
+        store.flush()
+        XCTAssertEqual(texts(boot()), ["之後記的"])
+    }
+
+    /// 按下去那一刻剛好讀得到：紙回來，什麼都不移
+    func testStartOverReadsOnceMoreFirst() throws {
+        try lockedState(sample("原本的紙"))
+        let store = boot()
+        XCTAssertNotNil(store.addTop("讀不到的時候記的"))
+        try mode(0o644, state)
+        XCTAssertTrue(store.startOver())
+        XCTAssertEqual(Set(texts(store)), ["原本記的", "讀不到的時候記的"])
+        XCTAssertNil(bytes("unreadable.json"))
+    }
+
+    /// 移不成：原檔沒動、照樣不寫，講沒移成；記的字還在畫面上，之後可以再試
+    func testStartOverFailureTouchesNothing() throws {
+        let raw = sample("原本的紙")
+        try lockedState(raw)
+        let store = boot()
+        XCTAssertNotNil(store.addTop("讀不到的時候記的"))
+        try mode(0o555, dir)
+        try XCTSkipIf((try? Data().write(to: dir.appendingPathComponent("probe"))) != nil, "這台機器擋不住寫入")
+        XCTAssertFalse(store.startOver())
+        XCTAssertTrue(store.frozen)
+        XCTAssertEqual(store.notice?.title, Words.startOverFailTitle)
+        XCTAssertEqual(texts(store), ["讀不到的時候記的"])
+        try mode(0o755, dir)
+        store.flush()
+        try mode(0o644, state)
+        XCTAssertEqual(try String(contentsOf: state, encoding: .utf8), raw)
+        try mode(0, state)
+        XCTAssertTrue(store.startOver())
+        XCTAssertEqual(texts(boot()), ["讀不到的時候記的"])
+    }
+
+    /// 問到一半切走再回來：還讀不到就不疊提示；讀到了就不用問了
+    func testAskingIsNotStackedAndClosesWhenBack() throws {
+        try lockedState(sample("原本的紙"))
+        let store = boot()
+        store.notice = nil
+        store.startOverAsk = true
+        store.thaw()
+        XCTAssertNil(store.notice)
+        XCTAssertTrue(store.startOverAsk)
+        try mode(0o644, state)
+        store.thaw()
+        XCTAssertFalse(store.startOverAsk)
+        XCTAssertNil(store.notice)
+        XCTAssertFalse(disk().hasAside)
+    }
+
+    /// 從 1.1 搬家時備份不成的那種 frozen：不算次數、沒有按鈕、移不了
+    func testLegacyFrozenHasNoExit() throws {
+        try FileManager.default.createDirectory(at: legacyDir, withIntermediateDirectories: true)
+        try JSONValue.object([LegacyStore.bookKey: .string(sample("舊版的紙"))]).stringify().write(
+            to: legacyDir.appendingPathComponent(LegacyStore.manifest), atomically: true, encoding: .utf8
+        )
+        try mode(0o555, dir)
+        try XCTSkipIf((try? Data().write(to: dir.appendingPathComponent("probe"))) != nil, "這台機器擋不住寫入")
+        for _ in 0 ... Disk.offerAfter {
+            let store = boot()
+            XCTAssertTrue(store.frozen)
+            XCTAssertEqual(store.notice?.offer, false)
+            XCTAssertFalse(store.startOver())
+        }
+        try mode(0o755, dir)
+        XCTAssertEqual(texts(boot()), ["原本記的"])
+    }
+
+    /// 旁邊已經有另存的：不准蓋掉，用下一個名字
+    func testStartOverDoesNotReplaceAnEarlierCopy() throws {
+        let raw = sample("原本的紙")
+        try Data("以前另存的".utf8).write(to: dir.appendingPathComponent("unreadable.json"))
+        try lockedState(raw)
+        XCTAssertTrue(boot().startOver())
+        XCTAssertEqual(bytes("unreadable.json"), Data("以前另存的".utf8))
+        try mode(0o644, dir.appendingPathComponent("unreadable-2.json"))
+        XCTAssertEqual(bytes("unreadable-2.json"), Data(raw.utf8))
+    }
+
+    /// 平常讀得到的時候叫了也沒作用
+    func testStartOverDoesNothingWhenFine() throws {
+        let raw = sample("原本的紙")
+        try raw.write(to: state, atomically: true, encoding: .utf8)
+        let one = disk()
+        let store = Store(disk: one)
+        store.boot()
+        XCTAssertFalse(store.startOver())
+        XCTAssertFalse(one.setAside(for: Notebook()))
+        XCTAssertEqual(store.book.notes.first?.title, "原本的紙")
+        XCTAssertNil(bytes("unreadable.json"))
+    }
 }

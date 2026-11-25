@@ -68,6 +68,61 @@ final class Disk {
     /// 清除所有資料之後記著：不准再從 1.1 的舊存檔搬回來（舊檔只讀不改，還留在 app 裡）
     static let wipedKey = "qieji.native.wiped"
 
+    /// 連續幾次打開都讀不到（冷啟動才算一次）
+    static let unreadKey = "qieji.native.unread"
+    /// 連續幾次讀不到才給「從空的開始」：一時讀不到的人不該看到這個按鈕
+    static let offerAfter = 3
+
+    /// 打開時記一次。讀到了就歸零。回傳連續第幾次讀不到
+    func tally(unread: Bool) -> Int {
+        guard unread else {
+            if defaults.object(forKey: Disk.unreadKey) != nil {
+                defaults.removeObject(forKey: Disk.unreadKey)
+            }
+            return 0
+        }
+        let count = defaults.integer(forKey: Disk.unreadKey) + 1
+        defaults.set(count, forKey: Disk.unreadKey)
+        return count
+    }
+
+    /// 從空的開始：原檔換個名字留著（不用讀得到），這一份變成新的存檔。
+    /// 一次換好（RENAME_SWAP）：不會有「舊的移走了、新的還沒放好」的空檔。沒成功就什麼都沒動
+    func setAside(for book: Notebook) -> Bool {
+        queue.sync {
+            guard held, let spot = rescueFiles.first(where: Disk.vacant) else { return false }
+            let text = NoteCoding.write(book)
+            do {
+                try text.write(to: spot, atomically: true, encoding: .utf8)
+            } catch {
+                Disk.log.error("set aside: not written: \((error as NSError).code, privacy: .public)")
+                return false
+            }
+            guard renamex_np(spot.path, stateFile.path, UInt32(RENAME_SWAP)) == 0 else {
+                Disk.log.error("set aside: not swapped: \(errno, privacy: .public)")
+                // 對過真的還是剛寫的那份新的才刪：讀不到、不一樣就留著，不冒刪到原檔的險
+                if (try? Data(contentsOf: spot)) == Data(text.utf8) {
+                    try? FileManager.default.removeItem(at: spot)
+                }
+                return false
+            }
+            held = false
+            written = text
+            return true
+        }
+    }
+
+    /// 旁邊有沒有另存、移開的原檔（清除所有資料會一起刪，要先講）
+    var hasAside: Bool {
+        rescueFiles.contains { !Disk.vacant($0) }
+    }
+
+    /// 這個名字真的沒有人用。連「在不在」都問不到的不算沒有
+    private static func vacant(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) != 0 && errno == ENOENT
+    }
+
     func load(now: Double = Clock.now()) -> Loaded {
         let found = find(now: now)
         queue.sync { held = found.frozen }
@@ -133,7 +188,7 @@ final class Disk {
             if (try? Data(contentsOf: file)) == data {
                 return true
             }
-            guard !FileManager.default.fileExists(atPath: file.path) else { continue }
+            guard Disk.vacant(file) else { continue }
             return (try? data.write(to: file, options: .atomic)) != nil
         }
         return false

@@ -28,6 +28,7 @@ struct SettingsPage: View {
     @State private var picking: Picking?
     @State private var wipeAsk = false
     @State private var wipeSure = false
+    @State private var wipeAside = false // 旁邊還有留著的原檔
     @State private var alert: Notice?
     @State private var driveOn = true
 
@@ -76,7 +77,7 @@ struct SettingsPage: View {
             Button(Words.cancel, role: .cancel) {}
             Button(Words.goOn) { wipeSure = true }
         } message: {
-            Text(Words.wipeAskBody(cloudPart))
+            Text(Words.wipeAskBody(cloudPart) + (wipeAside ? Words.wipeAside : ""))
         }
         .alert(Words.wipeSureTitle, isPresented: $wipeSure) {
             Button(Words.cancel, role: .cancel) {}
@@ -138,7 +139,10 @@ struct SettingsPage: View {
                 .padding(.horizontal, Tok.Space.lg)
             // 清除所有資料自己一塊、紅字，跟上面的開關隔開，免得手滑
             PageGroup {
-                row(first: true, icon: "trash", Words.wipeRow, danger: true) { wipeAsk = true }
+                row(first: true, icon: "trash", Words.wipeRow, danger: true) {
+                    wipeAside = store.disk?.hasAside == true
+                    wipeAsk = true
+                }
             }
         }
     }

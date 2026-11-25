@@ -36,6 +36,7 @@ final class Store: ObservableObject {
     struct Notice: Equatable {
         let title: String
         let body: String
+        var offer = false // 給「從空的開始」
     }
 
     /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
@@ -115,6 +116,8 @@ final class Store: ObservableObject {
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（原本的存檔讀不到、或沒能先備份）。回到前景再試（thaw）
     var frozen = false
+    var unreadTries = 0 // 連續第幾次打開讀不到
+    @Published var startOverAsk = false // 正在問「要從空的開始嗎？」
 
     let disk: Disk?
     private var saveTask: DispatchWorkItem?

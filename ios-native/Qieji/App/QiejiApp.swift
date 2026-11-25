@@ -145,15 +145,10 @@ struct RootView: View {
         } message: {
             Text(Words.fullNoticeBody)
         }
-        .alert(store.notice?.title ?? "", isPresented: Binding(get: { store.notice != nil }, set: {
-            if !$0 {
-                store.notice = nil
-            }
-        })) {
-            Button(Words.gotIt) { store.notice = nil }
-        } message: {
-            Text(store.notice?.body ?? "")
-        }
+        .modifier(UnreadAlerts(store: store) {
+            store.takeInbox(after: cloud)
+            cloud.pull()
+        })
         .alert(newsCard.map { Words.newsTitle($0.version) } ?? "", isPresented: Binding(get: { newsCard != nil }, set: {
             if !$0 {
                 newsCard = nil

@@ -12,6 +12,7 @@ extension Store {
             old: found.source == .legacy ? found.legacy : nil, fresh: found.source == .fresh,
             bundleID: Bundle.main.bundleIdentifier ?? "org.domyweb.qieji"
         )
+        unreadTries = disk.tally(unread: found.frozen && found.source == .native)
         start(found, with: disk)
     }
 
@@ -23,16 +24,53 @@ extension Store {
             tellUnread(found)
             return
         }
+        resume(found, with: disk)
+    }
+
+    /// 連續好幾次讀不到、使用者確認要從空的開始：原檔移到旁邊留著，中間記的字接著用。
+    /// 先再讀一次：讀得到就照 thaw，什麼都不移。回傳現在能不能存了
+    func startOver() -> Bool {
+        guard loaded, frozen, let disk else { return false }
+        let found = disk.load()
+        guard found.frozen else {
+            resume(found, with: disk)
+            return true
+        }
+        var next = found
+        next.book.notes = takeTyped()
+        // 從 1.1 搬來的那份沒有 state.json 可移，原檔也一直在：不走這條
+        guard found.source == .native, disk.setAside(for: next.book) else {
+            notice = Notice(title: Words.startOverFailTitle, body: Words.startOverFailBody)
+            return false
+        }
+        // unreadable 照舊：跟另存過、從空的用起一樣，不替空的這份認領排列（ownLayout）
+        next.frozen = false
+        unreadTries = disk.tally(unread: false)
+        start(next, with: disk)
+        notice = nil
+        toast = Toast(text: Words.startedOver)
+        return true
+    }
+
+    /// 讀到了：換成讀到的那份，中間記的字接在後面
+    private func resume(_ found: Disk.Loaded, with disk: Disk) {
+        let typed = takeTyped()
+        unreadTries = disk.tally(unread: false)
+        toast = nil
+        notice = nil
+        startOverAsk = false // 問到一半就讀到了：不用問了
+        start(found, with: disk, adding: typed)
+        if !typed.isEmpty, !found.unreadable {
+            toast = Toast(text: Words.typedKept)
+        }
+    }
+
+    /// 讀不到的時候使用者自己記的紙（空白的不算）。打到一半的先記進去
+    private func takeTyped() -> [Note] {
         if let currentID {
             keepDraft(in: currentID)
         }
-        let typed = book.notes.filter { !Labels.isEmpty($0) || !$0.bin.isEmpty || $0.cover != nil }
-        toast = nil
-        notice = nil
-        start(found, with: disk, adding: typed)
-        if !typed.isEmpty {
-            toast = Toast(text: Words.typedKept)
-        }
+        return book.notes.filter { !Labels.isEmpty($0) || !$0.bin.isEmpty || $0.cover != nil }
     }
 
     private func start(_ read: Disk.Loaded, with disk: Disk, adding typed: [Note] = []) {
@@ -54,9 +92,11 @@ extension Store {
 
     /// 已經另存的：先講沒有損失，再講紙會從哪裡回來。沒另存成的不准說另存了
     private func tellUnread(_ found: Disk.Loaded) {
-        guard found.unreadable else { return }
+        // 正在問要不要從空的開始：不疊一個上去
+        guard found.unreadable, !(found.frozen && startOverAsk) else { return }
+        let offer = found.source == .native && unreadTries >= Disk.offerAfter
         notice = found.frozen
-            ? Notice(title: Words.unreadTitle, body: Words.unreadBody)
+            ? Notice(title: Words.unreadTitle, body: offer ? Words.unreadOfferBody : Words.unreadBody, offer: offer)
             : Notice(title: Words.unreadableTitle, body: Words.unreadableBody)
     }
 
