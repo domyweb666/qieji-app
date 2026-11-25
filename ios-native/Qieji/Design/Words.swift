@@ -277,7 +277,16 @@ enum Words {
         "用 \(price) 解鎖"
     }
 
+    /// 按住一行的選單最下面（2.1）
+    static func bornAt(_ time: String) -> String {
+        "\(time) 記的"
+    }
+
     // 貼上好幾行：拆成 N 行（2.1）
+    static func splitInto(_ count: Int) -> String {
+        "拆成 \(count) 行"
+    }
+
     static let splitKept = "有行已經改過，沒有變回去"
     static func splitDone(_ count: Int) -> String {
         "已拆成 \(count) 行"

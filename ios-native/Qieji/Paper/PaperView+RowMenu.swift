@@ -5,8 +5,14 @@ extension PaperView {
     /// 那一行按住的當下已經拍好、位置記好了，這裡才收鍵盤
     func openRowMenu(_ grab: RowGrab) {
         KeyboardWatch.dismiss()
-        guard note.items.contains(where: { $0.id == grab.id }) else { return }
-        rowMenu = RowMenuAsk(grab: grab, items: rowItems(grab.id))
+        guard let item = note.items.first(where: { $0.id == grab.id }) else { return }
+        rowMenu = RowMenuAsk(grab: grab, items: rowItems(grab.id), born: PaperView.bornText(item))
+    }
+
+    /// 選單最下面那行小字；空行、讀不出時間就沒有
+    static func bornText(_ item: Item) -> String? {
+        guard !Labels.trim(item.text).isEmpty, let born = Ident.born(item.id) else { return nil }
+        return Words.bornAt(Dates.full(born))
     }
 
     /// 選了一項：當下就做，選單同時收

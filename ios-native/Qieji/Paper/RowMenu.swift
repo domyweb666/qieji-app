@@ -20,6 +20,8 @@ struct RowMenuAsk {
     let grab: RowGrab
     /// 打開那一刻的項目
     let items: [MenuItem]
+    /// 最下面那行小字：什麼時候記的（多米 2026-11-25 選 1A）。讀不出來、空行就沒有
+    let born: String?
     /// 選好一項了：卡片上的字不再跟著資料換（不然收的途中「劃掉」會變成「恢復」）
     var picked = false
     var exit: RowExit?
@@ -95,6 +97,18 @@ struct RowMenu: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MenuRowPress())
+            }
+            if let born = ask.born {
+                Tok.Col.menuSep.frame(height: 1 / scale)
+                Text(born)
+                    .font(Tok.Font.footnote)
+                    .foregroundColor(Tok.Col.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Tok.Space.lg)
+                    .padding(.vertical, Tok.Space.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .gesture(TapGesture()) // 只是字：點到不做事，也不穿過去把選單關掉
             }
         }
         // 按住最上、最下那一項的灰底照圓角裁（玻璃自己不裁）

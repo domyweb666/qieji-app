@@ -15,6 +15,7 @@ struct ComposerHost: UIViewRepresentable {
     let onBlur: () -> Void
     let onDone: (Bool) -> Void
     let onTipTap: () -> Void
+    let onSplit: () -> Void
 
     func makeUIView(context _: Context) -> ComposerView {
         PerfMeter.time("composer") { ComposerView(frame: .zero) }
@@ -25,6 +26,7 @@ struct ComposerHost: UIViewRepresentable {
         view.onBlur = onBlur
         view.onDone = onDone
         view.onTip = onTipTap
+        view.onSplit = onSplit
         view.topLimit = topLimit
         view.showTip(tip)
         view.setOpen(open)
@@ -60,13 +62,16 @@ final class ComposerView: UIView, UITextViewDelegate {
     /// 有沒有選字選到一半
     var onDone: (Bool) -> Void = { _ in }
     var onTip: () -> Void = {}
+    var onSplit: () -> Void = {}
     var topLimit: CGFloat = 0
 
-    private let card = UIView()
+    private let card = ComposerCard()
     private let field = UITextView()
     private let hint = UILabel()
     private let done = UIButton(type: .custom)
     private let tipCard = UIButton(type: .custom)
+    private let splitChip = UIButton(type: .custom)
+    private var splitCount = 0 // 現在拆得出幾行；0＝沒有要給
     private var tall: NSLayoutConstraint?
     private var opened = false
     private var rising = false // 框還在往上升，等鍵盤那段動畫一起走
@@ -124,6 +129,8 @@ final class ComposerView: UIView, UITextViewDelegate {
         field.text = ""
         was = ""
         hint.isHidden = false
+        splitCount = 0
+        splitChip.isHidden = true
         card.layer.removeAllAnimations()
         card.isHidden = false
         card.alpha = calm ? 0 : 1
@@ -221,8 +228,47 @@ final class ComposerView: UIView, UITextViewDelegate {
         hint.isHidden = !field.text.isEmpty
         let now = field.text ?? ""
         onText(was, now)
+        offerSplit(prev: was, next: now)
         was = now
         refit()
+    }
+
+    /// 貼上好幾行才給「拆成 N 行」（多米 2026-11-25 選 2A）；之後改字跟著數，剩不到兩行就收
+    private func offerSplit(prev: String, next: String) {
+        guard splitCount > 0 || ComposerHost.pastedMany(prev: prev, next: next) else { return }
+        let count = Lines.splitPasted(next).count
+        let before = splitCount
+        splitCount = count >= 2 ? count : 0
+        guard splitCount != before else { return }
+        if splitCount > 0 {
+            UIView.performWithoutAnimation {
+                splitChip.configuration?.attributedTitle = ComposerView.splitTitle(splitCount)
+                splitChip.layoutIfNeeded()
+            }
+        }
+        guard (before > 0) != (splitCount > 0) else { return }
+        let shown = splitCount > 0
+        if shown {
+            splitChip.isHidden = false
+            splitChip.alpha = 0
+            UIAccessibility.post(notification: .announcement, argument: Words.splitInto(splitCount))
+        }
+        UIView.animate(withDuration: Tok.Motion.fadeSeconds, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.splitChip.alpha = shown ? 1 : 0
+        } completion: { _ in
+            self.splitChip.isHidden = self.splitCount == 0
+        }
+    }
+
+    /// 選字選到一半就先定下來，拆的是看到的字
+    private func tapSplit() {
+        if field.markedTextRange != nil {
+            field.unmarkText()
+        }
+        if field.text != was {
+            textViewDidChange(field)
+        }
+        onSplit()
     }
 
     func textViewDidEndEditing(_ view: UITextView) {
@@ -240,7 +286,8 @@ final class ComposerView: UIView, UITextViewDelegate {
         let side = Tok.Space.sm * 2 + Tok.Space.lg + Tok.Space.xs + Tok.Shape.hitMin
         let width = field.bounds.width > 0 ? field.bounds.width : bounds.width - side
         let fit = field.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude)).height
-        let room = max(Tok.Shape.hitMin, keyboardLayoutGuide.layoutFrame.minY - topLimit - Tok.Space.sm * 4)
+        let chip = splitCount > 0 ? Tok.Shape.hitMin + Tok.Space.sm : 0 // 上面要留位置給「拆成 N 行」
+        let room = max(Tok.Shape.hitMin, keyboardLayoutGuide.layoutFrame.minY - topLimit - Tok.Space.sm * 4 - chip)
         let next = max(Tok.Shape.hitMin, min(fit, room))
         field.isScrollEnabled = fit > room
         if tall?.constant != next {
@@ -310,11 +357,12 @@ final class ComposerView: UIView, UITextViewDelegate {
         done.accessibilityLabel = Words.commit
         done.addAction(UIAction { [weak self] _ in self.map { $0.onDone($0.choosing) } }, for: .touchUpInside)
         buildTip()
-        for part in [card, tipCard, field, hint, done] as [UIView] {
+        buildSplit()
+        for part in [card, tipCard, splitChip, field, hint, done] as [UIView] {
             part.translatesAutoresizingMaskIntoConstraints = false
         }
         addSubview(card)
-        for part in [field, hint, done, tipCard] as [UIView] {
+        for part in [field, hint, done, tipCard, splitChip] as [UIView] {
             card.addSubview(part)
         }
         pin()
@@ -340,7 +388,30 @@ final class ComposerView: UIView, UITextViewDelegate {
             done.heightAnchor.constraint(equalToConstant: Tok.Shape.hitMin),
             tipCard.trailingAnchor.constraint(equalTo: card.trailingAnchor),
             tipCard.bottomAnchor.constraint(equalTo: card.topAnchor, constant: -Tok.Space.md),
+            splitChip.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            splitChip.bottomAnchor.constraint(equalTo: card.topAnchor, constant: -Tok.Space.sm),
+            splitChip.heightAnchor.constraint(greaterThanOrEqualToConstant: Tok.Shape.hitMin),
         ])
+    }
+
+    /// 「拆成 N 行」：輸入框左上方的茄紫膠囊（右上方是 ✓ 的提示）
+    private func buildSplit() {
+        var look = UIButton.Configuration.filled()
+        look.baseBackgroundColor = UIColor(Tok.Col.accent)
+        look.baseForegroundColor = UIColor(Tok.Col.fabIcon)
+        look.cornerStyle = .capsule
+        look.contentInsets = NSDirectionalEdgeInsets(
+            top: Tok.Space.sm, leading: Tok.Space.lg, bottom: Tok.Space.sm, trailing: Tok.Space.lg
+        )
+        splitChip.configuration = look
+        splitChip.isHidden = true
+        splitChip.addAction(UIAction { [weak self] _ in self?.tapSplit() }, for: .touchUpInside)
+    }
+
+    private static func splitTitle(_ count: Int) -> AttributedString {
+        var words = AttributedString(Words.splitInto(count))
+        words.font = UIFont.preferredFont(forTextStyle: .headline)
+        return words
     }
 
     /// ✓ 的單點提示（1.1 tip）：從 1.0 更新上來的人第一次在輸入框按 Return 時，✓ 上面冒一張小卡，一輩子一次。點它、按 ✓、框收起就不見
@@ -359,6 +430,14 @@ final class ComposerView: UIView, UITextViewDelegate {
         tipCard.isHidden = true
         tipCard.accessibilityHint = Words.tipHint
         tipCard.addAction(UIAction { [weak self] _ in self?.onTip() }, for: .touchUpInside)
+    }
+}
+
+/// 輸入框那張卡。提示卡、「拆成 N 行」掛在卡的上緣外面，一起升降；那一塊也要收得到觸控
+final class ComposerCard: UIView {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event)
+            || subviews.contains { !$0.isHidden && $0.isUserInteractionEnabled && $0.frame.contains(point) }
     }
 }
 

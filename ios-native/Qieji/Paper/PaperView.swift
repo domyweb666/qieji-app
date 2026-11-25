@@ -112,7 +112,8 @@ struct PaperView: View {
         .overlay {
             ComposerHost(
                 open: composing, onText: typed, tip: tip, topLimit: listTop,
-                onBlur: { remote.recording ? () : closeComposer() }, onDone: doneComposer, onTipTap: { tip = false }
+                onBlur: { remote.recording ? () : closeComposer() }, onDone: doneComposer, onTipTap: { tip = false },
+                onSplit: splitComposer
             )
             .ignoresSafeArea()
             .allowsHitTesting(composing)
@@ -389,6 +390,19 @@ struct PaperView: View {
         let settled = store.takeDraft()
         store.draft = marked && !settled.isEmpty ? settled : text
         closeComposer()
+    }
+
+    /// 貼上好幾行之後按「拆成 N 行」：拆好放最上面，框和鍵盤一起收。放不下就不拆，字留在框裡
+    private func splitComposer() {
+        guard composing, let ids = store.addSplit(store.draft) else { return }
+        // 字已經記好了：收鍵盤時系統的訂正不准再記一次
+        store.draft = ""
+        remote.recording = true
+        KeyboardWatch.dismiss()
+        remote.recording = false
+        store.draft = ""
+        closeComposer()
+        remote.list?.toTop(ids.first)
     }
 
     /// 輸入框裡打了字。字記在 store，不放在這個畫面的狀態裡：每打一個字整張紙重畫一次會卡

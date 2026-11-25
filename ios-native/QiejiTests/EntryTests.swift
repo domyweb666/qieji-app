@@ -51,6 +51,13 @@ final class EntryTests: XCTestCase {
         XCTAssertNil(Ident.born(Ident.make(now: now + 1000), now: now))
     }
 
+    func testBornTextSkipsBlankAndUnknown() {
+        let id = Ident.make(now: Clock.now() - 1000)
+        XCTAssertEqual(PaperView.bornText(Item(id: id, text: "牛奶"))?.hasSuffix(" 記的"), true)
+        XCTAssertNil(PaperView.bornText(Item(id: id, text: "  ")))
+        XCTAssertNil(PaperView.bornText(Item(id: "abc", text: "牛奶")))
+    }
+
     // MARK: C10
 
     func testSplitKeepsNumbersThatAreNotListMarks() {
