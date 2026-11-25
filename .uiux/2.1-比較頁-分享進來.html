@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>茄記 2.1 比較頁：分享進來</title>
+<style>
+:root{--ink:#2E2233;--sub:#75677A;--page:#FBF3E7;--card:#FFFCF6;--line:#EADFCF;--acc:#7D467F;--paper:#F4EEF2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:16px/1.6 -apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;padding:24px 16px 64px}
+main{max-width:1060px;margin:auto}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:20px;margin:40px 0 4px}p,li{color:var(--sub);max-width:46em}p{margin:4px 0 16px}
+b,strong{color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:28px}
+figure{margin:0;width:320px;max-width:100%}
+figcaption{margin-top:8px;font-size:14px;color:var(--sub)}figcaption b{display:block;font-size:16px}
+.count{display:flex;justify-content:space-between;align-items:center;min-height:44px;font-size:14px;color:var(--sub)}
+.count button,.btn{border:0;background:none;color:var(--acc);font:600 15px inherit;font-family:inherit;cursor:pointer;min-height:44px;padding:0 4px}
+.phone{position:relative;height:600px;border-radius:36px;overflow:hidden;background:#fff;border:1px solid var(--line);user-select:none}
+.phone.short{height:250px;background:var(--paper)}
+.host{padding:44px 20px 0}.host h3{font-size:20px;line-height:1.35;margin:0 0 10px}.host i{display:block;height:9px;border-radius:5px;background:#e6e6ea;margin:10px 0}
+.url{font-size:12px;color:#8a8a90;margin-bottom:14px}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#f2f2f6;border-radius:24px 24px 0 0;padding:18px 16px 26px;box-shadow:0 -6px 24px #0002}
+.apps{display:flex;gap:14px;margin-top:14px}.app{width:60px;text-align:center;font-size:11px;color:#555;border:0;background:none;padding:0;font-family:inherit}
+.app s{display:block;width:60px;height:60px;border-radius:14px;background:#d9d9df;margin-bottom:4px}
+.app.q{cursor:pointer;color:var(--ink);font-weight:600}.app.q s{background:var(--acc);display:grid;place-items:center;text-decoration:none;font-size:28px;color:#fff}
+.dim{position:absolute;inset:0;background:#0004;animation:fade .2s}
+.box{position:absolute;left:8px;right:8px;bottom:26px;background:var(--card);border-radius:24px;box-shadow:0 8px 24px #3b205033;padding:14px 16px 8px;animation:up .28s cubic-bezier(.2,.8,.2,1);transition:bottom .28s cubic-bezier(.2,.8,.2,1)}
+.box.kb{bottom:238px}
+.txt{white-space:pre-line;font-size:16px;line-height:1.5;overflow-wrap:anywhere;cursor:text;min-height:44px}
+.txt.on::after,.full .txt::after{content:"";display:inline-block;width:2px;height:1.1em;background:var(--acc);vertical-align:-2px;margin-left:1px;animation:blink 1s steps(2) infinite}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.to{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--sub);min-width:0}
+.to u{flex:none;width:24px;height:24px;border-radius:7px;background:#b489b6;display:grid;place-items:center;font-size:12px;color:#2E2233;text-decoration:none}
+button.to{border:0;background:none;font-family:inherit;min-height:44px;padding:0;cursor:pointer}
+.x,.v{border:0;background:none;width:44px;height:44px;font-size:22px;font-weight:600;cursor:pointer;color:var(--ink);flex:none}
+.x{color:var(--sub);font-weight:400;margin-left:-10px}
+.keys{position:absolute;left:0;right:0;bottom:0;height:230px;background:#d1d3d9;display:grid;place-items:center;color:#75677a;font-size:13px;animation:up .28s cubic-bezier(.2,.8,.2,1)}
+.full{position:absolute;left:0;right:0;bottom:0;top:36px;background:var(--card);border-radius:24px 24px 0 0;animation:up .3s cubic-bezier(.2,.8,.2,1)}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px}.bar span{font-weight:600}
+.full .txt{padding:8px 16px;min-height:150px}.full .foot{padding:0 16px;border-top:1px solid var(--line);position:absolute;left:0;right:0;bottom:230px}
+.toast{position:absolute;left:24px;right:24px;bottom:40px;background:var(--card);border-radius:24px;padding:4px 8px 4px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 24px #3b205033;animation:fade .2s;font-size:15px}
+.ph{background:var(--paper);position:absolute;inset:0;padding-top:44px}.ph .t{display:inline-block;border:1px solid var(--acc);border-radius:22px;padding:6px 14px;margin:0 16px 10px}
+.l{padding:13px 16px;border-top:1px solid #2e22331f;white-space:pre-line;overflow-wrap:anywhere}.l.new{animation:glow 1.8s}
+.menu{position:absolute;left:8px;bottom:96px;width:220px;background:#fffcf6;border-radius:20px;box-shadow:0 8px 24px #3b205033;overflow:hidden;animation:fade .15s}
+.menu button{display:flex;width:100%;border:0;background:none;border-top:1px solid #2e22331f;min-height:44px;padding:0 14px;align-items:center;font:15px inherit;font-family:inherit;color:var(--ink);cursor:pointer}.menu button:first-child{border-top:0}
+button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+table{border-collapse:collapse;max-width:100%}td,th{border-top:1px solid var(--line);padding:8px 12px 8px 0;text-align:left;vertical-align:top;font-size:15px}
+@keyframes up{from{transform:translateY(60%);opacity:.2}}@keyframes fade{from{opacity:0}}@keyframes blink{50%{opacity:0}}@keyframes glow{0%,40%{background:#7d467f2e}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<main>
+<h1>茄記 2.1：從別的 app 分享進來</h1>
+<p>三題，回「3A、4A、5A」這樣就好。每支手機都可以按：先按底下的「茄記」。「動作」從按到茄記開始算。網頁上的動畫只給你看順序，手感要真機。</p>
+
+<h2>3　面板的樣子</h2>
+<p>這題最重要，決定記一行要幾下。</p>
+<div class="row" id="q3"></div>
+
+<h2>4　分享網頁進來，紙上長怎樣</h2>
+<p>分享的是文字就照原文放。有些 app 只給網址、不給標題，那時候就只有網址。</p>
+<div class="row" id="q4"></div>
+
+<h2>5　放進哪張</h2>
+<p>放進最近開過、能記的那張（記事本、上鎖、滿 1000 行的跳過）。這題問面板上寫什麼。</p>
+<div class="row" id="q5"></div>
+
+<h2>照之前定的做，不用回</h2>
+<ul>
+<li>免費，買了沒都一樣（你 11/25 定的）。</li>
+<li>只收文字和網址，分享圖片時不會出現茄記。</li>
+<li>貼進來好幾行：照 2A，左上方冒「拆成 N 行」，不按就是一則。</li>
+<li>記好的先放在手機裡的收件匣，下次打開茄記才進那張紙的最上面、亮一下。收件匣存成功才刪，不會記兩次。</li>
+<li>取消＝什麼都不留，字還在原本的 app 裡。</li>
+</ul>
+
+<h2>要你點頭的兩件</h2>
+<table>
+<tr><th>會上 iCloud</th><td>開著同步的人，分享進來的行進了紙就會跟著上傳，跟平常記一行一樣。進去之後收不回來，所以先問。</td></tr>
+<tr><th>多一個 Bundle ID</th><td>分享面板是另一個小程式，要在 Apple 後台多開一個 <code>org.domyweb.qieji.share</code>。等要打包才開。</td></tr>
+</table>
+</main>
+<script>
+const T='為什麼便利貼總是貼滿螢幕',U='https://example.com/sticky-notes',BOTH=T+'\n'+U;
+const host=`<div class="host"><div class="url">example.com</div><h3>${T}</h3>${'<i></i>'.repeat(5)}<i style="width:60%"></i></div>`;
+const share=`<div class="sheet"><b>分享</b><div class="apps"><span class="app"><s></s>訊息</span><span class="app"><s></s>郵件</span><button class="app q"><s>茄</s>茄記</button><span class="app"><s></s>提醒</span></div></div>`;
+const paper=(first,title='今天想到的')=>`<div class="ph"><span class="t">${title} ⌄</span><div class="l new">${first}</div><div class="l">回信給出版社</div><div class="l">想讀的那本書</div><div class="l">訂高鐵票</div></div>`;
+function fig(root,title,desc){const f=document.createElement('figure');f.innerHTML=`<div class="phone"></div><div class="count"><span></span><button>重來</button></div><figcaption><b>${title}</b>${desc}</figcaption>`;root.append(f);return f}
+function play(root,title,desc,panel){
+  const f=fig(root,title,desc),p=f.querySelector('.phone'),c=f.querySelector('.count span');let n=0;
+  const tick=()=>{n++;c.textContent='動作：'+n};
+  const back=(text,to)=>{p.innerHTML=host;c.innerHTML=text?`動作：${n}，回到原本的 app　<button class="open">打開茄記看</button>`:`動作：${n}，什麼都沒留`;
+    const o=c.querySelector('.open');if(o)o.onclick=()=>{p.innerHTML=paper(text,to)}};
+  const start=()=>{n=0;c.textContent='按底下的「茄記」';p.innerHTML=host+share;p.querySelector('.q').onclick=()=>{tick();p.innerHTML=host;panel(p,{tick,back})}};
+  f.querySelector('.count>button').onclick=start;start();
+}
+const add=(p,h)=>p.insertAdjacentHTML('beforeend',h);
+const tile='<u>今</u>';
+function card(p,k,foot,wire){
+  add(p,`<div class="dim"></div><div class="box"><div class="txt">${BOTH}</div><div class="foot"><button class="x" aria-label="取消">✕</button>${foot}<button class="v" aria-label="記下">✓</button></div></div>`);
+  const box=p.querySelector('.box'),txt=p.querySelector('.txt');let to='今天想到的';
+  txt.onclick=()=>{if(box.classList.contains('kb'))return;k.tick();box.classList.add('kb');txt.classList.add('on');add(p,'<div class="keys">鍵盤</div>')};
+  p.querySelector('.v').onclick=()=>{k.tick();k.back(BOTH,to)};
+  p.querySelector('.x').onclick=p.querySelector('.dim').onclick=()=>{k.tick();k.back('')};
+  if(wire)wire(box,x=>to=x);
+}
+const q3=document.getElementById('q3');
+play(q3,'3A　底部小卡，鍵盤不升（推薦）','兩下：茄記、✓。看得到要記什麼，想改字才點字升鍵盤。卡跟 app 裡的輸入框同一個樣子。這種半高面板系統沒有現成的，底下的暗幕和收起要自己做，要多花時間調真機。',
+  (p,k)=>card(p,k,`<span class="to" style="flex:1">${tile}放進 今天想到的</span>`));
+play(q3,'3B　系統的整頁面板，鍵盤直接升起','也是兩下，但右上角的「記下」離大拇指遠，鍵盤升起要等一下。最省工，往下拉關閉是系統的。',
+  (p,k)=>{add(p,`<div class="dim"></div><div class="full"><div class="bar"><button class="btn n">取消</button><span>丟進茄記</span><button class="btn y">記下</button></div><div class="txt">${BOTH}</div><div class="foot"><span class="to">${tile}放進 今天想到的</span></div></div><div class="keys">鍵盤</div>`);
+    p.querySelector('.y').onclick=()=>{k.tick();k.back(BOTH)};p.querySelector('.n').onclick=()=>{k.tick();k.back('')}});
+play(q3,'3C　不出面板，按茄記就記好','一下。底下閃一條「已記到」，兩秒自己收，可以復原。最快，但不能先改字，按錯茄記也會記進去。',
+  (p,k)=>{add(p,`<div class="toast"><span>已記到「今天想到的」</span><button class="btn">復原</button></div>`);
+    const t=setTimeout(()=>{if(p.querySelector('.toast'))k.back(BOTH)},2000);
+    p.querySelector('.toast button').onclick=()=>{clearTimeout(t);k.tick();k.back('')}});
+
+const S='便利貼的故事',LU='https://example.com/stories/2026/11/sticky-notes';
+const q4=document.getElementById('q4');
+[['4A　標題一行、網址一行（推薦）','同一則，中間換行。標題好認，網址完整。',S+'\n'+LU],
+ ['4B　接在同一行','少一個換行，網址長的時候標題和網址黏在一起。',S+' '+LU],
+ ['4C　只有網址','最短，但之後看不出那是什麼。',LU]].forEach(([t,d,x])=>{
+  const f=document.createElement('figure');f.innerHTML=`<div class="phone short"><div style="height:20px"></div><div class="l" style="word-break:break-all">${x}</div><div class="l">回信給出版社</div><div class="l">想讀的那本書</div></div><figcaption><b>${t}</b>${d}</figcaption>`;q4.append(f)});
+
+const q5=document.getElementById('q5');
+play(q5,'5A　寫出那一張，不能換（推薦）','知道它去哪就好，要換進茄記再搬。共用區只多放一個紙名，沒買的人也會放（現在沒買的人一個名字都不放）。之後要加選單，樣子不用大改。',
+  (p,k)=>card(p,k,`<span class="to" style="flex:1">${tile}放進 今天想到的</span>`));
+play(q5,'5B　點了可以換','多一個選擇要想。釘選的和最近開過的紙名都要放進共用區，上鎖的不放。',
+  (p,k)=>card(p,k,`<button class="to" style="flex:1">${tile}<span>放進 今天想到的 ▾</span></button>`,(box,set)=>{
+    const b=box.querySelector('button.to');b.onclick=()=>{const m=p.querySelector('.menu');if(m)return m.remove();k.tick();
+      add(p,`<div class="menu">${['今天想到的','旅行','買菜','想讀的書'].map(x=>`<button>${x}</button>`).join('')}</div>`);
+      p.querySelectorAll('.menu button').forEach(y=>y.onclick=()=>{k.tick();set(y.textContent);b.querySelector('span').textContent='放進 '+y.textContent+' ▾';p.querySelector('.menu').remove()})}}));
+play(q5,'5C　不寫','最乾淨，共用區不多放任何東西。代價是記完不知道去了哪一張。',
+  (p,k)=>card(p,k,`<span class="to" style="flex:1"></span>`));
+</script>
+</html>
