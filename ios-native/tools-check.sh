@@ -18,7 +18,7 @@ fi
 "$T/swiftformat" . 2>&1 | tail -1
 "$T/swiftformat" --lint . 2>&1 | tail -1
 # COPYFILE_DISABLE：不要把 macOS 的附屬檔（._檔名）一起包進去
-find Qieji QiejiTests QiejiControls Shared -name "*.swift" | COPYFILE_DISABLE=1 tar czf formatted.tgz -T -
+find Qieji QiejiTests QiejiControls QiejiShare Shared -name "*.swift" | COPYFILE_DISABLE=1 tar czf formatted.tgz -T -
 echo "---LINT"
 "$T/swiftlint" lint --strict --quiet 2>&1 | sed "s/.*ios-native\///" | cut -c1-220 | head -30
 echo "LINT-DONE"
