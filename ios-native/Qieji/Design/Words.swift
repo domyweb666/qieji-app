@@ -282,7 +282,7 @@ enum Words {
         "\(time) 記的"
     }
 
-    // 貼上好幾行：拆成 N 行（2.1）
+    /// 貼上好幾行：拆成 N 行（2.1）
     static func splitInto(_ count: Int) -> String {
         "拆成 \(count) 行"
     }
