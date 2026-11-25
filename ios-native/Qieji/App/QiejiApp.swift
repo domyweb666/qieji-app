@@ -3,6 +3,8 @@ import UIKit
 
 @main
 struct QiejiApp: App {
+    @UIApplicationDelegateAdaptor(QiejiDelegate.self) private var delegate
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -43,6 +45,7 @@ struct RootView: View {
     @ObservedObject private var shop = Purchases.shared
     @ObservedObject private var look = Look.shared
     @ObservedObject private var cloud = CloudLink.shared
+    @ObservedObject private var quick = QuickAction.shared
 
     /// 假資料模式、跑單元測試：不碰 App Store
     private static var offline: Bool {
@@ -115,7 +118,9 @@ struct RootView: View {
                 cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
                 ReviewAsk.opened() // 評分提示要數「在幾個不同的日子打開過」
             }
+            composeIfQuick()
         }
+        .onChange(of: quick.asks) { _ in composeIfQuick() }
         .onChange(of: shop.asked) { asked in
             // 問過 Apple 買了沒才決定：1.0 同步過、確定沒買的人跳「iCloud 同步改成完整版功能」。
             // 新功能卡片（更新後第一次打開跳一次）照樣記成看過，但上面那個這次有跳就不跳，一次只跳一個（1.1 _layout）
@@ -187,13 +192,11 @@ struct RootView: View {
             // 鎖住的小工具：qieji://full → 付費頁
             switch url.host {
             case "new":
-                dir.close()
-                switcher.close()
                 if store.isFull {
-                    path.removeAll()
-                    sheet = nil
-                    store.requestCompose()
+                    composeNow()
                 } else {
+                    dir.close()
+                    switcher.close()
                     sheet = .full
                 }
             case "full":
@@ -202,6 +205,22 @@ struct RootView: View {
             default:
                 break
             }
+        }
+    }
+
+    /// 回到上次那張紙、升起輸入框
+    private func composeNow() {
+        dir.close()
+        switcher.close()
+        path.removeAll()
+        sheet = nil
+        store.requestCompose()
+    }
+
+    /// 主畫面長按圖示「記一行」：免費，買了沒都一樣
+    private func composeIfQuick() {
+        if quick.take() {
+            composeNow()
         }
     }
 

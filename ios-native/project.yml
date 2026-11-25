@@ -57,6 +57,11 @@ targets:
             NSUbiquitousContainerIsDocumentScopePublic: true
             NSUbiquitousContainerSupportedFolderLevels: Any
             NSUbiquitousContainerName: 茄記
+        # 主畫面長按圖示「記一行」：免費（App/QuickAction.swift）
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: org.domyweb.qieji.newline
+            UIApplicationShortcutItemTitle: 記一行
+            UIApplicationShortcutItemIconSymbolName: square.and.pencil
         # 控制中心「記一行」按鈕開 qieji://new（Expo 版同一個 scheme）
         CFBundleURLTypes:
           - CFBundleURLSchemes:

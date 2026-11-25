@@ -277,6 +277,16 @@ enum Words {
         "用 \(price) 解鎖"
     }
 
+    // 貼上好幾行：拆成 N 行（2.1）
+    static let splitKept = "有行已經改過，沒有變回去"
+    static func splitDone(_ count: Int) -> String {
+        "已拆成 \(count) 行"
+    }
+
+    static func splitNoRoom(_ room: Int) -> String {
+        "這張只剩 \(room) 行的空間，先不拆"
+    }
+
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"
     }

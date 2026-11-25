@@ -352,6 +352,8 @@ struct PaperView: View {
                 padFocused = true // 剛開的新記事本：一打開游標就在裡面
             } else if Lines.room(note) > 0 {
                 openComposer()
+            } else {
+                store.toast = Store.Toast(text: Words.full(Lines.max)) // 跟按 ＋ 一樣講一聲，不准按了沒反應
             }
         }
     }

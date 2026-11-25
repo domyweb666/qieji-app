@@ -35,6 +35,22 @@ struct ComposerHost: UIViewRepresentable {
         let breaks = { (text: String) in text.filter { $0 == "\n" }.count }
         return (next as NSString).length == (prev as NSString).length + 1 && breaks(next) == breaks(prev) + 1
     }
+
+    /// 這次改字是不是貼上好幾行：多出來的那一段有換行、又不只是一個換行（按 Return、選字後按 Return 都不算）
+    static func pastedMany(prev: String, next: String) -> Bool {
+        guard next.contains(where: \.isNewline) else { return false }
+        let old = Array(prev), new = Array(next)
+        var head = 0
+        while head < old.count, head < new.count, old[head] == new[head] {
+            head += 1
+        }
+        var tail = 0
+        while tail < old.count - head, tail < new.count - head, old[old.count - 1 - tail] == new[new.count - 1 - tail] {
+            tail += 1
+        }
+        let added = new[head ..< new.count - tail]
+        return added.count > 1 && added.contains(where: \.isNewline)
+    }
 }
 
 final class ComposerView: UIView, UITextViewDelegate {
