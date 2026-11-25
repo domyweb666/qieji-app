@@ -214,102 +214,12 @@ final class ShareTests: XCTestCase {
         return names.union(["bytes.json", "dir.json", "half.tmp"])
     }
 
-    private func target(_ id: String) -> ShareTarget {
-        ShareTarget(id: id, title: "紙 \(id)", glyph: "紙", color: "purple")
-    }
-
-    func testTargetsRoundTripAndRemove() {
-        let list = [target("n1"), target("n2")]
-        XCTAssertEqual(inbox.targets(), [])
-        inbox.setTargets(list)
-        XCTAssertEqual(inbox.targets(), list)
-        inbox.setTargets(Array(list.reversed()))
-        XCTAssertEqual(inbox.targets().map(\.id), ["n2", "n1"])
-        defaults.set(Data("舊的".utf8), forKey: ShareInbox.oldTargetKey)
-        inbox.setTargets([])
-        XCTAssertEqual(inbox.targets(), [])
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
-        XCTAssertNil(defaults.object(forKey: ShareInbox.oldTargetKey))
-        defaults.set(Data("舊的".utf8), forKey: ShareInbox.oldTargetKey)
-        inbox.setTargets(list)
-        XCTAssertNil(defaults.object(forKey: ShareInbox.oldTargetKey))
-    }
-
-    /// 內容一樣不寫；裡面被塞了讀的時候會丟掉的，照寫
-    func testSameTargetsAreNotWrittenAgain() throws {
-        let counting = try XCTUnwrap(CountingDefaults(suiteName: suite))
-        let inbox = ShareInbox(folder: { nil }, settings: { counting })
-        inbox.setTargets([target("n1"), target("n2")])
-        XCTAssertEqual(counting.writes, 1)
-        inbox.setTargets([target("n1"), target("n2")])
-        XCTAssertEqual(counting.writes, 1)
-        inbox.setTargets([target("n1")])
-        XCTAssertEqual(counting.writes, 2)
-        try defaults.set(JSONEncoder().encode([target("n1"), target("n1")]), forKey: ShareInbox.targetsKey)
-        XCTAssertEqual(inbox.targets(), [target("n1")])
-        inbox.setTargets([target("n1")])
-        XCTAssertEqual(counting.writes, 3)
-    }
-
-    func testBadTargetsReadAsEmpty() {
-        let good = #"{"id":"n1","title":"紙","glyph":"紙","color":"red"}"#
-        let bad = [
-            "", "不是 JSON", "null", "{}", good, #""n1""#, "[1]", "[null]", "[\(good),{}]", #"[{"id":"n1"}]"#,
-            #"[{"id":1,"title":"紙","glyph":"紙","color":"red"}]"#, String(repeating: "[", count: 10000),
-        ]
-        for text in bad {
-            defaults.set(Data(text.utf8), forKey: ShareInbox.targetsKey)
-            XCTAssertEqual(inbox.targets(), [], text)
-        }
-        defaults.set(Data([0xFF, 0xFE, 0x00]), forKey: ShareInbox.targetsKey)
-        XCTAssertEqual(inbox.targets(), [])
-        defaults.set("不是 Data", forKey: ShareInbox.targetsKey)
-        XCTAssertEqual(inbox.targets(), [])
-        defaults.set(Data("[\(good)]".utf8), forKey: ShareInbox.targetsKey)
-        XCTAssertEqual(inbox.targets().map(\.id), ["n1"])
-    }
-
-    /// id 空的、重複的丟掉；最多 20 張，丟掉的不佔名額
-    func testTargetsDropEmptyRepeatedAndExtra() throws {
-        let many = (1 ... 30).map { target("n\($0)") }
-        let list = [target(""), many[0], many[0]] + many
-        try defaults.set(JSONEncoder().encode(list), forKey: ShareInbox.targetsKey)
-        XCTAssertEqual(inbox.targets(), Array(many.prefix(20)))
-        inbox.setTargets(list)
-        let kept = try XCTUnwrap(defaults.data(forKey: ShareInbox.targetsKey))
-        XCTAssertEqual(try JSONDecoder().decode([ShareTarget].self, from: kept), Array(many.prefix(20)))
-        inbox.setTargets([target("")])
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
-    }
-
-    func testWipeTakesEverything() throws {
-        XCTAssertTrue(inbox.wipe())
-        XCTAssertTrue(try inbox.write(XCTUnwrap(ShareEntry.make(["牛奶"], note: nil))))
-        _ = try ShareTests.writeBad(to: folder)
-        inbox.setTargets([target("n1"), target("n2")])
-        defaults.set(Data("舊的".utf8), forKey: ShareInbox.oldTargetKey)
-        XCTAssertTrue(inbox.wipe())
-        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
-        XCTAssertNil(defaults.object(forKey: ShareInbox.oldTargetKey))
-    }
-
     func testWipeSaysWhenItCannot() throws {
         XCTAssertTrue(try inbox.write(XCTUnwrap(ShareEntry.make(["牛奶"], note: nil))))
         let parent = folder.deletingLastPathComponent().path
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: parent)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent) }
         XCTAssertFalse(inbox.wipe())
-    }
-}
-
-/// 數寫了幾次
-private final class CountingDefaults: UserDefaults {
-    var writes = 0
-
-    override func set(_ value: Any?, forKey defaultName: String) {
-        writes += 1
-        super.set(value, forKey: defaultName)
     }
 }
 

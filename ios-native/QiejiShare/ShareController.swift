@@ -8,7 +8,7 @@ final class ShareController: UIViewController {
 
     private let panel = SharePanel(frame: .zero)
     private let born = Date()
-    private var targets: [ShareTarget] = []
+    private var targets: [ShareTarget]? // 紙單讀到才有；一張都沒有是空的
     private var picked = 0
     private var read = false // 附件讀完了
     private var draft: ShareDraft? // 讀到字才有
@@ -24,11 +24,10 @@ final class ShareController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         wire()
-        targets = ShareInbox.app.targets()
-        panel.showTargets(targets, picked: picked)
-        // 第一次跟系統拿共用容器會慢：先在背景叫一次
-        DispatchQueue.global(qos: .userInitiated).async {
-            _ = ShareInbox.app.folder()
+        // 第一次跟系統拿共用容器會慢：不准在主執行緒。送出時是第二次，✓ 等紙單到了才能按
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let list = ShareInbox.app.targets()
+            DispatchQueue.main.async { self?.listed(list) }
         }
         Task { [weak self] in
             let found = await ShareReader.read(self?.extensionContext?.inputItems ?? [])
@@ -65,6 +64,22 @@ final class ShareController: UIViewController {
         }
     }
 
+    // MARK: 紙單
+
+    private func listed(_ list: [ShareTarget]) {
+        guard !closed else { return }
+        targets = list
+        panel.showTargets(list, picked: picked)
+        refresh(animated: false)
+        logReady()
+    }
+
+    private func pick(_ index: Int) {
+        guard let targets, targets.indices.contains(index) else { return }
+        picked = index
+        panel.showTargets(targets, picked: index)
+    }
+
     // MARK: 字
 
     private func arrived(_ found: ShareFound) {
@@ -81,6 +96,12 @@ final class ShareController: UIViewController {
         said = notes.isEmpty ? nil : notes.joined(separator: "\n")
         panel.showNote(said)
         refresh(animated: false)
+        logReady()
+    }
+
+    /// 字和紙單都到了：可以按 ✓
+    private func logReady() {
+        guard draft != nil, targets != nil else { return }
         let took = Int(-born.timeIntervalSinceNow * 1000)
         ShareController.log.info("ready \(took) ms")
     }
@@ -97,16 +118,11 @@ final class ShareController: UIViewController {
             tooLong = draft.tooLong
             panel.showNote(tooLong ? ShareWords.tooLong : said, alert: tooLong || failed)
         }
-        panel.setCommit(!draft.isBlank && !tooLong)
-        panel.showSplit(draft.rows.count, animated: animated)
+        // 還不知道放進哪張：✓、拆行都先等
+        panel.setCommit(targets != nil && !draft.isBlank && !tooLong)
+        panel.showSplit(targets == nil ? 0 : draft.rows.count, animated: animated)
         // 改過的字不准被一拉就不見
         isModalInPresentation = draft.edited || failed
-    }
-
-    private func pick(_ index: Int) {
-        guard targets.indices.contains(index) else { return }
-        picked = index
-        panel.showTargets(targets, picked: index)
     }
 
     // MARK: 記
@@ -125,7 +141,7 @@ final class ShareController: UIViewController {
 
     /// 先寫進收件匣，寫成了才收。整段在主執行緒一次做完：連按第二下時已經收了
     private func send(_ texts: [String]) {
-        guard !closed else { return }
+        guard !closed, let targets else { return }
         let note = targets.indices.contains(picked) ? targets[picked].id : nil
         guard let entry = draft?.entry(texts, note: note), ShareInbox.app.write(entry) else {
             failed = true

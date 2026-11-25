@@ -15,6 +15,10 @@ final class ShareStoreTests: XCTestCase {
         root.appendingPathComponent("native")
     }
 
+    private var listIsThere: Bool {
+        FileManager.default.fileExists(atPath: root.appendingPathComponent("group/ShareTargets.json").path)
+    }
+
     private var inbox: ShareInbox {
         let folder = folder, defaults = defaults
         return ShareInbox(folder: { folder }, settings: { defaults })
@@ -339,7 +343,7 @@ final class ShareStoreTests: XCTestCase {
         store.setLocked("bbb", true)
         store.pushTarget(now: true)
         XCTAssertEqual(names(), [])
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
+        XCTAssertFalse(listIsThere)
     }
 
     @MainActor
@@ -350,7 +354,7 @@ final class ShareStoreTests: XCTestCase {
         full.items = (0 ..< Lines.max).map { Item(text: "\($0)") }
         let store = store([pad, gone, full], last: "pad")
         store.pushTarget(now: true)
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
+        XCTAssertFalse(listIsThere)
     }
 
     /// 免費：還不知道買了沒也推。假資料不推

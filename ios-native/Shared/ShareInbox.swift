@@ -64,17 +64,19 @@ struct ShareEntry: Codable, Equatable {
     }
 }
 
-/// App Group 裡跟「分享進來」有關的兩個地方：收件匣資料夾（一次分享一個檔）、可選的紙單。
-/// 擴充寫收件匣、讀紙單；app 讀收件匣、寫紙單。使用者的字不進 log，只寫數量與錯誤代碼
+/// App Group 裡跟「分享進來」有關的兩個地方：收件匣資料夾（一次分享一個檔）、可選的紙單（一個檔）。
+/// 擴充寫收件匣、讀紙單；app 讀收件匣、寫紙單。使用者的字不進 log，只寫數量與錯誤代碼。
+/// 紙單不准放 UserDefaults：擴充的行程留著時讀到的是舊的，剛上鎖的紙名會露出來（2026-11-25 模擬器看到）
 struct ShareInbox {
     /// 跟 WidgetShare.group 同一個（小工具那份沒有編進擴充）
     static let group = "group.org.domyweb.qieji"
     static let folderName = "Inbox"
-    static let targetsKey = "shareTargets.v1"
-    /// 只放一張的舊鍵：沒有出貨過，碰到就拿掉
-    static let oldTargetKey = "shareTarget.v1"
-    /// 紙單最多幾張
+    static let targetsName = "ShareTargets.json"
+    /// 紙單放 UserDefaults 時的鍵：沒有出貨過，碰到就拿掉
+    static let oldKeys = ["shareTargets.v1", "shareTarget.v1"]
+    /// 紙單最多幾張、檔最大多大
     static let maxTargets = 20
+    static let maxTargetBytes = 64 * 1024
     /// 跟 Lines.max 同一個
     static let maxLines = 1000
     static let maxBytes = 512 * 1024
@@ -82,8 +84,9 @@ struct ShareInbox {
     static let maxFiles = 50
     private static let log = Logger(subsystem: "org.domyweb.qieji", category: "inbox")
 
-    /// 收件匣在哪（還不一定存在）。第一次跟系統拿共用容器會慢：app 只在背景佇列叫
+    /// 收件匣在哪（還不一定存在）。第一次跟系統拿共用容器會慢：不准在主執行緒第一次叫
     let folder: () -> URL?
+    /// 只用來拿掉舊鍵
     let settings: () -> UserDefaults?
     /// 假資料、單元測試那份：本來就沒有東西，清除時算清乾淨
     var isOff = false
@@ -185,15 +188,15 @@ struct ShareInbox {
         guard !isOff else { return true }
         setTargets([])
         // 共用區拿不到就不知道裡面還有沒有字：不准說清乾淨了
-        guard let settings = settings(), let dir = folder() else {
+        guard let settings = settings(), let dir = folder(), let names = targetsFile() else {
             ShareInbox.log.error("wipe failed: no app group container")
             return false
         }
-        let named = [ShareInbox.targetsKey, ShareInbox.oldTargetKey].contains { settings.object(forKey: $0) != nil }
-        guard FileManager.default.fileExists(atPath: dir.path) else { return !named }
+        let left = FileManager.default.fileExists(atPath: names.path) || ShareInbox.oldKeys.contains { settings.object(forKey: $0) != nil }
+        guard FileManager.default.fileExists(atPath: dir.path) else { return !left }
         do {
             try FileManager.default.removeItem(at: dir)
-            return !named
+            return !left
         } catch {
             ShareInbox.log.error("wipe failed: \(ShareInbox.brief(error), privacy: .public)")
             return false
@@ -237,37 +240,87 @@ struct ShareInbox {
 
     // MARK: 可選的紙單
 
-    /// 第一張是預設的。當外面來的資料：解不開回空的
+    /// 跟收件匣資料夾同一層
+    private func targetsFile() -> URL? {
+        folder()?.deletingLastPathComponent().appendingPathComponent(ShareInbox.targetsName)
+    }
+
+    /// 第一張是預設的。每次都從磁碟讀。當外面來的資料：太大、解不開回空的
     func targets() -> [ShareTarget] {
-        guard let data = settings()?.data(forKey: ShareInbox.targetsKey),
+        guard let data = targetsFile().flatMap(ShareInbox.targetsData),
               let list = try? JSONDecoder().decode([ShareTarget].self, from: data) else { return [] }
         return ShareInbox.sound(list)
     }
 
-    /// 空的＝拿掉。內容一樣不寫
-    func setTargets(_ next: [ShareTarget]) {
-        guard let settings = settings() else { return }
-        // 拿掉不存在的鍵也算寫一次：有才拿
-        if settings.object(forKey: ShareInbox.oldTargetKey) != nil {
-            settings.removeObject(forKey: ShareInbox.oldTargetKey)
-        }
-        let list = ShareInbox.sound(next)
-        guard !list.isEmpty else {
-            settings.removeObject(forKey: ShareInbox.targetsKey)
-            return
+    /// 空的＝刪檔。跟磁碟上的一樣就不寫。false＝沒寫成要的那一份，要再叫一次；寫不進去就拿掉，不准留著舊的
+    @discardableResult
+    func setTargets(_ next: [ShareTarget]) -> Bool {
+        guard !isOff else { return true }
+        dropOldKeys()
+        guard let file = targetsFile() else {
+            ShareInbox.log.error("targets: no app group container")
+            return false
         }
         do {
-            // 比寫進去的原樣，不比讀回來的：讀的時候會丟掉多的，裡面說不定還留著不該在的
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .sortedKeys
-            let data = try encoder.encode(list)
-            guard data != settings.data(forKey: ShareInbox.targetsKey) else { return }
-            settings.set(data, forKey: ShareInbox.targetsKey)
+            guard let data = try ShareInbox.pack(ShareInbox.sound(next)) else { return ShareInbox.clear(file) }
+            // 比檔裡的原樣，不比讀回來的：讀的時候會丟掉多的，裡面說不定還留著不該在的
+            guard data != ShareInbox.targetsData(file) else { return true }
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return true
         } catch {
-            // 編不出來就拿掉：寧可沒有紙單，不准留著舊的（裡面可能有剛上鎖的）
-            settings.removeObject(forKey: ShareInbox.targetsKey)
-            ShareInbox.log.error("targets not encoded: \(ShareInbox.brief(error), privacy: .public)")
+            ShareInbox.log.error("targets not written: \(ShareInbox.brief(error), privacy: .public)")
+            _ = ShareInbox.clear(file) // 寧可沒有紙單：舊的裡面可能有剛上鎖的
+            return false
         }
+    }
+
+    /// 刪檔；刪不掉就把內容換成空的。回傳裡面是不是沒有名字了
+    private static func clear(_ file: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: file.path) else { return true }
+        do {
+            try FileManager.default.removeItem(at: file)
+            return true
+        } catch {
+            log.error("targets not removed: \(brief(error), privacy: .public)")
+        }
+        do {
+            // 刪不掉多半是資料夾不給動，換檔（原子寫入）也不行：直接寫進原檔
+            try Data("[]".utf8).write(to: file, options: .completeFileProtectionUntilFirstUserAuthentication)
+            return true
+        } catch {
+            log.error("targets not emptied: \(brief(error), privacy: .public)")
+            return false
+        }
+    }
+
+    /// 有才拿：拿掉不存在的鍵也算寫一次
+    private func dropOldKeys() {
+        guard let settings = settings() else { return }
+        for key in ShareInbox.oldKeys where settings.object(forKey: key) != nil {
+            settings.removeObject(forKey: key)
+        }
+    }
+
+    private static func targetsData(_ file: URL) -> Data? {
+        guard let info = try? file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+              info.isRegularFile == true, let size = info.fileSize, size <= maxTargetBytes else { return nil }
+        return try? Data(contentsOf: file)
+    }
+
+    /// 放不下（名字沒有長度上限）就少放後面的；一張都沒有是 nil
+    private static func pack(_ list: [ShareTarget]) throws -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        var list = list
+        while !list.isEmpty {
+            let data = try encoder.encode(list)
+            if data.count <= maxTargetBytes {
+                return data
+            }
+            list.removeLast()
+        }
+        return nil
     }
 
     /// id 空的、重複的丟掉（留前面的），最多 maxTargets 張

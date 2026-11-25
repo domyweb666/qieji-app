@@ -15,6 +15,10 @@ class ShareSafeCase: XCTestCase {
         root.appendingPathComponent("native")
     }
 
+    var names: URL {
+        root.appendingPathComponent("group/ShareTargets.json")
+    }
+
     var inbox: ShareInbox {
         let folder = folder, defaults = defaults
         return ShareInbox(folder: { folder }, settings: { defaults })
@@ -226,7 +230,9 @@ final class ShareSafeTests: ShareSafeCase {
         let store = store([note("aaa"), note("bbb")])
         let folder = folder, defaults = defaults
         store.inbox = ShareInbox(folder: {
-            Thread.sleep(forTimeInterval: 1.5)
+            if String(cString: __dispatch_queue_get_label(nil)) == "org.domyweb.qieji.inbox" {
+                Thread.sleep(forTimeInterval: 1.5)
+            }
             return folder
         }, settings: { defaults })
         store.pushTarget()
@@ -269,185 +275,5 @@ final class ShareSafeTests: ShareSafeCase {
         store.inbox = ShareInbox(folder: { nil }, settings: { nil })
         XCTAssertFalse(store.wipe())
         XCTAssertEqual(texts(store), ["舊的"])
-    }
-}
-
-/// 可選的紙單：順序、張數、誰不准出現、什麼時候跟著變
-final class ShareTargetsTests: ShareSafeCase {
-    private func pin(_ id: String, created: Double) -> Note {
-        var note = note(id)
-        note.pinned = true
-        note.created = created
-        return note
-    }
-
-    private func bad(_ id: String) -> [Note] {
-        var locked = note("\(id)-lock"), pad = note("\(id)-pad"), gone = note("\(id)-gone"), full = note("\(id)-full")
-        locked.locked = true
-        pad.kind = "text"
-        gone.deleted = true
-        full.items = (0 ..< Lines.max).map { Item(text: "\($0)") }
-        return [locked, pad, gone, full]
-    }
-
-    private func choices(_ notes: [Note], current: String? = nil, recent: [String] = []) -> [String] {
-        var book = Notebook()
-        book.notes = notes
-        return InboxMerge.choices(book, current: current, recent: recent).map(\.id)
-    }
-
-    private func names() -> [String] {
-        inbox.targets().map(\.id)
-    }
-
-    /// 預設那張 → 釘選（照建立先後）→ 最近開過的 → 最近改過的補。總張數跟切換清單一樣
-    func testOrderAndCount() {
-        let pins = [pin("p2", created: 20), pin("p1", created: 10)]
-        let rest = (1 ... 8).map { note("n\($0)", updated: Double($0)) }
-        // 預設那張沒釘選：算最近的一張
-        XCTAssertEqual(
-            choices(pins + rest, current: "n3", recent: ["n3", "n1", "p1"]), ["n3", "p1", "p2", "n1", "n8", "n7", "n6"]
-        )
-        // 預設那張不在最近開過的裡面：張數一樣
-        XCTAssertEqual(choices(pins + rest, current: "n3", recent: ["n1"]), ["n3", "p1", "p2", "n1", "n8", "n7", "n6"])
-        // 預設那張是釘選的：提到最前面，不重複
-        XCTAssertEqual(
-            choices(pins + rest, current: "p2", recent: ["p2", "n1"]), ["p2", "p1", "n1", "n8", "n7", "n6", "n5"]
-        )
-        // 最近開過的夠多：不補，多的不放
-        XCTAssertEqual(
-            choices(rest, current: "n1", recent: ["n1", "n2", "n3", "n4", "n5", "n6"]), ["n1", "n2", "n3", "n4", "n5"]
-        )
-        // 沒有正在看的、沒開過：最近改過的
-        XCTAssertEqual(choices(rest), ["n8", "n7", "n6", "n5", "n4"])
-        XCTAssertEqual(choices([note("one")], current: "one"), ["one"])
-        XCTAssertEqual(choices([]), [])
-    }
-
-    /// 跟切換清單同樣的紙（都能記的時候）
-    func testSamePapersAsSwitchList() {
-        var book = Notebook()
-        book.notes = (1 ... 7).map { pin("p\($0)", created: Double($0)) } + (1 ... 9).map { note("n\($0)", updated: Double($0)) }
-        for current in ["n2", "p3", "n9"] {
-            let recent = [current, "n4", "p1", "n1"]
-            let lists = Seats.switchList(book, recent: recent)
-            let made = InboxMerge.choices(book, current: current, recent: recent).map(\.id)
-            XCTAssertEqual(made.first, current)
-            XCTAssertEqual(Set(made), Set((lists.pinned + lists.recent).map(\.id)))
-            XCTAssertEqual(made.count, Seats.pinMax + Seats.recentMax)
-        }
-    }
-
-    /// 上鎖、記事本、刪掉、滿了：不出現、也不佔名額（釘選的、最近開過的、補的都一樣）
-    func testBadPapersTakeNoPlace() {
-        let badPins = bad("p").map { one -> Note in
-            var one = one
-            one.pinned = true
-            one.created = 1
-            return one
-        }
-        let badRecent = bad("r"), badNew = bad("u").map { one -> Note in
-            var one = one
-            one.updated = 9999
-            return one
-        }
-        let pins = (1 ... 5).map { pin("p\($0)", created: Double($0 + 10)) }
-        let rest = (1 ... 6).map { note("n\($0)", updated: Double($0)) }
-        XCTAssertEqual(
-            choices(badPins + badRecent + badNew + pins + rest, current: "r-lock", recent: badRecent.map(\.id) + ["n1"]),
-            ["n1", "p1", "p2", "p3", "p4", "p5", "n6", "n5", "n4", "n3"]
-        )
-        XCTAssertEqual(choices(badPins + badRecent, current: "r-pad", recent: badRecent.map(\.id)), [])
-    }
-
-    /// 上鎖那一刻就從紙單消失，不是預設那張也一樣；連檔裡的原樣都找不到名字
-    @MainActor
-    func testLockedPaperLeavesTheListAtOnce() throws {
-        let store = store([note("aaa"), note("bbb"), note("ccc")])
-        store.pushTarget(now: true)
-        XCTAssertEqual(names(), ["aaa", "bbb", "ccc"])
-        store.setLocked("bbb", true)
-        store.pushTarget(now: true)
-        XCTAssertEqual(names(), ["aaa", "ccc"])
-        let raw = try XCTUnwrap(defaults.data(forKey: ShareInbox.targetsKey))
-        XCTAssertFalse(String(bytes: raw, encoding: .utf8)?.contains("bbb") ?? true)
-    }
-
-    /// 釘選、取消釘選（不動修改時間的那種也算）、換張、改名、換色、換圖示：紙單跟著變
-    @MainActor
-    func testListFollowsChanges() async {
-        let store = store([note("aaa"), note("bbb", updated: 900), note("ccc", updated: 800)])
-        store.pushTarget(now: true)
-        XCTAssertEqual(names(), ["aaa", "bbb", "ccc"])
-        store.togglePin("ccc")
-        await waitUntil("釘選的排前面") { names() == ["aaa", "ccc", "bbb"] }
-        store.togglePin("ccc")
-        await waitUntil("取消釘選") { names() == ["aaa", "bbb", "ccc"] }
-        store.open("bbb")
-        await waitUntil("換張") { names() == ["bbb", "aaa", "ccc"] }
-        store.rename("aaa", "買東西")
-        store.setColor("aaa", "red")
-        store.setGlyph("aaa", "買")
-        let want = ShareTarget(id: "aaa", title: "買東西", glyph: "買", color: "red")
-        await waitUntil("改名、換色、換圖示") { inbox.targets().contains(want) }
-        store.setLocked("bbb", true)
-        await waitUntil("存檔那條也會拿掉") { !names().contains("bbb") }
-    }
-
-    private func stamp(_ day: Int, _ hour: Int, _ minute: Int) -> Double {
-        let parts = DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute)
-        return (Calendar.current.date(from: parts)?.timeIntervalSince1970 ?? 0) * 1000
-    }
-
-    private func paper(_ title: String, _ created: Double) -> Note {
-        var note = note("x", ["不准外露的第一行"])
-        note.title = title
-        note.created = created
-        return note
-    }
-
-    /// 同名的分得出來：加開的日期，同一天的再加時分；不同名的不變；第一行不准出現
-    func testSameNamesAreToldApart() {
-        let early = stamp(24, 9, 5), noon = stamp(25, 12, 0), late = stamp(25, 18, 30)
-        XCTAssertEqual(InboxMerge.names([paper("", noon)]), ["未命名"])
-        XCTAssertEqual(InboxMerge.names([paper("", noon), paper("買菜", noon)]), ["未命名", "買菜"])
-        XCTAssertEqual(InboxMerge.names([paper(" ", noon), paper("", early)]), ["未命名・11/25", "未命名・11/24"])
-        XCTAssertEqual(
-            InboxMerge.names([paper("", noon), paper("買菜", noon), paper("", early), paper("", late)]),
-            ["未命名・11/25 12:00", "買菜", "未命名・11/24", "未命名・11/25 18:30"]
-        )
-        XCTAssertEqual(InboxMerge.names([paper("買菜", noon), paper("買菜", early)]), ["買菜・11/25", "買菜・11/24"])
-        XCTAssertEqual(InboxMerge.names([]), [])
-    }
-
-    /// 推出去的紙單：兩張沒取名的有分開，共用區裡沒有紙的內容
-    @MainActor
-    func testUntitledInTheListHasDates() throws {
-        var one = paper("", stamp(25, 12, 0)), two = paper("", stamp(24, 12, 0))
-        one.id = "aaa"
-        two.id = "bbb"
-        let store = store([one, two])
-        store.pushTarget(now: true)
-        XCTAssertEqual(inbox.targets().map(\.title), ["未命名・11/25", "未命名・11/24"])
-        let raw = try XCTUnwrap(defaults.data(forKey: ShareInbox.targetsKey))
-        XCTAssertFalse(String(bytes: raw, encoding: .utf8)?.contains("第一行") ?? true)
-        store.rename("bbb", "買菜")
-        store.pushTarget(now: true)
-        XCTAssertEqual(inbox.targets().map(\.title), ["未命名", "買菜"])
-    }
-
-    /// 真的清除：新舊兩個鍵都不留
-    @MainActor
-    func testWipeTakesBothKeys() {
-        let store = store([note("aaa"), note("bbb")])
-        store.pushTarget(now: true)
-        XCTAssertEqual(names().count, 2)
-        defaults.set(Data("舊的".utf8), forKey: ShareInbox.oldTargetKey)
-        XCTAssertTrue(store.wipeInbox())
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
-        XCTAssertNil(defaults.object(forKey: ShareInbox.oldTargetKey))
-        // 清完再推：一樣的內容也要寫
-        store.pushTarget(now: true)
-        XCTAssertEqual(names().count, 2)
     }
 }

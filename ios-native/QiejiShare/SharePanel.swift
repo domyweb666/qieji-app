@@ -73,9 +73,11 @@ final class SharePanel: UIView, UITextViewDelegate {
         UIAccessibility.post(notification: .announcement, argument: words)
     }
 
+    /// 紙單到了才叫：在那之前「放進 X」不出現
     func showTargets(_ list: [ShareTarget], picked: Int) {
         targets = list
         self.picked = picked
+        target.isHidden = done.isHidden // 沒有字可以記：只留 ✕
         refreshTarget()
     }
 
@@ -227,6 +229,7 @@ final class SharePanel: UIView, UITextViewDelegate {
         done.accessibilityLabel = ShareWords.commit
         done.addAction(UIAction { [weak self] _ in self?.onCommit() }, for: .touchUpInside)
         done.isEnabled = false
+        target.isHidden = true
         row.spacing = Tok.Space.sm
         row.alignment = .center
         for part in [cancel, gap, done] {

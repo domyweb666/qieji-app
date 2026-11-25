@@ -149,7 +149,7 @@ extension Store {
     // MARK: 可選的紙單
 
     /// 分享卡上「放進 X ▾」的紙單：跟小工具同樣的時候推，不看買了沒。內容一樣不寫。
-    /// now＝上鎖那一刻：寫完才回來
+    /// now＝上鎖那一刻：寫完才回來（在主執行緒做；共用容器打開 app 時就在背景拿過了）。沒寫成就忘掉上次推的：下一次一定再推
     func pushTarget(now: Bool = false) {
         guard loaded, disk != nil else { return }
         let targets = shareTargets()
@@ -157,9 +157,14 @@ extension Store {
         targetsSent = targets
         let inbox = inbox
         if now {
-            Store.nameQueue.sync { inbox.setTargets(targets) }
+            if !Store.nameQueue.sync(execute: { inbox.setTargets(targets) }) {
+                targetsSent = nil
+            }
         } else {
-            Store.nameQueue.async { inbox.setTargets(targets) }
+            Store.nameQueue.async { [weak self] in
+                guard !inbox.setTargets(targets) else { return }
+                DispatchQueue.main.async { self?.targetsSent = nil }
+            }
         }
     }
 
