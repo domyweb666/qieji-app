@@ -7,24 +7,57 @@ extension Store {
     /// 讀資料（Swift 版自己的存檔；第一次會從 Expo 版搬）。只會真的做一次
     func boot() {
         guard !loaded, let disk else { return }
-        var found = disk.load()
+        let found = disk.load()
+        Prefs.shared.start(
+            old: found.source == .legacy ? found.legacy : nil, fresh: found.source == .fresh,
+            bundleID: Bundle.main.bundleIdentifier ?? "org.domyweb.qieji"
+        )
+        start(found, with: disk)
+    }
+
+    /// 讀不到、這次不准寫檔的時候：回到前景再讀一次。讀到了，中間記的字跟著帶過去一起存
+    func thaw() {
+        guard loaded, frozen, let disk else { return }
+        let found = disk.load()
+        guard !found.frozen else {
+            tellUnread(found)
+            return
+        }
+        if let currentID {
+            keepDraft(in: currentID)
+        }
+        let typed = book.notes.filter { !Labels.isEmpty($0) || !$0.bin.isEmpty || $0.cover != nil }
+        toast = nil
+        notice = nil
+        start(found, with: disk, adding: typed)
+        if !typed.isEmpty {
+            toast = Toast(text: Words.typedKept)
+        }
+    }
+
+    private func start(_ read: Disk.Loaded, with disk: Disk, adding typed: [Note] = []) {
+        var found = read
         if found.source != .fresh, !found.unreadable {
             Seats.ownLayout(&found.book)
             Seats.packGrid(&found.book, now: Clock.now())
         }
         frozen = found.frozen
-        disk.seedRecent(found.recent, last: found.last)
-        Prefs.shared.start(
-            old: found.source == .legacy ? found.legacy : nil, fresh: found.source == .fresh,
-            bundleID: Bundle.main.bundleIdentifier ?? "org.domyweb.qieji"
-        )
-        adopt(found.book, last: found.last)
-        if found.unreadable {
-            // 原本那份已經另存（不會被蓋掉）：先講沒有損失，再講紙會從哪裡回來
-            notice = Notice(title: Words.unreadableTitle, body: Words.unreadableBody)
+        if !frozen {
+            disk.seedRecent(found.recent, last: found.last)
         }
+        found.book.notes += typed
+        adopt(found.book, last: found.last)
+        tellUnread(found)
         purgeTrash()
         flush()
+    }
+
+    /// 已經另存的：先講沒有損失，再講紙會從哪裡回來。沒另存成的不准說另存了
+    private func tellUnread(_ found: Disk.Loaded) {
+        guard found.unreadable else { return }
+        notice = found.frozen
+            ? Notice(title: Words.unreadTitle, body: Words.unreadBody)
+            : Notice(title: Words.unreadableTitle, body: Words.unreadableBody)
     }
 
     /// 最近刪除 30 天自動清：打開 app、回到前景各跑一次。清掉的紙立墓碑（不然同步會從另一台把它帶回來）

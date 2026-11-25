@@ -7,7 +7,7 @@ import os
 /// 第一次打開（還沒有 state.json）會去找 Expo 版的舊存檔搬過來。搬的規矩：
 /// 1. 舊存檔只讀，不改、不刪。
 /// 2. 讀到的原文先原封不動另存一份（from-expo.json），存成功才繼續；之後每次都只寫 state.json。
-/// 3. 讀不出來的檔一律另存、不蓋掉。
+/// 3. 讀不出來的檔一律另存、不蓋掉。檔在但讀不到、或另存不成：這次打開什麼都不寫（frozen），回到前景再試。
 final class Disk {
     enum Source: Equatable {
         case native // 讀到 Swift 版自己的存檔
@@ -20,9 +20,9 @@ final class Disk {
         var source: Source
         var last: String?
         var recent: [String]
-        var unreadable: Bool // 有存檔卻讀不出來，原本那份已另存
+        var unreadable: Bool // 有存檔卻讀不出來。frozen 是 false 就代表原本那份已另存
         var legacy: [String: String] // 舊版其他的設定（買了沒、同步開關、外觀、字級），原樣帶著給之後的功能用
-        var frozen = false // 舊存檔沒能先另存一份：這次打開什麼都不寫，下次再試
+        var frozen = false // 原本那份讀不到、或沒能先另存一份：這次打開什麼都不寫，下次再試
     }
 
     static let log = Logger(subsystem: "org.domyweb.qieji", category: "disk")
@@ -32,7 +32,10 @@ final class Disk {
     /// 寫檔一筆一筆排隊（背景寫的、馬上寫的都排同一條），先叫的先寫完：舊的不會蓋掉新的
     private let queue = DispatchQueue(label: "org.domyweb.qieji.disk", qos: .userInitiated)
     private var written: String? // 上次寫進去的那一份。只在 queue 上碰
+    private var held = false // 原本那份還沒保住：叫了也不寫。只在 queue 上碰
     private var recentSeen: [String]? // 最近開過的，手上這份。只在主執行緒碰
+
+    private static let rescueMax = 9
 
     private var stateFile: URL {
         dir.appendingPathComponent("state.json")
@@ -42,8 +45,9 @@ final class Disk {
         dir.appendingPathComponent("from-expo.json")
     }
 
-    private var rescueFile: URL {
-        dir.appendingPathComponent("unreadable.json")
+    /// 讀不出來的存檔另存在這幾個名字：壞第二次不蓋掉第一次另存的
+    private var rescueFiles: [URL] {
+        (1 ... Disk.rescueMax).map { dir.appendingPathComponent($0 == 1 ? "unreadable.json" : "unreadable-\($0).json") }
     }
 
     init(dir: URL, legacyDirs: [URL], defaults: UserDefaults = .standard) {
@@ -65,9 +69,19 @@ final class Disk {
     static let wipedKey = "qieji.native.wiped"
 
     func load(now: Double = Clock.now()) -> Loaded {
+        let found = find(now: now)
+        queue.sync { held = found.frozen }
+        return found
+    }
+
+    private func find(now: Double) -> Loaded {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        if let raw = try? String(contentsOf: stateFile, encoding: .utf8) {
-            let mine = loadNative(raw)
+        switch readState() {
+        case .blocked:
+            // 檔在、只是現在讀不到：不准當成新裝的、不准退回去搬 1.1 的舊資料
+            return Loaded(book: empty(), source: .native, last: nil, recent: [], unreadable: true, legacy: [:], frozen: true)
+        case let .got(data):
+            let mine = loadNative(data)
             // 補搬：上次打開時沒讀到舊版存檔（剛好讀不到、或舊檔後來才出現），所以手上只有一張沒動過的教學紙；
             // 這次讀得到了就照樣搬。手上已經有使用者自己的東西就不搬（不拿舊的蓋新的）；清除過所有資料也不搬
             let onlyTutorial = !mine.unreadable && mine.book.notes.allSatisfy(Tutorial.isUntouched)
@@ -76,15 +90,53 @@ final class Disk {
                 return loadLegacy(found.raw, old: found.old)
             }
             return mine
+        case .none:
+            break
         }
         if let found = legacy() {
             return loadLegacy(found.raw, old: found.old)
         }
-        var book = Notebook()
-        book.grid = Seats.gridCols // 新裝的沒有寬磚時期的空位：下次打開不准清、不准把排列時間改成現在（會蓋掉 iCloud 的排列）
+        var book = empty()
         let first = Tutorial.note(now: now)
         book.notes.append(first)
         return Loaded(book: book, source: .fresh, last: first.id, recent: [], unreadable: false, legacy: [:])
+    }
+
+    /// 空的一份。新開始的沒有寬磚時期的空位：下次打開不准清、不准把排列時間改成現在（會蓋掉 iCloud 的排列）
+    private func empty() -> Notebook {
+        var book = Notebook()
+        book.grid = Seats.gridCols
+        return book
+    }
+
+    private enum Found {
+        case none // 沒有這個檔
+        case got(Data)
+        case blocked // 讀不到（沒權限、還沒解鎖、磁碟出錯）。不確定檔在不在也算這個
+    }
+
+    /// 只有系統明講「沒有這個檔」才算沒有
+    private func readState() -> Found {
+        do {
+            return try .got(Data(contentsOf: stateFile))
+        } catch CocoaError.fileReadNoSuchFile {
+            return .none
+        } catch {
+            Disk.log.error("state.json not read: \((error as NSError).code, privacy: .public)")
+            return .blocked
+        }
+    }
+
+    /// 讀不出來的那份原封不動另存（一模一樣的已經有了就不再存）。回傳有沒有一份在
+    private func rescue(_ data: Data) -> Bool {
+        for file in rescueFiles {
+            if (try? Data(contentsOf: file)) == data {
+                return true
+            }
+            guard !FileManager.default.fileExists(atPath: file.path) else { continue }
+            return (try? data.write(to: file, options: .atomic)) != nil
+        }
+        return false
     }
 
     /// 找 Expo 版留下來的存檔（新的位置先找）
@@ -97,15 +149,17 @@ final class Disk {
         return nil
     }
 
-    private func loadNative(_ raw: String) -> Loaded {
+    private func loadNative(_ data: Data) -> Loaded {
         queue.sync {} // 上一份設定還在排隊的先寫完
         let last = defaults.string(forKey: LegacyStore.lastKey)
         let recent = defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
-        guard let book = NoteCoding.readBook(raw) else {
-            // 讀不出來：原本那份另存，接下來的存檔才不會把唯一的一份蓋掉
-            let saved = (try? raw.write(to: rescueFile, atomically: true, encoding: .utf8)) != nil
+        guard let raw = String(data: data, encoding: .utf8), let book = NoteCoding.readBook(raw) else {
+            // 讀不出來：原本那份另存，接下來的存檔才不會把唯一的一份蓋掉。另存不成就什麼都不寫
+            let saved = rescue(data)
             Disk.log.error("state.json unreadable, rescued=\(saved)")
-            return Loaded(book: Notebook(), source: .native, last: nil, recent: [], unreadable: true, legacy: [:])
+            return Loaded(
+                book: empty(), source: .native, last: nil, recent: [], unreadable: true, legacy: [:], frozen: !saved
+            )
         }
         queue.sync { written = raw }
         return Loaded(book: book, source: .native, last: last, recent: recent, unreadable: false, legacy: [:])
@@ -122,7 +176,7 @@ final class Disk {
         guard copied, let book = NoteCoding.readBook(raw) else {
             Disk.log.error("legacy store unreadable or copy failed, copied=\(copied)")
             return Loaded(
-                book: Notebook(), source: .legacy, last: nil, recent: [], unreadable: true, legacy: old, frozen: !copied
+                book: empty(), source: .legacy, last: nil, recent: [], unreadable: true, legacy: old, frozen: !copied
             )
         }
         return Loaded(book: book, source: .legacy, last: old[LegacyStore.lastKey], recent: recent, unreadable: false, legacy: old)
@@ -145,6 +199,7 @@ final class Disk {
 
     /// 跟上次寫的一字不差就不再寫
     private func put(_ book: Notebook) -> Bool {
+        guard !held else { return false }
         let text = NoteCoding.write(book)
         if text == written {
             return true
@@ -165,7 +220,7 @@ final class Disk {
     func wipe() -> Bool {
         queue.sync {} // 還在背景排隊的先寫完
         var clean = true
-        for file in [expoCopy, rescueFile] where FileManager.default.fileExists(atPath: file.path) {
+        for file in [expoCopy] + rescueFiles where FileManager.default.fileExists(atPath: file.path) {
             do {
                 try FileManager.default.removeItem(at: file)
             } catch {

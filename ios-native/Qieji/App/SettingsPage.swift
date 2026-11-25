@@ -362,6 +362,10 @@ struct SettingsPage: View {
 
     /// 清除所有資料（1.1 片 F2，只清這支手機）：先關同步（不然下一次拉取又全部回來），清完回到剛裝好的樣子
     private func wipe() {
+        guard !store.frozen else { // 這次不准寫檔，一定清不成：別先把同步關掉
+            alert = Notice(title: Words.unreadTitle, body: Words.unreadBody)
+            return
+        }
         if shop.full, cloud.syncOn {
             cloud.setSyncOn(false, full: shop.full)
         }

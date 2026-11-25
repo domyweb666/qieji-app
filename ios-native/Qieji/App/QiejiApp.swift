@@ -165,6 +165,10 @@ struct RootView: View {
         }
         .onChange(of: phase) { now in
             if now == .active {
+                if store.frozen {
+                    KeyboardWatch.dismiss() // 先收鍵盤：打到一半的字要落在現在這張，不准跑到讀回來的紙上
+                    store.thaw() // 打開時讀不到存檔：再讀一次
+                }
                 store.purgeTrash()
                 if !RootView.offline {
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）

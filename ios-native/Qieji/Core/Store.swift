@@ -113,7 +113,7 @@ final class Store: ObservableObject {
     var landed: (note: String, line: String)? // 剛併進正在看的那張的最上面一行：紙拿去亮一下
 
     @Published private(set) var loaded = false
-    /// 這次打開不准寫檔（舊存檔沒能先備份）
+    /// 這次打開不准寫檔（原本的存檔讀不到、或沒能先備份）。回到前景再試（thaw）
     var frozen = false
 
     let disk: Disk?
@@ -169,7 +169,9 @@ final class Store: ObservableObject {
         guard book.note(id) != nil else { return }
         let leaving = currentID
         currentID = id
-        disk?.rememberLast(id)
+        if !frozen {
+            disk?.rememberLast(id)
+        }
         pushWidgetSoon()
         if let leaving, leaving != id {
             PerfMeter.time("tidy") {
