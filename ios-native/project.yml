@@ -14,7 +14,7 @@ targets:
     platform: iOS
     sources:
       - Qieji
-      - Shared # 控制中心按鈕的動作：app 與擴充都要編進去
+      - Shared # 控制中心按鈕的動作、分享進來的收件匣：app 與擴充都要編進去
     dependencies:
       - target: QiejiControls
       - target: QiejiWidgets
@@ -85,7 +85,13 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - QiejiControls
-      - Shared
+      # 分享進來的那四個用不到
+      - path: Shared
+        excludes:
+          - ShareInbox.swift
+          - ShareText.swift
+          - Ident.swift
+          - LineSplit.swift
     info:
       path: QiejiControls/Info.plist
       properties:
@@ -142,6 +148,10 @@ targets:
     deploymentTarget: "16.4"
     sources:
       - QiejiShare
+      - path: Shared/ShareInbox.swift
+      - path: Shared/ShareText.swift
+      - path: Shared/Ident.swift
+      - path: Shared/LineSplit.swift
       - path: Qieji/Design/Tokens.swift
     entitlements:
       path: QiejiShare/QiejiShare.entitlements

@@ -72,7 +72,9 @@ struct RootView: View {
         if info.environment["XCTestConfigurationFilePath"] != nil {
             return Store()
         }
-        return Store(disk: Disk.standard())
+        let real = Store(disk: Disk.standard())
+        real.inbox = .app
+        return real
     }
 
     var body: some View {
@@ -114,6 +116,9 @@ struct RootView: View {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路
                 store.isFull = shop.full
                 store.fullKnown = true // 知道買了沒才推小工具
+                // 分享進來的字併進紙（免費）。正在拖一行、滑一行、拖磚時先等放手
+                store.inboxHold = { [weak dir] in LineListView.current?.handling == true || dir?.drag != nil }
+                store.takeInbox()
                 cloud.store = store
                 cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
                 ReviewAsk.opened() // 評分提示要數「在幾個不同的日子打開過」
@@ -160,6 +165,7 @@ struct RootView: View {
             if now == .active {
                 store.purgeTrash()
                 if !RootView.offline {
+                    store.takeInbox() // 剛才在別的 app 分享進來的
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
                     ReviewAsk.opened()
                     cloud.pull() // 回到前景去 iCloud 拉一次

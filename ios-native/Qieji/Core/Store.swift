@@ -101,6 +101,14 @@ final class Store: ObservableObject {
     var widgetSent: Data?
     var widgetWork: DispatchWorkItem?
 
+    /// 分享進來（StoreInbox）：收件匣在哪。只有真的 app 才接 App Group，假資料、測試不碰
+    var inbox = ShareInbox.off
+    let inboxGate = InboxGate()
+    var inboxTurn = 0 // 清除所有資料一次加一：清之前讀到的不算
+    var inboxHold: () -> Bool = { false } // 手上正在拖東西：先不併
+    var targetSent: ShareTarget?? // 上次推出去的那一張（還沒推過、推過「沒有」、推過這張）
+    var landed: (note: String, line: String)? // 剛併進正在看的那張的最上面一行：紙拿去亮一下
+
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（舊存檔沒能先備份）
     var frozen = false
@@ -304,11 +312,17 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動
-    func saveSoon() {
-        guard let disk, readyToSave() else { return }
+    /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動。done＝這一份寫進檔案了沒（現在不能存也回 false），在主執行緒叫
+    func saveSoon(_ done: @escaping (Bool) -> Void = { _ in }) {
+        guard let disk, readyToSave() else {
+            done(false)
+            return
+        }
         let turn = saveTurn
-        disk.writeLater(book) { [weak self] saved in self?.saveDone(saved, turn: turn) }
+        disk.writeLater(book) { [weak self] saved in
+            self?.saveDone(saved, turn: turn)
+            done(saved)
+        }
     }
 
     /// 馬上存、存完才回來（進背景時叫）。背景還沒寫完的排在前面，最後留在檔案裡的一定是這一份

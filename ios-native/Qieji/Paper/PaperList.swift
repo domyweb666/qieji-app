@@ -54,7 +54,14 @@ struct PaperList: UIViewRepresentable {
         list.restyle(LineLook(key: note.color, scale: scale))
         list.setHead(front)
         // 看現在的資料，不看交下來的那份（那份可能慢一拍，會把剛打的字蓋回去）
-        UIView.lively { list.refresh() }
+        let landed = store.takeLanded(in: note)
+        UIView.lively {
+            if let landed {
+                list.takeIn(landed)
+            } else {
+                list.refresh()
+            }
+        }
         seek(list)
     }
 
@@ -67,9 +74,10 @@ struct PaperList: UIViewRepresentable {
         head.map { AnyView($0.coordinateSpace(name: PaperList.space)) }
     }
 
-    /// 從搜尋點一行過來（1.1 Paper seekRow）：換紙那一下清單還沒排好，晚一格再捲
+    /// 從搜尋點一行過來（1.1 Paper seekRow）：換紙那一下清單還沒排好，晚一格再捲。
+    /// 清單剛做好就有分享進來的行也走這裡
     private func seek(_ list: LineListView) {
-        guard let line = store.takeSeek(in: note) else { return }
+        guard let line = store.takeSeek(in: note) ?? store.takeLanded(in: note) else { return }
         DispatchQueue.main.async { [weak list] in list?.seek(line) }
     }
 
@@ -113,5 +121,30 @@ struct PaperList: UIViewRepresentable {
 extension LineListView {
     static func items(_ note: Note) -> [LineItem] {
         note.items.map { LineItem(id: $0.id, text: $0.text, done: $0.done) }
+    }
+
+    /// 手上正拖著、滑著一行
+    var handling: Bool {
+        drag != nil || swiping != nil
+    }
+
+    /// 分享進來的行併進正在看的這張（2.1）：捲回最上面、亮一下，跟輸入框記下一行一樣。
+    /// 正在打字：那一行留在原地，鍵盤和游標不動；輸入框開著、手指碰著、還在捲：不捲
+    func takeIn(_ id: String) {
+        if editingID != nil {
+            let tall = total, spot = contentOffset.y
+            refresh(animated: false, stay: true)
+            if total > tall {
+                contentOffset.y = spot + total - tall
+            }
+        } else if keyboardOverlap > 0 || isTracking || isDecelerating || handling {
+            // 已經捲下去：畫面原地不動；在最上面：新的一行淡入、其他行讓開
+            let scrolled = contentOffset.y > Tok.Shape.rowMin
+            refresh(animated: !scrolled, stay: scrolled)
+        } else {
+            toTop(id)
+            return
+        }
+        flash(id)
     }
 }

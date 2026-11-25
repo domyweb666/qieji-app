@@ -296,6 +296,15 @@ enum Words {
         "這張只剩 \(room) 行的空間，先不拆"
     }
 
+    /// 分享進來的字放進了別張（2.1）
+    static func landedIn(_ name: String) -> String {
+        "已放進「\(name)」"
+    }
+
+    static func landedMany(_ count: Int) -> String {
+        "已放進 \(count) 張"
+    }
+
     static func full(_ max: Int) -> String {
         "這張已經滿 \(max) 行，開一張新的吧"
     }

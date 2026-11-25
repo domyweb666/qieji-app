@@ -107,10 +107,11 @@ extension Store {
     }
 
     /// 清除所有資料（1.1 片 F2，多米 2026-11-14 定：只清這支手機）：紙、最近刪除、目錄排列、資料夾全部拿掉，回到剛裝好的樣子（一張教學紙）。
+    /// 分享進來還沒併的字、共用區裡那張的名字也一起清（2.1）。
     /// 整份換成新的，不立墓碑：墓碑會在之後重新打開同步時傳上去，把 iCloud 和別台的紙也刪掉。iCloud 雲碟裡的檔案這裡完全不碰。
     /// 呼叫的人要先把 iCloud 同步關掉。回傳有沒有清乾淨、存成功
     func wipe() -> Bool {
-        guard loaded, let disk, !frozen, disk.wipe() else { return false }
+        guard loaded, let disk, !frozen, disk.wipe(), wipeInbox() else { return false }
         var fresh = Notebook()
         fresh.grid = Seats.gridCols // 跟新裝的一樣（見 Disk）
         let first = Tutorial.note(now: Clock.now())
