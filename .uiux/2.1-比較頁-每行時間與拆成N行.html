@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>茄記 2.1 比較頁</title>
+<style>
+:root{--ink:#2E2233;--sub:#75677A;--page:#FBF3E7;--card:#FFFCF6;--line:#EADFCF;--acc:#7D467F;--red:#C83C32;--paper:#F4EEF2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:16px/1.6 -apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;padding:24px 16px 64px}
+main{max-width:1120px;margin:auto}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:20px;margin:40px 0 4px}p{margin:4px 0 16px;color:var(--sub);max-width:46em}
+.row{display:flex;flex-wrap:wrap;gap:24px}
+figure{margin:0;width:320px;max-width:100%}
+figcaption{margin-top:8px;font-size:14px;color:var(--sub)}figcaption b{color:var(--ink);display:block;font-size:16px}
+.phone{position:relative;height:430px;border-radius:32px;overflow:hidden;background:var(--paper);border:1px solid var(--line)}
+.line{padding:13px 16px;border-bottom:1px solid #2e22331f;font-size:16px}
+.veil{position:absolute;inset:0;background:#f4eef2b8;backdrop-filter:blur(3px)}
+.lift{position:absolute;left:8px;right:8px;top:64px;background:var(--paper);border-radius:14px;padding:13px 12px;box-shadow:0 8px 24px #3b205024}
+.menu{position:absolute;right:12px;top:126px;width:248px;background:#fffcf6f2;border-radius:24px;overflow:hidden;box-shadow:0 8px 24px #3b205024}
+.mi{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-top:1px solid #2e22331f}
+.mi:first-child{border-top:0}.mi.red{color:var(--red)}
+.when{font-size:13px;color:var(--sub);padding:9px 16px;border-top:1px solid #2e22331f}
+.when.top{border-top:0}.out{position:absolute;right:28px;top:328px;font-size:13px;color:var(--sub)}
+.dim{position:absolute;inset:0;background:#0003}
+.kb{position:absolute;left:0;right:0;bottom:0;height:120px;background:#d1d3d9;display:grid;place-items:center;color:#75677a;font-size:13px}
+.box{position:absolute;left:8px;right:8px;bottom:128px;background:var(--card);border-radius:24px;padding:10px 52px 10px 16px;box-shadow:0 8px 24px #3b205024;white-space:pre-line}
+.ok{position:absolute;right:18px;bottom:10px;font-size:20px;font-weight:600}
+.chip{border:0;font:600 15px/1 inherit;font-family:inherit;min-height:44px;padding:0 18px;border-radius:22px;background:var(--acc);color:#fff;cursor:pointer}
+.chip.soft{background:#7d467f1f;color:var(--acc)}
+.up{position:absolute;bottom:calc(100% + 8px)}.up.l{left:0}.up.r{right:0}
+.toast{position:absolute;left:24px;right:24px;bottom:24px;background:var(--card);border-radius:24px;padding:12px 16px;display:flex;justify-content:space-between;box-shadow:0 8px 24px #3b205024}
+.toast button{border:0;background:none;color:var(--acc);font:600 15px inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+</style>
+<main>
+<h1>茄記 2.1：兩個要選的樣子</h1>
+<p>回「1A、2A」這樣就好。文字大小和間距照現有代號，真機會再對一次。</p>
+
+<h2>1　每行的時間</h2>
+<p>按住一行才看得到，紙上不出現。讀不出時間的行就沒有這一行字。</p>
+<div class="row" id="c7"></div>
+
+<h2>2　拆成 N 行</h2>
+<p>只有在輸入框貼上好幾行才冒出來，不按就照舊是一則。可以按按看，按完有復原。</p>
+<div class="row" id="c10"></div>
+</main>
+<script>
+const items='<div class="mi">劃掉<span>S̶</span></div><div class="mi">搬到…<span>↱</span></div><div class="mi">複製<span>⧉</span></div><div class="mi red">刪除<span>🗑</span></div>';
+const w=(c='')=>`<div class="when ${c}">2026/11/25 14:03 記的</div>`;
+const c7=[['1A　卡片最下面（推薦）','離手指最遠，不會誤點，劃掉等四項位置不變。',items+w(),''],
+['1B　卡片最上面','先看到時間，四項往下移 37 點。',w('top')+items,''],
+['1C　卡片外面','卡片不變。字直接壓在霧上，底下的字多時比較難讀。',items,'<div class="out">2026/11/25 14:03 記的</div>']];
+document.getElementById('c7').innerHTML=c7.map(([t,d,m,o])=>`<figure><div class="phone"><div class="line">買牛奶</div><div class="line">回信給出版社</div><div class="line">想讀的那本書</div><div class="line">訂高鐵票</div><div class="line">影片點子</div><div class="line">報帳</div><div class="line">修水龍頭</div><div class="line">植物要換盆</div><div class="veil"></div><div class="lift">回信給出版社</div><div class="menu">${m}</div>${o}</div><figcaption><b>${t}</b>${d}</figcaption></figure>`).join('');
+const L=['牛奶','蛋','豆腐','青蔥'];
+const c10=[['2A　輸入框左上方，實心（推薦）','最顯眼，也離 ✓ 最遠。右上方留給現有的 Return 提示卡。','up l',''],
+['2B　輸入框右上方，實心','右手大拇指最近，但會跟 Return 提示卡搶同一個位置。','up r',''],
+['2C　輸入框裡、字的下面，淡色','最安靜，輸入框會高 52 點，貼很長時要捲才看得到。','','soft']];
+const root=document.getElementById('c10');
+function draw(f,k){const[t,d,pos,soft]=c10[k];const chip=`<button class="chip ${soft} ${pos}">拆成 4 行</button>`;
+f.innerHTML=`<div class="phone"><div class="line">想讀的那本書</div><div class="line">訂高鐵票</div><div class="dim"></div><div class="box">${L.join('\n')}${pos?chip:'<br>'+chip}<span class="ok">✓</span></div><div class="kb">鍵盤</div></div><figcaption><b>${t}</b>${d}</figcaption>`;
+f.querySelector('.chip').onclick=()=>{f.querySelector('.phone').innerHTML=L.concat(['想讀的那本書','訂高鐵票']).map(x=>`<div class="line">${x}</div>`).join('')+'<div class="toast">已拆成 4 行<button>復原</button></div>';
+f.querySelector('.toast button').onclick=()=>{f.querySelector('.phone').innerHTML=`<div class="line" style="white-space:pre-line">${L.join('\n')}</div><div class="line">想讀的那本書</div><div class="line">訂高鐵票</div>`;setTimeout(()=>draw(f,k),1800)}}}
+c10.forEach((_,k)=>{const f=document.createElement('figure');root.append(f);draw(f,k)});
+</script>
+</html>
