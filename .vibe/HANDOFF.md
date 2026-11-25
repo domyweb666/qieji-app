@@ -5,9 +5,13 @@
 
 ## 接手第一件事
 
-**做 C1 分享進來。多米 2026-11-25 選 3A、4A、5A。** 規格、派工順序、勾選都在 `.vibe/規格-分享進來-2026-11-25.md`：看哪一包沒打勾就從那包接，一包派一個子代理、依序做（會改到同樣的檔）。`git log`、`git status` 先看做到哪；`lim ios list`、`lim xcode list` 看有沒有忘了關的機器（label project=qieji21 是我們的）。
+**C1 分享進來做到一半，規格、試做結果、勾選都在 `.vibe/規格-分享進來-2026-11-25.md`。**
 
-**打包前一定要問多米兩件（他還沒單獨點頭）**：分享進來的行會跟著上 iCloud；Apple 後台要多開 `org.domyweb.qieji.share`。
+1. 先 `git status`：審查五條的修正（StoreInbox、CloudLink、QiejiApp、ShareInbox、Share 測試）如果沒 commit，跑一次 limrun 測試與格式檢查，綠了就 commit；紅的就接著修
+2. **等多米選容器：3D 還是硬做 3A**（3A 照比較頁做不出來，原因在規格檔「S0、S0b 試做結果」）。選了才派 S2（擴充畫面）
+3. S2 之後再審一輪資料安全，安全標準定稿
+4. 打包前一定要問多米兩件（他還沒單獨點頭）：分享進來的行會跟著上 iCloud；Apple 後台要多開 `org.domyweb.qieji.share`
+5. 問多米：`Disk.swift:106` 那條既有問題修不修
 
 ## 做完的
 
