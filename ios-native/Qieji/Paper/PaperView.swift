@@ -275,7 +275,7 @@ struct PaperView: View {
         let id = note.id
         guard await locks.unlock(id, reason: Words.confirmReason) else { return }
         store.setLocked(id, true)
-        store.pushTarget(now: true) // 分享卡上那張的名字馬上換掉，不等存檔
+        store.pushTarget(now: true) // 分享卡的紙單馬上拿掉這張，不等存檔
         // 上鎖的紙只存在這支手機：拿掉 iCloud 上那份；拿不掉要跟使用者講
         CloudLink.shared.dropNote(id) { gone in
             store.toast = Store.Toast(text: gone ? Words.lockedToast : Words.lockedKeptCloud)

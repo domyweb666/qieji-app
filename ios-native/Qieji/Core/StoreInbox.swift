@@ -5,7 +5,7 @@ import Foundation
 extension Store {
     /// 收件匣的讀、刪都排這一條。共用容器第一次拿很慢，不准在主執行緒等
     private static let inboxQueue = DispatchQueue(label: "org.domyweb.qieji.inbox", qos: .userInitiated)
-    /// 那一張的名字自己一條：上鎖那一刻要等它寫完，不准排在讀檔、算指紋後面
+    /// 紙單自己一條：上鎖那一刻要等它寫完，不准排在讀檔、算指紋後面
     private static let nameQueue = DispatchQueue(label: "org.domyweb.qieji.inbox.name", qos: .userInitiated)
 
     // MARK: 併進紙
@@ -146,41 +146,40 @@ extension Store {
         return found.note == note.id ? found.line : nil
     }
 
-    // MARK: 那一張的名字
+    // MARK: 可選的紙單
 
-    /// 分享卡上寫的「放進 X」：跟小工具同樣的時候推，不看買了沒。內容一樣不寫。
+    /// 分享卡上「放進 X ▾」的紙單：跟小工具同樣的時候推，不看買了沒。內容一樣不寫。
     /// now＝上鎖那一刻：寫完才回來
     func pushTarget(now: Bool = false) {
         guard loaded, disk != nil else { return }
-        let target = shareTarget()
-        guard now || targetSent != .some(target) else { return }
-        targetSent = .some(target)
+        let targets = shareTargets()
+        guard now || targetsSent != targets else { return }
+        targetsSent = targets
         let inbox = inbox
         if now {
-            Store.nameQueue.sync { inbox.setTarget(target) }
+            Store.nameQueue.sync { inbox.setTargets(targets) }
         } else {
-            Store.nameQueue.async { inbox.setTarget(target) }
+            Store.nameQueue.async { inbox.setTargets(targets) }
         }
     }
 
-    private func shareTarget() -> ShareTarget? {
-        let spot = InboxMerge.place(book, wanted: nil, current: currentID, recent: disk?.recent ?? [], need: 1)
-        return spot.map { book.notes[$0] }.map {
+    private func shareTargets() -> [ShareTarget] {
+        InboxMerge.choices(book, current: currentID, recent: disk?.recent ?? []).map {
             ShareTarget(id: $0.id, title: Labels.label($0), glyph: Labels.glyph($0), color: $0.color)
         }
     }
 
     // MARK: 清除
 
-    /// 清除所有資料：收件匣和名字一起清；讀到一半還沒併的不算數。回傳有沒有清乾淨
+    /// 清除所有資料：收件匣和紙單一起清；讀到一半還沒併的不算數。回傳有沒有清乾淨
     func wipeInbox() -> Bool {
         inboxTurn += 1
         landed = nil
-        targetSent = nil
+        targetsSent = nil
         inboxPut = [:]
         inboxKept = []
         let inbox = inbox
-        Store.nameQueue.sync {} // 還在排隊的名字先寫完，才不會清掉之後又寫回去
+        Store.nameQueue.sync {} // 還在排隊的紙單先寫完，才不會清掉之後又寫回去
         return Store.inboxQueue.sync { inbox.wipe() }
     }
 }
@@ -240,6 +239,16 @@ enum InboxMerge {
             }
         }
         return book.notes.indices.filter { fits(book.notes[$0], need) }.max { book.notes[$0].updated < book.notes[$1].updated }
+    }
+
+    /// 分享卡上可以選的紙。第一張＝沒選時會放的那張；後面照切換清單：釘選的 → 最近開過的 → 最近改過的補，張數也一樣。
+    /// 先濾掉不能記的再算：上鎖的、滿了的不佔名額
+    static func choices(_ book: Notebook, current: String?, recent: [String]) -> [Note] {
+        guard let first = place(book, wanted: nil, current: current, recent: recent, need: 1).map({ book.notes[$0] }) else { return [] }
+        var usable = book
+        usable.notes = book.notes.filter { fits($0, 1) }
+        let lists = Seats.switchList(usable, recent: [first.id] + recent)
+        return [first] + (lists.pinned + lists.recent).filter { $0.id != first.id }
     }
 
     /// 能記的：沒刪、是清單、沒上鎖、放得下

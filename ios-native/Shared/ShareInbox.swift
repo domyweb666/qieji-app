@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// 分享進來會放進哪一張：擴充只看得到這四樣，拿不到紙的內容。上鎖、記事本、刪掉、滿了的紙不准放這裡（安全標準）
+/// 分享進來可以放進的一張：擴充只看得到這四樣，拿不到紙的內容。上鎖、記事本、刪掉、滿了的紙不准放這裡（安全標準）
 struct ShareTarget: Codable, Equatable {
     var id: String
     var title: String
@@ -64,13 +64,17 @@ struct ShareEntry: Codable, Equatable {
     }
 }
 
-/// App Group 裡跟「分享進來」有關的兩個地方：收件匣資料夾（一次分享一個檔）、那一張的名字。
-/// 擴充寫收件匣、讀名字；app 讀收件匣、寫名字。使用者的字不進 log，只寫數量與錯誤代碼
+/// App Group 裡跟「分享進來」有關的兩個地方：收件匣資料夾（一次分享一個檔）、可選的紙單。
+/// 擴充寫收件匣、讀紙單；app 讀收件匣、寫紙單。使用者的字不進 log，只寫數量與錯誤代碼
 struct ShareInbox {
     /// 跟 WidgetShare.group 同一個（小工具那份沒有編進擴充）
     static let group = "group.org.domyweb.qieji"
     static let folderName = "Inbox"
-    static let targetKey = "shareTarget.v1"
+    static let targetsKey = "shareTargets.v1"
+    /// 只放一張的舊鍵：沒有出貨過，碰到就拿掉
+    static let oldTargetKey = "shareTarget.v1"
+    /// 紙單最多幾張
+    static let maxTargets = 20
     /// 跟 Lines.max 同一個
     static let maxLines = 1000
     static let maxBytes = 512 * 1024
@@ -176,16 +180,16 @@ struct ShareInbox {
         }
     }
 
-    /// 清除所有資料：整個收件匣（連讀不懂的）和那一張的名字都拿掉。回傳有沒有清乾淨
+    /// 清除所有資料：整個收件匣（連讀不懂的）和紙單都拿掉。回傳有沒有清乾淨
     func wipe() -> Bool {
         guard !isOff else { return true }
-        setTarget(nil)
+        setTargets([])
         // 共用區拿不到就不知道裡面還有沒有字：不准說清乾淨了
         guard let settings = settings(), let dir = folder() else {
             ShareInbox.log.error("wipe failed: no app group container")
             return false
         }
-        let named = settings.object(forKey: ShareInbox.targetKey) != nil
+        let named = [ShareInbox.targetsKey, ShareInbox.oldTargetKey].contains { settings.object(forKey: $0) != nil }
         guard FileManager.default.fileExists(atPath: dir.path) else { return !named }
         do {
             try FileManager.default.removeItem(at: dir)
@@ -231,26 +235,44 @@ struct ShareInbox {
         return "\(plain.domain) \(plain.code)"
     }
 
-    // MARK: 那一張的名字
+    // MARK: 可選的紙單
 
-    func target() -> ShareTarget? {
-        settings()?.data(forKey: ShareInbox.targetKey).flatMap { try? JSONDecoder().decode(ShareTarget.self, from: $0) }
+    /// 第一張是預設的。當外面來的資料：解不開回空的
+    func targets() -> [ShareTarget] {
+        guard let data = settings()?.data(forKey: ShareInbox.targetsKey),
+              let list = try? JSONDecoder().decode([ShareTarget].self, from: data) else { return [] }
+        return ShareInbox.sound(list)
     }
 
-    /// nil＝拿掉。內容一樣不寫
-    func setTarget(_ next: ShareTarget?) {
+    /// 空的＝拿掉。內容一樣不寫
+    func setTargets(_ next: [ShareTarget]) {
         guard let settings = settings() else { return }
-        guard let next else {
-            settings.removeObject(forKey: ShareInbox.targetKey)
+        // 拿掉不存在的鍵也算寫一次：有才拿
+        if settings.object(forKey: ShareInbox.oldTargetKey) != nil {
+            settings.removeObject(forKey: ShareInbox.oldTargetKey)
+        }
+        let list = ShareInbox.sound(next)
+        guard !list.isEmpty else {
+            settings.removeObject(forKey: ShareInbox.targetsKey)
             return
         }
-        guard next != target() else { return }
         do {
-            try settings.set(JSONEncoder().encode(next), forKey: ShareInbox.targetKey)
+            // 比寫進去的原樣，不比讀回來的：讀的時候會丟掉多的，裡面說不定還留著不該在的
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .sortedKeys
+            let data = try encoder.encode(list)
+            guard data != settings.data(forKey: ShareInbox.targetsKey) else { return }
+            settings.set(data, forKey: ShareInbox.targetsKey)
         } catch {
-            // 編不出來就拿掉：寧可沒有名字，不准留著舊的（舊的那張可能已經上鎖）
-            settings.removeObject(forKey: ShareInbox.targetKey)
-            ShareInbox.log.error("target not encoded: \(ShareInbox.brief(error), privacy: .public)")
+            // 編不出來就拿掉：寧可沒有紙單，不准留著舊的（裡面可能有剛上鎖的）
+            settings.removeObject(forKey: ShareInbox.targetsKey)
+            ShareInbox.log.error("targets not encoded: \(ShareInbox.brief(error), privacy: .public)")
         }
+    }
+
+    /// id 空的、重複的丟掉（留前面的），最多 maxTargets 張
+    private static func sound(_ list: [ShareTarget]) -> [ShareTarget] {
+        var seen = Set<String>()
+        return Array(list.filter { !$0.id.isEmpty && seen.insert($0.id).inserted }.prefix(maxTargets))
     }
 }

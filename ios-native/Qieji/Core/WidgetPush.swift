@@ -32,7 +32,7 @@ extension WidgetSnap {
 extension Store {
     /// 推給小工具。還不知道買了沒就先不推：打開 app 那一下不要把買了的人的小工具閃成鎖住
     func pushWidget() {
-        pushTarget() // 分享卡上的「放進 X」是免費的：不看買了沒
+        pushTarget() // 分享卡上的「放進 X ▾」是免費的：不看買了沒
         guard fullKnown, disk != nil else { return }
         let snap = WidgetSnap.make(note: current, full: isFull)
         guard let data = try? JSONEncoder().encode(snap), data != widgetSent else { return }

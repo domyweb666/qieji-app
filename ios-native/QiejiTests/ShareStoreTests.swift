@@ -1,7 +1,7 @@
 @testable import Qieji
 import XCTest
 
-/// 收件匣接上 Store：什麼時候併、什麼時候刪檔、名字什麼時候推
+/// 收件匣接上 Store：什麼時候併、什麼時候刪檔、紙單什麼時候推
 final class ShareStoreTests: XCTestCase {
     private var root = URL(fileURLWithPath: NSTemporaryDirectory())
     private var defaults = UserDefaults.standard
@@ -262,14 +262,14 @@ final class ShareStoreTests: XCTestCase {
     func testWipeClearsInboxAndName() async throws {
         let store = store([note("aaa")])
         store.pushTarget(now: true)
-        XCTAssertEqual(inbox.target()?.title, "aaa")
+        XCTAssertEqual(names(), ["aaa"])
         try share(["牛奶"])
         XCTAssertTrue(store.wipe())
-        XCTAssertNil(inbox.target())
+        XCTAssertEqual(names(), [])
         XCTAssertEqual(left(), 0)
         // 之後推的是新的那張
-        await waitUntil("推新的名字") { inbox.target() != nil }
-        XCTAssertEqual(inbox.target()?.title, Tutorial.title)
+        await waitUntil("推新的名字") { !names().isEmpty }
+        XCTAssertEqual(inbox.targets().map(\.title), [Tutorial.title])
     }
 
     /// 讀到一半按了清除：那些字不准回來
@@ -301,7 +301,11 @@ final class ShareStoreTests: XCTestCase {
         XCTAssertEqual(texts(store), ["舊的"])
     }
 
-    // MARK: 名字
+    // MARK: 紙單
+
+    private func names() -> [String] {
+        inbox.targets().map(\.id)
+    }
 
     @MainActor
     func testNameFollowsSaves() async {
@@ -311,15 +315,16 @@ final class ShareStoreTests: XCTestCase {
         store.rename("aaa", "今天想到的")
         store.flush()
         let want = ShareTarget(id: "aaa", title: "今天想到的", glyph: "茄", color: "red")
-        await waitUntil("名字推出去") { inbox.target() == want }
+        await waitUntil("名字推出去") { inbox.targets().first == want }
+        XCTAssertEqual(names(), ["aaa", "bbb"])
         store.trashNote("aaa")
         store.flush()
-        await waitUntil("刪掉的換掉") { inbox.target()?.id == "bbb" }
+        await waitUntil("刪掉的換掉") { names() == ["bbb"] }
         // 換紙：停一下才推
         let pad = store.newPad()
         XCTAssertEqual(store.currentID, pad)
         store.open("bbb")
-        await waitUntil("不是記事本") { inbox.target()?.id == "bbb" }
+        await waitUntil("不是記事本") { names() == ["bbb"] }
     }
 
     /// 上鎖那一刻就換掉，不等存檔；全都鎖了就什麼都不放
@@ -327,14 +332,14 @@ final class ShareStoreTests: XCTestCase {
     func testLockedNamesLeaveAtOnce() {
         let store = store([note("aaa"), note("bbb")])
         store.pushTarget(now: true)
-        XCTAssertEqual(inbox.target()?.id, "aaa")
+        XCTAssertEqual(names(), ["aaa", "bbb"])
         store.setLocked("aaa", true)
         store.pushTarget(now: true)
-        XCTAssertEqual(inbox.target()?.id, "bbb")
+        XCTAssertEqual(names(), ["bbb"])
         store.setLocked("bbb", true)
         store.pushTarget(now: true)
-        XCTAssertNil(inbox.target())
-        XCTAssertNil(defaults.object(forKey: ShareInbox.targetKey))
+        XCTAssertEqual(names(), [])
+        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
     }
 
     @MainActor
@@ -345,7 +350,7 @@ final class ShareStoreTests: XCTestCase {
         full.items = (0 ..< Lines.max).map { Item(text: "\($0)") }
         let store = store([pad, gone, full], last: "pad")
         store.pushTarget(now: true)
-        XCTAssertNil(inbox.target())
+        XCTAssertNil(defaults.object(forKey: ShareInbox.targetsKey))
     }
 
     /// 免費：還不知道買了沒也推。假資料不推
@@ -354,13 +359,13 @@ final class ShareStoreTests: XCTestCase {
         let store = store([note("aaa")])
         XCTAssertFalse(store.fullKnown)
         store.pushWidget()
-        await waitUntil("名字推出去") { inbox.target()?.id == "aaa" }
-        inbox.setTarget(nil)
+        await waitUntil("名字推出去") { names() == ["aaa"] }
+        inbox.setTargets([])
         let demo = Store()
         demo.inbox = inbox
         demo.adopt(store.book, last: "aaa")
         demo.pushTarget(now: true)
-        XCTAssertNil(inbox.target())
+        XCTAssertEqual(names(), [])
     }
 }
 

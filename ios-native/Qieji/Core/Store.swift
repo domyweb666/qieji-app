@@ -109,7 +109,7 @@ final class Store: ObservableObject {
     var inboxKept: Set<String> = [] // 這次打開已經有著落的行 id（存進去過、使用者自己刪掉）：不准再加
     var inboxTurn = 0 // 清除所有資料一次加一：清之前讀到的不算
     var inboxHold: () -> Bool = { false } // 手上正在拖東西：先不併
-    var targetSent: ShareTarget?? // 上次推出去的那一張（還沒推過、推過「沒有」、推過這張）
+    var targetsSent: [ShareTarget]? // 上次推出去的紙單（nil＝還沒推過）
     var landed: (note: String, line: String)? // 剛併進正在看的那張的最上面一行：紙拿去亮一下
 
     @Published private(set) var loaded = false
