@@ -5,20 +5,13 @@
 
 ## 接手第一件事
 
-**多米 11/26 說「打包 2.1」。打包在跑，先看結果：**
+**2.1.0 (209) 11/26 03:30 上傳 TestFlight 成功**（tfs-9，ec7bd8b，run 45676941041 第 3 次，單元測試 281 條、略過 2、0 失敗）。真機沒驗、沒送審、沒合併。下一個 tag `tfs-10`。
+第 1 次沒有機器；第 2 次封存失敗，因為 `org.domyweb.qieji.share` 沒接上 App Group，多米 11/26 在後台勾了 `group.org.domyweb.qieji` 就過（自動簽章會開 ID，不會接 App Group；以後加擴充先請多米勾）。
+Apple 提醒（不擋）：2027 年 4 月起要用 iOS 27 SDK。
 
-```
-gh run view 45676941041 --repo domyweb666/qieji-app
-```
-
-**11/26 03:10 結果：失敗在封存簽章。** 單元測試 281 條、0 失敗、略過 2；Apple 後台的 `org.domyweb.qieji.share` 這個 ID 已存在（簽得出它的描述檔），但沒接上 App Group `group.org.domyweb.qieji`。等多米在後台按：Identifiers → org.domyweb.qieji.share → App Groups → Configure → 勾 group.org.domyweb.qieji → Save。**他按完才 `gh run rerun 45676941041`（還是 209），不用推新 tag、程式不用改。** 什麼都沒上傳。
-
-1. 這是 tag `tfs-9`（ec7bd8b，版本 2.1.0，build 會是 209）。第一次失敗是 GitHub 沒有 macOS 機器可用（一步都沒跑、Apple 後台沒動），已經重跑同一件。**再遇到「not acquired by Runner」就 `gh run rerun 45676941041`**（同一件的號碼不變），不要另推 tag。模擬器「Unable to find a device」也是機器問題，重跑就好
-2. 分支 CI（run 45673805937）重跑綠：281 條、0 失敗、略過 2 條購買測試，格式與 SwiftLint 過
-3. 真的失敗在簽章：多半是 `org.domyweb.qieji.share` 或它的 App Group 沒自動配好。自動簽章（`-allowProvisioningUpdates`）會自己在 Apple 後台開這個 ID（多米點頭過）。要改 workflow 或專案就修好、commit、推 `feat/2.1`，再推 `tfs-10`。需要多米在後台按的，列出步驟請他按
-4. 成功：記下 build 號，更新記憶，告訴多米先試 T9、T10、T11、T14 和「改名打注音到一半、切走再回來，字有沒有跑到別張」。這次只上 TestFlight，**不送審**
-5. 還等多米：要不要把存檔保護也搬到 2.0.1（建議等 2.1 真機驗過）。iCloud、Bundle ID、Disk.swift 三件都點頭了
-6. 沒做：新功能說明與 News 卡片（等真機逐條確認；沒有 2.1.0 那一則就不跳卡片）、描述與支援頁（草稿在 `.vibe/描述草稿-2.1.0.md`，後台沒動）
+1. 等多米真機結果：先試 T9、T10、T11、T14 和「改名打注音到一半、切走再回來，字有沒有跑到別張」，其餘見「待驗」
+2. 還等多米：要不要把存檔保護也搬到 2.0.1（建議等 2.1 真機驗過）。iCloud、Bundle ID、Disk.swift 三件都點頭了
+3. 沒做：新功能說明與 News 卡片（等真機逐條確認；沒有 2.1.0 那一則就不跳卡片）、描述與支援頁（草稿在 `.vibe/描述草稿-2.1.0.md`，後台沒動）
 
 規格、實測數字、知道沒修的：`.vibe/規格-分享進來-2026-11-25.md` 檔尾。
 
@@ -63,7 +56,7 @@ gh run view 45676941041 --repo domyweb666/qieji-app
 
 - 版本號 2.1.0、README 改了（ec7bd8b）；描述只有草稿；支援頁、新功能說明沒改（新功能說明要多米逐條確認真機結果才寫）
 - C1 做完等真機；下一件大的還沒選
-- 這條分支何時合併、送審等多米開口
+- 這條分支何時合併、送審等多米開口（2.0.1 (208) 沒送審；2.1.0 已上 TestFlight）
 
 ---
 
