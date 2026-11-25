@@ -6,7 +6,7 @@
 ## 接手第一件事
 
 **2.1.0 (209) 11/26 03:30 上傳 TestFlight 成功**（tfs-9，ec7bd8b，run 45676941041 第 3 次，單元測試 281 條、略過 2、0 失敗）。真機沒驗、沒送審、沒合併。下一個 tag `tfs-10`。
-第 1 次沒有機器；第 2 次封存失敗，因為 `org.domyweb.qieji.share` 沒接上 App Group，多米 11/26 在後台勾了 `group.org.domyweb.qieji` 就過（自動簽章會開 ID，不會接 App Group；以後加擴充先請多米勾）。
+第 1 次沒有機器；第 2 次封存失敗，因為 `org.domyweb.qieji.share` 沒接上 App Group，多米 11/26 在後台勾了 `group.org.domyweb.qieji` 就過（ID 是自動簽章開的還是多米先建的沒確認，App Group 沒有自動接上；以後加擴充先請多米勾）。
 Apple 提醒（不擋）：2027 年 4 月起要用 iOS 27 SDK。
 
 1. 等多米真機結果：先試 T9、T10、T11、T14 和「改名打注音到一半、切走再回來，字有沒有跑到別張」，其餘見「待驗」
