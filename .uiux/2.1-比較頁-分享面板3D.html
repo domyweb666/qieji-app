@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>茄記 2.1 比較頁：分享面板 3D</title>
+<style>
+:root{--ink:#2E2233;--sub:#75677A;--page:#FBF3E7;--card:#FFFCF6;--line:#EADFCF;--acc:#7D467F;--paper:#F4EEF2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:16px/1.6 -apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;padding:24px 16px 64px}
+main{max-width:1100px;margin:auto}
+h1{font-size:24px;margin:0 0 4px}p,li{color:var(--sub);max-width:46em}p{margin:4px 0 12px}
+b{color:var(--ink)}
+.pick{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px}
+.pick button{min-height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--line);background:none;font:15px inherit;font-family:inherit;color:var(--ink);cursor:pointer}
+.pick button[aria-pressed=true]{background:var(--acc);border-color:var(--acc);color:#fff}
+.row{display:flex;flex-wrap:wrap;gap:40px}
+figure{margin:0;width:322px;max-width:100%}
+figcaption{margin-top:8px;font-size:14px;color:var(--sub)}figcaption b{display:block;font-size:17px}
+.count{display:flex;justify-content:space-between;align-items:center;min-height:44px;font-size:14px;color:var(--sub)}
+.count button{border:0;background:none;color:var(--acc);font:600 15px inherit;font-family:inherit;cursor:pointer;min-height:44px;padding:0 4px}
+.case{width:322px;height:700px;border-radius:40px;overflow:hidden;border:1px solid var(--line);background:#fff}
+.phone{position:relative;width:402px;height:874px;zoom:.8;overflow:hidden;background:#fff;user-select:none;touch-action:none}
+.time{position:absolute;top:14px;left:50px;font-weight:600;z-index:9}
+.host{padding:76px 24px 0}.host h3{font-size:24px;line-height:1.35;margin:0 0 12px}.host i{display:block;height:11px;border-radius:6px;background:#e6e6ea;margin:14px 0}
+.url{font-size:14px;color:#8a8a90;margin-bottom:14px}
+.share{position:absolute;left:0;right:0;bottom:0;background:#f2f2f6;border-radius:32px 32px 0 0;padding:24px 20px 40px;height:400px}
+.apps{display:flex;gap:20px;margin-top:20px}.app{width:68px;text-align:center;font-size:13px;color:#555;border:0;background:none;padding:0;font-family:inherit}
+.app s{display:block;width:68px;height:68px;border-radius:16px;background:#d9d9df;margin-bottom:6px}
+.app.q{cursor:pointer;color:var(--ink);font-weight:600}.app.q s{background:var(--acc);display:grid;place-items:center;text-decoration:none;font-size:32px;color:#fff}
+.lines{margin-top:28px}.lines i{display:block;height:44px;border-radius:12px;background:#e6e6ec;margin-top:8px}
+.dim{position:absolute;inset:0;background:#0004;transition:opacity .25s}.dim.in{animation:fade .25s}
+.full{position:absolute;left:0;right:0;bottom:0;top:72px;background:var(--card);border-radius:38px 38px 0 0;animation:up .35s cubic-bezier(.2,.8,.2,1);transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.full.drag{transition:none;animation:none}
+.grab{position:absolute;top:0;left:0;right:0;height:60px;cursor:grab}.grab::after{content:"";position:absolute;top:8px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:#2e223333}
+.txt{white-space:pre-line;font-size:17px;line-height:1.5;overflow-wrap:anywhere;cursor:text;min-height:44px}
+.full .txt{position:absolute;left:24px;right:24px;top:44px;bottom:100px}
+.txt.on::after{content:"";display:inline-block;width:2px;height:1.1em;background:var(--acc);vertical-align:-2px;margin-left:1px;animation:blink 1s steps(2) infinite}
+.foot{display:flex;align-items:center;gap:8px;min-height:48px}
+.full .foot{position:absolute;left:16px;right:16px;bottom:34px;border-top:1px solid #2e22331f;padding-top:8px;transition:bottom .28s cubic-bezier(.2,.8,.2,1)}
+.full.kb .foot{bottom:306px}
+.full .split{position:absolute;left:24px;bottom:100px;transition:bottom .28s cubic-bezier(.2,.8,.2,1)}.full.kb .split{bottom:372px}
+.split{border:0;border-radius:22px;background:var(--acc);color:#fff;min-height:44px;padding:0 18px;font:600 16px inherit;font-family:inherit;cursor:pointer}
+.box .split{position:absolute;left:8px;top:-56px}
+.to{flex:1;display:flex;align-items:center;gap:8px;font-size:15px;color:var(--sub);min-width:0}
+.to u{flex:none;width:26px;height:26px;border-radius:8px;background:#b489b6;display:grid;place-items:center;font-size:13px;color:#2E2233;text-decoration:none}
+.x,.v{border:0;background:none;width:48px;height:48px;font-size:24px;font-weight:600;cursor:pointer;color:var(--ink);flex:none;padding:0}
+.x{color:var(--sub);font-weight:400}
+.box{position:absolute;left:8px;right:8px;bottom:34px;background:var(--card);border-radius:24px;box-shadow:0 8px 24px #3b205033;padding:16px 16px 8px;animation:up .3s cubic-bezier(.2,.8,.2,1);transition:bottom .28s cubic-bezier(.2,.8,.2,1),transform .25s}
+.box.kb{bottom:306px}.box.down{transform:translateY(400px)}
+.box .txt{max-height:200px;overflow:auto}
+.keys{position:absolute;left:0;right:0;bottom:0;height:292px;background:#d1d3d9;display:grid;place-items:center;color:#75677a;font-size:15px;animation:up .28s cubic-bezier(.2,.8,.2,1)}
+.flash{position:absolute;left:0;right:0;bottom:0;top:72px;background:#f7f7f4;border-radius:38px 38px 0 0;animation:fall .35s forwards cubic-bezier(.4,0,1,1)}
+.ph{background:var(--paper);position:absolute;inset:0;padding-top:64px}.ph .t{display:inline-block;border:1px solid var(--acc);border-radius:24px;padding:8px 16px;margin:0 16px 12px}
+.l{padding:14px 20px;border-top:1px solid #2e22331f;white-space:pre-line;overflow-wrap:anywhere;font-size:17px}.l.new{animation:glow 1.8s}
+button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+@keyframes up{from{transform:translateY(60%)}}@keyframes fall{to{transform:translateY(100%)}}@keyframes fade{from{opacity:0}}@keyframes blink{50%{opacity:0}}@keyframes glow{0%,40%{background:#7d467f2e}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}}
+</style>
+<main>
+<h1>分享面板：3D 長這樣</h1>
+<p>先按底下的「茄記」。想改字就點字。左邊可以抓著面板頂端往下拉。記一行都是兩下：茄記、✓。</p>
+<div class="pick" id="pick"></div>
+<div class="row" id="row"></div>
+<p style="margin-top:28px">左右都照 iOS 26 模擬器的比例畫。左邊還沒寫成程式，收起會不會閃、改過字之後往下拉要不要擋，要做出來才知道。右邊的分享表和白色面板，是試做時真的拍到的。</p>
+</main>
+<script>
+const T='為什麼便利貼總是貼滿螢幕',U='https://example.com/sticky-notes';
+const CASES={'分享網頁':T+'\n'+U,'分享一句話':'下次把便利貼換成大張的，字才寫得下','分享好幾行':'買菜\n茄子三條\n九層塔\n雞蛋一盒\n醬油'};
+let name='分享網頁';
+const host=`<span class="time">9:41</span><div class="host"><div class="url">example.com</div><h3>${T}</h3>${'<i></i>'.repeat(8)}<i style="width:60%"></i></div>`;
+const share=`<div class="share"><b>分享</b><div class="apps"><span class="app"><s></s>訊息</span><span class="app"><s></s>郵件</span><button class="app q"><s>茄</s>茄記</button><span class="app"><s></s>提醒</span></div><div class="lines"><i></i><i></i><i></i></div></div>`;
+const paper=ls=>`<div class="ph"><span class="t">今天想到的 ⌄</span>${ls.map(x=>`<div class="l new">${x}</div>`).join('')}<div class="l">回信給出版社</div><div class="l">想讀的那本書</div><div class="l">訂高鐵票</div></div>`;
+const add=(p,h)=>p.insertAdjacentHTML('beforeend',h);
+const foot='<div class="foot"><button class="x" aria-label="取消">✕</button><span class="to"><u>今</u>放進 今天想到的</span><button class="v" aria-label="記下">✓</button></div>';
+const many=()=>name==='分享好幾行';
+const split=()=>many()?`<button class="split">拆成 ${CASES[name].split('\n').length} 行</button>`:'';
+const starts=[];
+function play(title,desc,panel){
+  const f=document.createElement('figure');
+  f.innerHTML=`<div class="case"><div class="phone"></div></div><div class="count"><span></span><button>重來</button></div><figcaption><b>${title}</b>${desc}</figcaption>`;
+  document.getElementById('row').append(f);
+  const p=f.querySelector('.phone'),c=f.querySelector('.count span');let n=0;
+  const k={tick(){n++;c.textContent='動作：'+n},
+    back(ls){p.innerHTML=host;c.innerHTML=ls?`動作：${n}，回到原本的 app　<button>打開茄記看</button>`:`動作：${n}，什麼都沒留`;
+      const o=c.querySelector('button');if(o)o.onclick=()=>{p.innerHTML=paper(ls)}}};
+  const start=()=>{n=0;c.textContent='按底下的「茄記」';p.innerHTML=host+share;p.querySelector('.q').onclick=()=>{k.tick();panel(p,k)}};
+  f.querySelector('.count>button').onclick=start;starts.push(start);start();
+}
+function wire(p,k,el,close){
+  const txt=el.querySelector('.txt');
+  txt.onclick=()=>{if(el.classList.contains('kb'))return;k.tick();el.classList.add('kb');txt.classList.add('on');add(p,'<div class="keys">鍵盤</div>')};
+  const end=ls=>{const q=p.querySelector('.keys');if(q)q.remove();k.tick();close(()=>k.back(ls))};
+  el.querySelector('.v').onclick=()=>end([CASES[name]]);
+  el.querySelector('.x').onclick=()=>end(null);
+  const s=el.querySelector('.split');if(s)s.onclick=()=>end(CASES[name].split('\n'));
+  return end;
+}
+play('3D　系統整頁面板，裡面照 3A 排（推薦）','字在上面，✕、放進哪張、✓ 在下面大拇指處，鍵盤不升。點字才升鍵盤，下面那排跟著上去。整頁是系統的，可以往下拉關掉。缺點：只記一行時中間空一大塊。',(p,k)=>{
+  p.querySelector('.share').remove();
+  add(p,`<div class="dim in"></div><div class="full"><div class="txt">${CASES[name]}</div>${split()}${foot}<div class="grab"></div></div>`);
+  const s=p.querySelector('.full'),d=p.querySelector('.dim'),g=p.querySelector('.grab');
+  const end=wire(p,k,s,done=>{s.classList.remove('drag');s.style.transform='translateY(100%)';d.style.opacity=0;setTimeout(done,300)});
+  let y0=null,dy=0;
+  g.onpointerdown=e=>{y0=e.clientY;dy=0;g.setPointerCapture(e.pointerId);s.classList.add('drag')};
+  g.onpointermove=e=>{if(y0===null)return;dy=Math.max(0,(e.clientY-y0)/.8);s.style.transform=`translateY(${dy}px)`};
+  g.onpointerup=g.onpointercancel=()=>{if(y0===null)return;y0=null;s.classList.remove('drag');if(dy>160)end(null);else s.style.transform=''};
+});
+play('硬做 3A　底部小卡','樣子最像 app 裡的輸入框。缺點三個：後面的分享表收不掉；按 ✓ 之後會閃一塊白色整頁面板；靠 Apple 沒公開的東西，iOS 改版可能壞。',(p,k)=>{
+  add(p,`<div class="dim in"></div><div class="box">${split()}<div class="txt">${CASES[name]}</div>${foot}</div>`);
+  const b=p.querySelector('.box'),d=p.querySelector('.dim');
+  const end=wire(p,k,b,done=>{b.classList.add('down');d.style.opacity=0;d.style.pointerEvents='none';
+    setTimeout(()=>{p.innerHTML=host+'<div class="flash"></div>';setTimeout(done,360)},420)});
+  d.onclick=()=>end(null);
+});
+const pick=document.getElementById('pick');
+Object.keys(CASES).forEach(x=>{const b=document.createElement('button');b.textContent=x;b.setAttribute('aria-pressed',x===name);
+  b.onclick=()=>{name=x;pick.querySelectorAll('button').forEach(y=>y.setAttribute('aria-pressed',y===b));starts.forEach(s=>s())};pick.append(b)});
+</script>
+</html>
