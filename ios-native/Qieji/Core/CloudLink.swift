@@ -30,6 +30,8 @@ final class CloudLink: ObservableObject {
     private var goneSent = ""
     private var pushWork: DispatchWorkItem?
     private var offWork: DispatchWorkItem?
+    private var deciding = false // 還不知道買了沒（重裝、換手機後第一次打開）
+    private var waiting: [UUID: () -> Void] = [:] // 等這一輪拉完的
 
     init(drive: CloudDrive) {
         self.drive = drive
@@ -54,7 +56,14 @@ final class CloudLink: ObservableObject {
             pull()
         } else {
             pushWork?.cancel()
+            settle()
         }
+    }
+
+    /// 還不知道買了沒：「拉完叫我」的先等著，不准當成沒在同步。知道了（setAllowed 之後）再叫一次 false
+    func setDeciding(_ on: Bool) {
+        deciding = on
+        pullForWaiting()
     }
 
     /// iCloud 雲碟有沒有開（設定頁的說明用）
@@ -75,7 +84,41 @@ final class CloudLink: ObservableObject {
         }
     }
 
+    /// 這一輪有結果了叫一次 done（主執行緒）：合完、iCloud 沒開、拿不到、停在問「放進去」都算。
+    /// 沒在同步、現在拉不了就馬上叫；正在拉就等那一輪；正在傳就等傳完、拉一輪。等太久（limit）照叫
+    func whenPulled(limit: Double = Tok.Timing.pullWait, _ done: @escaping () -> Void) {
+        let key = UUID()
+        waiting[key] = done
+        DispatchQueue.main.asyncAfter(deadline: .now() + limit) { [weak self] in
+            self?.waiting.removeValue(forKey: key)?()
+        }
+        pullForWaiting()
+    }
+
+    /// 離開前景：還在等的不等了，回來會重新要一次（app 睡著時倒數照走，一醒來就會當成逾時）
+    func forgetWaiting() {
+        waiting = [:]
+    }
+
+    private func pullForWaiting() {
+        guard !waiting.isEmpty, !deciding, !busy || !allowed else { return }
+        pull()
+        if !busy || !allowed {
+            settle() // 沒准許、停著等人回答、不准寫檔：這一輪不會有
+        }
+    }
+
+    private func settle() {
+        guard !deciding else { return }
+        let calls = waiting
+        waiting = [:]
+        for done in calls.values {
+            done()
+        }
+    }
+
     private func merge(_ fetched: CloudSync.Fetched) {
+        defer { settle() }
         busy = false
         ready = true
         guard let store, allowed else { return }
@@ -159,6 +202,7 @@ final class CloudLink: ObservableObject {
                     again = false
                     pushSoon()
                 }
+                pullForWaiting()
             }
         }
     }

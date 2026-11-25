@@ -114,10 +114,10 @@ final class ShareTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(entry.lines[0].id).json").path))
         // 同一份再寫一次（按 ✓ 失敗再按）還是一則
         XCTAssertTrue(inbox.write(entry))
-        let mail = inbox.read()
+        let mail = inbox.read().mail
         XCTAssertEqual(mail.map(\.entry), [entry])
         inbox.remove(mail)
-        XCTAssertTrue(inbox.read().isEmpty)
+        XCTAssertTrue(inbox.read().mail.isEmpty)
         inbox.remove(mail)
     }
 
@@ -147,18 +147,18 @@ final class ShareTests: XCTestCase {
     func testWriteRefusesWhatCannotBeRead() throws {
         let worst = try XCTUnwrap(ShareEntry.make([String(repeating: "\u{1}", count: ShareText.max)], note: nil))
         XCTAssertTrue(inbox.write(worst))
-        XCTAssertEqual(inbox.read().first?.entry, worst)
-        inbox.remove(inbox.read())
+        XCTAssertEqual(inbox.read().mail.first?.entry, worst)
+        inbox.remove(inbox.read().mail)
         let huge = try XCTUnwrap(ShareEntry.make([String(repeating: "茄", count: 200_000)], note: nil))
         XCTAssertFalse(inbox.write(huge))
-        XCTAssertTrue(inbox.read().isEmpty)
+        XCTAssertTrue(inbox.read().mail.isEmpty)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [])
     }
 
     func testWriteFailsLoudlyWithoutContainer() throws {
         let entry = try XCTUnwrap(ShareEntry.make(["牛奶"], note: nil))
         XCTAssertFalse(ShareInbox.off.write(entry))
-        XCTAssertTrue(ShareInbox.off.read().isEmpty)
+        XCTAssertTrue(ShareInbox.off.read().mail.isEmpty)
         XCTAssertTrue(ShareInbox.off.wipe())
         // 資料夾的位置被一個檔佔住
         try FileManager.default.createDirectory(at: root.appendingPathComponent("group"), withIntermediateDirectories: true)
@@ -172,7 +172,7 @@ final class ShareTests: XCTestCase {
             entry.at = at
             XCTAssertTrue(inbox.write(entry))
         }
-        XCTAssertEqual(inbox.read().map { $0.entry.lines[0].text }, ["一", "二", "三"])
+        XCTAssertEqual(inbox.read().mail.map { $0.entry.lines[0].text }, ["一", "二", "三"])
     }
 
     /// 壞掉的跳過、不刪、不影響好的
@@ -180,8 +180,8 @@ final class ShareTests: XCTestCase {
         let good = try XCTUnwrap(ShareEntry.make(["好的"], note: nil))
         XCTAssertTrue(inbox.write(good))
         let names = try ShareTests.writeBad(to: folder)
-        XCTAssertEqual(inbox.read().map(\.entry), [good])
-        inbox.remove(inbox.read())
+        XCTAssertEqual(inbox.read().mail.map(\.entry), [good])
+        inbox.remove(inbox.read().mail)
         XCTAssertEqual(try Set(FileManager.default.contentsOfDirectory(atPath: folder.path)), names)
     }
 
@@ -271,7 +271,7 @@ final class ShareMergeTests: XCTestCase {
         var book = Notebook()
         book.notes = notes
         Seats.fixOrder(&book)
-        let tops = InboxMerge.run(&book, entries, current: current, recent: recent, now: 9000)
+        let tops = InboxMerge.run(&book, entries, current: current, recent: recent, now: 9000).tops
         return (book, tops)
     }
 

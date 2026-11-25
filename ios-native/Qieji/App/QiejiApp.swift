@@ -118,9 +118,10 @@ struct RootView: View {
                 store.fullKnown = true // 知道買了沒才推小工具
                 // 分享進來的字併進紙（免費）。正在拖一行、滑一行、拖磚時先等放手
                 store.inboxHold = { [weak dir] in LineListView.current?.handling == true || dir?.drag != nil }
-                store.takeInbox()
                 cloud.store = store
-                cloud.setAllowed(shop.full && cloud.syncOn) // iCloud 同步是完整版功能：買了而且開著才同步
+                // 買過的人這一刻 shop.full 就是對的（start 裡先用上次記的）；重裝、換手機的第一次要等問過 Apple 才知道
+                allowSync(full: shop.full)
+                store.takeInbox(after: cloud)
                 ReviewAsk.opened() // 評分提示要數「在幾個不同的日子打開過」
             }
             composeIfQuick()
@@ -130,6 +131,7 @@ struct RootView: View {
             // 問過 Apple 買了沒才決定：1.0 同步過、確定沒買的人跳「iCloud 同步改成完整版功能」。
             // 新功能卡片（更新後第一次打開跳一次）照樣記成看過，但上面那個這次有跳就不跳，一次只跳一個（1.1 _layout）
             guard asked, !RootView.offline else { return }
+            allowSync(full: shop.full) // 知道買了沒了：等著這件事的（收件匣）可以動了
             let entry = News.take(firstRun: Prefs.shared.firstRun)
             if FullNotice.check(book: store.book, full: shop.full) {
                 fullNotice = true
@@ -165,12 +167,13 @@ struct RootView: View {
             if now == .active {
                 store.purgeTrash()
                 if !RootView.offline {
-                    store.takeInbox() // 剛才在別的 app 分享進來的
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
                     ReviewAsk.opened()
                     cloud.pull() // 回到前景去 iCloud 拉一次
+                    store.takeInbox(after: cloud) // 剛才在別的 app 分享進來的：等這一輪拉完
                 }
             } else {
+                cloud.forgetWaiting()
                 store.flush()
                 cloud.pushSoon(now: true) // 進背景時不等，馬上傳
                 Locks.shared.forgetAll() // 上鎖的紙：離開前景就忘掉這次驗過的，回來要再驗
@@ -181,7 +184,7 @@ struct RootView: View {
             if !RootView.offline {
                 store.isFull = full
                 if cloud.store != nil {
-                    cloud.setAllowed(full && cloud.syncOn)
+                    allowSync(full: full)
                 }
             }
         }
@@ -212,6 +215,12 @@ struct RootView: View {
                 break
             }
         }
+    }
+
+    /// iCloud 同步是完整版功能：買了而且開著才同步。手機上沒記過買了沒、Apple 也還沒回：先不當成「沒在同步」
+    private func allowSync(full: Bool) {
+        cloud.setAllowed(full && cloud.syncOn)
+        cloud.setDeciding(cloud.syncOn && !full && !shop.asked)
     }
 
     /// 回到上次那張紙、升起輸入框

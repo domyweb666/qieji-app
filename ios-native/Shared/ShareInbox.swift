@@ -74,11 +74,15 @@ struct ShareInbox {
     /// 跟 Lines.max 同一個
     static let maxLines = 1000
     static let maxBytes = 512 * 1024
+    /// 一批最多看幾個檔，其餘下一批
+    static let maxFiles = 50
     private static let log = Logger(subsystem: "org.domyweb.qieji", category: "inbox")
 
     /// 收件匣在哪（還不一定存在）。第一次跟系統拿共用容器會慢：app 只在背景佇列叫
     let folder: () -> URL?
     let settings: () -> UserDefaults?
+    /// 假資料、單元測試那份：本來就沒有東西，清除時算清乾淨
+    var isOff = false
 
     static let app = ShareInbox(
         folder: {
@@ -88,11 +92,19 @@ struct ShareInbox {
         settings: { UserDefaults(suiteName: group) }
     )
     /// 什麼都不讀不寫（假資料、單元測試）
-    static let off = ShareInbox(folder: { nil }, settings: { nil })
+    static let off = ShareInbox(folder: { nil }, settings: { nil }, isOff: true)
 
     struct Mail {
         let file: URL
         let entry: ShareEntry
+    }
+
+    /// 讀一批的結果
+    struct Batch {
+        var mail: [Mail] = [] // 讀得懂的，舊的在前
+        var names: Set<String> = [] // 這一批看過的檔名
+        var bad: Set<String> = [] // 裡面讀不懂的（太大、格式不對）。一時讀不到的不算：下次還要再試
+        var more = false // 看滿了，後面還有
     }
 
     // MARK: 收件匣
@@ -121,17 +133,32 @@ struct ShareInbox {
         }
     }
 
-    /// 讀得懂的，舊的在前。讀不懂的跳過、不刪、不影響其他檔
-    func read() -> [Mail] {
-        let files = list()
-        guard !files.isEmpty else { return [] }
-        let mail = files.compactMap { file in ShareInbox.load(file).map { Mail(file: file, entry: $0) } }
-        if mail.count < files.count {
-            ShareInbox.log.error("skipped \(files.count - mail.count) of \(files.count)")
+    /// 讀一批。讀不懂的跳過、不刪、不影響其他檔。skip＝不用再看的檔名。
+    /// 檔名是第一行的 id（前八碼是時間）：照檔名拿就是舊的先拿，不用為了排先後把全部讀進來
+    func read(skip: Set<String> = [], limit: Int = ShareInbox.maxFiles) -> Batch {
+        var out = Batch()
+        var unread = 0
+        let files = list().filter { !skip.contains($0.lastPathComponent) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        for file in files {
+            guard out.names.count < limit else {
+                out.more = true
+                break
+            }
+            let name = file.lastPathComponent
+            out.names.insert(name)
+            switch ShareInbox.load(file) {
+            case let .good(entry): out.mail.append(Mail(file: file, entry: entry))
+            case .bad: out.bad.insert(name)
+            case .unread: unread += 1
+            }
         }
-        return mail.sorted { one, two in
+        if !out.bad.isEmpty || unread > 0 {
+            ShareInbox.log.error("skipped: \(out.bad.count) bad, \(unread) unread of \(out.names.count)")
+        }
+        out.mail.sort { one, two in
             one.entry.at == two.entry.at ? one.file.lastPathComponent < two.file.lastPathComponent : one.entry.at < two.entry.at
         }
+        return out
     }
 
     /// 併好、存好了才叫
@@ -151,9 +178,15 @@ struct ShareInbox {
 
     /// 清除所有資料：整個收件匣（連讀不懂的）和那一張的名字都拿掉。回傳有沒有清乾淨
     func wipe() -> Bool {
+        guard !isOff else { return true }
         setTarget(nil)
-        let named = settings()?.object(forKey: ShareInbox.targetKey) != nil
-        guard let dir = folder(), FileManager.default.fileExists(atPath: dir.path) else { return !named }
+        // 共用區拿不到就不知道裡面還有沒有字：不准說清乾淨了
+        guard let settings = settings(), let dir = folder() else {
+            ShareInbox.log.error("wipe failed: no app group container")
+            return false
+        }
+        let named = settings.object(forKey: ShareInbox.targetKey) != nil
+        guard FileManager.default.fileExists(atPath: dir.path) else { return !named }
         do {
             try FileManager.default.removeItem(at: dir)
             return !named
@@ -176,13 +209,16 @@ struct ShareInbox {
         }
     }
 
-    private static func load(_ file: URL) -> ShareEntry? {
+    private enum Look {
+        case good(ShareEntry), bad, unread
+    }
+
+    private static func load(_ file: URL) -> Look {
         // 先看大小再讀：太大的不進記憶體
-        guard let info = try? file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
-              info.isRegularFile == true, let size = info.fileSize, size <= maxBytes,
-              let data = try? Data(contentsOf: file)
-        else { return nil }
-        return parse(data)
+        guard let info = try? file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]) else { return .unread }
+        guard info.isRegularFile == true, let size = info.fileSize, size <= maxBytes else { return .bad }
+        guard let data = try? Data(contentsOf: file) else { return .unread }
+        return parse(data).map(Look.good) ?? .bad
     }
 
     private static func parse(_ data: Data) -> ShareEntry? {

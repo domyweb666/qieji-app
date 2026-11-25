@@ -104,6 +104,9 @@ final class Store: ObservableObject {
     /// 分享進來（StoreInbox）：收件匣在哪。只有真的 app 才接 App Group，假資料、測試不碰
     var inbox = ShareInbox.off
     let inboxGate = InboxGate()
+    let inboxBad = InboxBad()
+    var inboxPut: [String: String] = [:] // 這次打開併進去、還沒確定存好的：行 id → 哪一張
+    var inboxKept: Set<String> = [] // 這次打開已經有著落的行 id（存進去過、使用者自己刪掉）：不准再加
     var inboxTurn = 0 // 清除所有資料一次加一：清之前讀到的不算
     var inboxHold: () -> Bool = { false } // 手上正在拖東西：先不併
     var targetSent: ShareTarget?? // 上次推出去的那一張（還沒推過、推過「沒有」、推過這張）
@@ -312,16 +315,16 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動。done＝這一份寫進檔案了沒（現在不能存也回 false），在主執行緒叫
-    func saveSoon(_ done: @escaping (Bool) -> Void = { _ in }) {
+    /// 平常的存檔：編碼和寫檔在背景做，不卡打字和捲動。done＝寫進檔案的那一份（沒寫成、現在不能存是 nil），在主執行緒叫
+    func saveSoon(_ done: @escaping (Notebook?) -> Void = { _ in }) {
         guard let disk, readyToSave() else {
-            done(false)
+            done(nil)
             return
         }
-        let turn = saveTurn
-        disk.writeLater(book) { [weak self] saved in
+        let turn = saveTurn, sent = book
+        disk.writeLater(sent) { [weak self] saved in
             self?.saveDone(saved, turn: turn)
-            done(saved)
+            done(saved ? sent : nil)
         }
     }
 
