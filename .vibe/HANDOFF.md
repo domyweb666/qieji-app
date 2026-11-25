@@ -11,6 +11,8 @@
 gh run view 45676941041 --repo domyweb666/qieji-app
 ```
 
+**11/26 03:10 結果：失敗在封存簽章。** 單元測試 281 條、0 失敗、略過 2；Apple 後台的 `org.domyweb.qieji.share` 這個 ID 已存在（簽得出它的描述檔），但沒接上 App Group `group.org.domyweb.qieji`。等多米在後台按：Identifiers → org.domyweb.qieji.share → App Groups → Configure → 勾 group.org.domyweb.qieji → Save。**他按完才 `gh run rerun 45676941041`（還是 209），不用推新 tag、程式不用改。** 什麼都沒上傳。
+
 1. 這是 tag `tfs-9`（ec7bd8b，版本 2.1.0，build 會是 209）。第一次失敗是 GitHub 沒有 macOS 機器可用（一步都沒跑、Apple 後台沒動），已經重跑同一件。**再遇到「not acquired by Runner」就 `gh run rerun 45676941041`**（同一件的號碼不變），不要另推 tag。模擬器「Unable to find a device」也是機器問題，重跑就好
 2. 分支 CI（run 45673805937）重跑綠：281 條、0 失敗、略過 2 條購買測試，格式與 SwiftLint 過
 3. 真的失敗在簽章：多半是 `org.domyweb.qieji.share` 或它的 App Group 沒自動配好。自動簽章（`-allowProvisioningUpdates`）會自己在 Apple 後台開這個 ID（多米點頭過）。要改 workflow 或專案就修好、commit、推 `feat/2.1`，再推 `tfs-10`。需要多米在後台按的，列出步驟請他按
