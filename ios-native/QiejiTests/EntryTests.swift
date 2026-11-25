@@ -65,6 +65,12 @@ final class EntryTests: XCTestCase {
         XCTAssertEqual(Lines.splitPasted("- 牛奶\n1. 蛋\n2、豆腐\n3)蔥\n\n• 米"), ["牛奶", "蛋", "豆腐", "蔥", "米"])
     }
 
+    func testSplitDropsMarkdownBoxes() {
+        XCTAssertEqual(Lines.splitPasted("- [ ] 牛奶\n* [x] 蛋\n  - [X] 蔥\n- [ ]"), ["牛奶", "蛋", "蔥"])
+        // 連結、沒有清單符號的中括號不是待辦框
+        XCTAssertEqual(Lines.splitPasted("- [x](https://a.b)\n[ ] 米\n- [買] 茶"), ["[x](https://a.b)", "[ ] 米", "[買] 茶"])
+    }
+
     func testPastedManyOnlyForPaste() {
         XCTAssertTrue(ComposerHost.pastedMany(prev: "", next: "牛奶\n蛋"))
         XCTAssertTrue(ComposerHost.pastedMany(prev: "買", next: "買牛奶\n蛋"))

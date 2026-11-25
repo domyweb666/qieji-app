@@ -172,6 +172,8 @@ test('K5 貼多行：換行切、去行首符號、丟空行，跟網頁版一�
   assert.deepEqual(splitPasted('一行沒換行'), ['一行沒換行']);
   assert.deepEqual(splitPasted('\n\n'), []);
   assert.deepEqual(splitPasted('  前後空白  \n☑ 勾過的'), ['前後空白', '勾過的']);
+  assert.deepEqual(splitPasted('- [ ] 牛奶\n* [x] 蛋\n  - [X] 蔥\n- [ ]'), ['牛奶', '蛋', '蔥']);
+  assert.deepEqual(splitPasted('- [x](https://a.b)\n[ ] 米\n- [買] 茶'), ['[x](https://a.b)', '[ ] 米', '[買] 茶']);
 });
 
 test('K1 游標落點：用 y 找行、行內用比例，夾在 0～max；沒有 lines 回 undefined', () => {

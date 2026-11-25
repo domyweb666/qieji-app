@@ -269,7 +269,7 @@ for (let seed = 1; seed <= 40; seed++) {
 }
 const glyphs = ['', ' ', '茄', '茄子', '🍆', '👨‍👩‍👧', '🇹🇼🇯🇵', '❤️好', '👍🏽', 'é', '1️⃣2', 'áb', '  兩邊空白  ']
   .map(t => ({ t, parts: M.graphemes(t), problem: M.glyphProblem(t) }));
-const pasted = ['- 一\n• 二\n3. 三\n\n  4) 四  \n5、五\n☐ 六\r\n✓ 七', '沒有符號', '', '\n\n', '10.十\n-連著']
+const pasted = ['- 一\n• 二\n3. 三\n\n  4) 四  \n5、五\n☐ 六\r\n✓ 七', '沒有符號', '', '\n\n', '10.十\n-連著', '- [ ] 牛奶\n* [x] 蛋\n- [x](a)\n[ ] 米']
   .map(t => ({ t, out: M.splitPasted(t) }));
 const labels = [note({ id: 'a' }), note({ id: 'b', title: ' 有名字 ' }), note({ id: 'c', items: [it('1', '  '), it('2', '這是一行很長很長很長的字')] }),
   note({ id: 'd', type: 'text', body: '\n第二行才有字' }), note({ id: 'e', glyph: '菜', title: '買菜' }), note({ id: 'f', title: '🍆茄記', items: [it('1', '一', { done: true }), it('2', '二')] })]

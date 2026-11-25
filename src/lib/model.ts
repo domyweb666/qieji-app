@@ -801,7 +801,7 @@ export function moveItem(from: Note, to: Note, id: string): Item | undefined {
 /* ---------------- 在一行裡打字的兩個純函式（2026-11-01 第三輪） ---------------- */
 // K5：貼上帶換行的字拆成多行，跟網頁版 splitLines 一樣——以換行切、去掉行首的「- • 1. 」這類清單符號、丟掉空行
 export function splitPasted(txt: string): string[] {
-  return txt.split(/\r?\n/).map(s => s.replace(/^\s*([-*](?!\d)|[•□☐✓☑]|\d+[.)、](?!\d))\s*/, '').trim()).filter(Boolean);
+  return txt.split(/\r?\n/).map(s => s.replace(/^\s*([-*](?!\d)(?:\s+\[[ xX]\](?=\s|$))?|[•□☐✓☑]|\d+[.)、](?!\d))\s*/, '').trim()).filter(Boolean);
 }
 // K1：點一下，游標落在點的位置。lines＝撐高度的隱形 Text 用 onTextLayout 回報的每一行（x、y、width、height、text），
 // x、y＝點的座標（跟 lines 同一個座標系）。先用 y 找第幾行，行內用比例算第幾個字（中文等寬所以準，中英混排差一兩個字），
