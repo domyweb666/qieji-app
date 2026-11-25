@@ -70,7 +70,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji
-        MARKETING_VERSION: "2.0.1"
+        MARKETING_VERSION: "2.1.0"
         CURRENT_PROJECT_VERSION: "1"
         # 只給 iPhone（1），跟 Expo 版的 supportsTablet: false 一樣
         TARGETED_DEVICE_FAMILY: "1"
@@ -104,7 +104,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.controls
         # 版本號要跟 app 一樣，不然上傳會被擋
-        MARKETING_VERSION: "2.0.1"
+        MARKETING_VERSION: "2.1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.10"
@@ -136,7 +136,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.ExpoWidgetsTarget
         # 版本號要跟 app 一樣，不然上傳會被擋
-        MARKETING_VERSION: "2.0.1"
+        MARKETING_VERSION: "2.1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.10"
@@ -178,7 +178,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.domyweb.qieji.share
         # 版本號要跟 app 一樣，不然上傳會被擋
-        MARKETING_VERSION: "2.0.1"
+        MARKETING_VERSION: "2.1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.10"
