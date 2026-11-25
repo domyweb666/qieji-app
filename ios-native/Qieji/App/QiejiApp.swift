@@ -169,8 +169,8 @@ struct RootView: View {
                 if !RootView.offline {
                     Task { await shop.refresh() } // 回到前景重問一次買了沒（退款、家人共享收回）
                     ReviewAsk.opened()
-                    cloud.pull() // 回到前景去 iCloud 拉一次
-                    store.takeInbox(after: cloud) // 剛才在別的 app 分享進來的：等這一輪拉完
+                    store.takeInbox(after: cloud) // 剛才在別的 app 分享進來的：要一輪新的，拉完才併。先叫：cloud 才知道回來了
+                    cloud.pull() // 回到前景去 iCloud 拉一次（上面已經在拉就不會再拉）
                 }
             } else {
                 cloud.forgetWaiting()

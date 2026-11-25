@@ -394,6 +394,48 @@ final class ShareTargetsTests: ShareSafeCase {
         await waitUntil("存檔那條也會拿掉") { !names().contains("bbb") }
     }
 
+    private func stamp(_ day: Int, _ hour: Int, _ minute: Int) -> Double {
+        let parts = DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute)
+        return (Calendar.current.date(from: parts)?.timeIntervalSince1970 ?? 0) * 1000
+    }
+
+    private func paper(_ title: String, _ created: Double) -> Note {
+        var note = note("x", ["不准外露的第一行"])
+        note.title = title
+        note.created = created
+        return note
+    }
+
+    /// 同名的分得出來：加開的日期，同一天的再加時分；不同名的不變；第一行不准出現
+    func testSameNamesAreToldApart() {
+        let early = stamp(24, 9, 5), noon = stamp(25, 12, 0), late = stamp(25, 18, 30)
+        XCTAssertEqual(InboxMerge.names([paper("", noon)]), ["未命名"])
+        XCTAssertEqual(InboxMerge.names([paper("", noon), paper("買菜", noon)]), ["未命名", "買菜"])
+        XCTAssertEqual(InboxMerge.names([paper(" ", noon), paper("", early)]), ["未命名・11/25", "未命名・11/24"])
+        XCTAssertEqual(
+            InboxMerge.names([paper("", noon), paper("買菜", noon), paper("", early), paper("", late)]),
+            ["未命名・11/25 12:00", "買菜", "未命名・11/24", "未命名・11/25 18:30"]
+        )
+        XCTAssertEqual(InboxMerge.names([paper("買菜", noon), paper("買菜", early)]), ["買菜・11/25", "買菜・11/24"])
+        XCTAssertEqual(InboxMerge.names([]), [])
+    }
+
+    /// 推出去的紙單：兩張沒取名的有分開，共用區裡沒有紙的內容
+    @MainActor
+    func testUntitledInTheListHasDates() throws {
+        var one = paper("", stamp(25, 12, 0)), two = paper("", stamp(24, 12, 0))
+        one.id = "aaa"
+        two.id = "bbb"
+        let store = store([one, two])
+        store.pushTarget(now: true)
+        XCTAssertEqual(inbox.targets().map(\.title), ["未命名・11/25", "未命名・11/24"])
+        let raw = try XCTUnwrap(defaults.data(forKey: ShareInbox.targetsKey))
+        XCTAssertFalse(String(bytes: raw, encoding: .utf8)?.contains("第一行") ?? true)
+        store.rename("bbb", "買菜")
+        store.pushTarget(now: true)
+        XCTAssertEqual(inbox.targets().map(\.title), ["未命名", "買菜"])
+    }
+
     /// 真的清除：新舊兩個鍵都不留
     @MainActor
     func testWipeTakesBothKeys() {

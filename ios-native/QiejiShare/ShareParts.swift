@@ -11,6 +11,13 @@ enum ShareWords {
     static let cut = "太長了，只拿了前面這些字"
     static let missed = "有一部分沒有讀到，先看一下再記"
     static let failed = "沒記成，字還在這裡，可以先複製"
+    static let tooLong = "太長了，最多 \(ShareText.max) 字，刪短一點才能記"
+
+    /// 圖片、影片不收
+    static func skipped(image: Bool, movie: Bool) -> String? {
+        let what = [image ? "圖片" : nil, movie ? "影片" : nil].compactMap { $0 }
+        return what.isEmpty ? nil : what.joined(separator: "和") + "沒有記"
+    }
 
     static func into(_ name: String?) -> String {
         name.map { "放進 \($0)" } ?? "放進茄記"

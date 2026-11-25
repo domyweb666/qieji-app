@@ -13,6 +13,8 @@ final class ShareController: UIViewController {
     private var read = false // 附件讀完了
     private var draft: ShareDraft? // 讀到字才有
     private var failed = false // 按過 ✓ 但沒寫成
+    private var said: String? // 讀進來時要講的、沒記成要講的
+    private var tooLong = false // 正在講「太長了」
     private var closed = false
 
     override func loadView() {
@@ -29,8 +31,8 @@ final class ShareController: UIViewController {
             _ = ShareInbox.app.folder()
         }
         Task { [weak self] in
-            let haul = await ShareReader.read(self?.extensionContext?.inputItems ?? [])
-            self?.arrived(haul)
+            let found = await ShareReader.read(self?.extensionContext?.inputItems ?? [])
+            self?.arrived(found)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.shareReadWait) { [weak self] in
             guard let self, !read, !closed else { return }
@@ -39,9 +41,13 @@ final class ShareController: UIViewController {
         Haptic.prepare()
     }
 
-    /// 往下拉走了：字沒改過才拉得動（改過的 isModalInPresentation 擋著）。系統不會替我們收掉擴充，要自己講
+    /// 往下拉走了：字沒改過才拉得動（改過的 isModalInPresentation 擋著）。系統不會替我們收掉擴充，要自己講。
+    /// 上面蓋了別的整頁（查詢、翻譯…）也會走到這裡：那是還要回來的，不准收
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        if let over = presentedViewController, !over.isBeingDismissed {
+            return
+        }
         close("pull")
     }
 
@@ -52,8 +58,8 @@ final class ShareController: UIViewController {
         panel.onSplit = { [weak self] in self?.split() }
         panel.onPick = { [weak self] in self?.pick($0) }
         panel.onEscape = { [weak self] in
-            // 跟往下拉同一條：字改過就不收
-            guard let self, !isModalInPresentation else { return false }
+            // 跟往下拉同一條：字改過就不收。也要算吃掉了：往外傳的話系統會去收整張面板
+            guard let self, !isModalInPresentation else { return true }
             close("escape")
             return true
         }
@@ -61,20 +67,19 @@ final class ShareController: UIViewController {
 
     // MARK: 字
 
-    private func arrived(_ haul: ShareHaul) {
+    private func arrived(_ found: ShareFound) {
         read = true
         guard !closed else { return }
-        guard let found = haul.compose() else {
+        guard let text = found.text else {
             panel.showNothing(ShareWords.nothing)
             return
         }
-        draft = ShareDraft(found.text, link: haul.link)
-        panel.showText(found.text)
-        if found.cut {
-            panel.showNote(ShareWords.cut)
-        } else if haul.missed > 0 {
-            panel.showNote(ShareWords.missed)
-        }
+        draft = ShareDraft(text, link: found.link)
+        panel.showText(text)
+        let short = found.cut ? ShareWords.cut : (found.missed > 0 ? ShareWords.missed : nil)
+        let notes = [short, ShareWords.skipped(image: found.image, movie: found.movie)].compactMap { $0 }
+        said = notes.isEmpty ? nil : notes.joined(separator: "\n")
+        panel.showNote(said)
         refresh(animated: false)
         let took = Int(-born.timeIntervalSinceNow * 1000)
         ShareController.log.info("ready \(took) ms")
@@ -87,7 +92,12 @@ final class ShareController: UIViewController {
 
     private func refresh(animated: Bool) {
         guard let draft else { return }
-        panel.setCommit(!draft.isBlank)
+        // 太長：講一聲、不給記；刪回來就換回原本那句
+        if tooLong != draft.tooLong {
+            tooLong = draft.tooLong
+            panel.showNote(tooLong ? ShareWords.tooLong : said, alert: tooLong || failed)
+        }
+        panel.setCommit(!draft.isBlank && !tooLong)
         panel.showSplit(draft.rows.count, animated: animated)
         // 改過的字不准被一拉就不見
         isModalInPresentation = draft.edited || failed
@@ -103,7 +113,7 @@ final class ShareController: UIViewController {
 
     private func commit() {
         panel.settle()
-        guard let draft, !draft.isBlank else { return }
+        guard let draft, !draft.isBlank, !draft.tooLong else { return }
         send([draft.text])
     }
 
@@ -120,7 +130,8 @@ final class ShareController: UIViewController {
         guard let entry = draft?.entry(texts, note: note), ShareInbox.app.write(entry) else {
             failed = true
             Haptic.reject()
-            panel.showNote(ShareWords.failed, alert: true)
+            said = ShareWords.failed
+            panel.showNote(said, alert: true)
             refresh(animated: false)
             return
         }

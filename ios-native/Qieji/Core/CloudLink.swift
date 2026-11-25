@@ -32,6 +32,9 @@ final class CloudLink: ObservableObject {
     private var offWork: DispatchWorkItem?
     private var deciding = false // 還不知道買了沒（重裝、換手機後第一次打開）
     private var waiting: [UUID: () -> Void] = [:] // 等這一輪拉完的
+    private var pulling = false // busy 的時候是在拉（不是在傳）
+    private var away = false // 離開前景了
+    private var stale = false // 正在拉的這一輪是回到前景之前開始的：不算這次要的
 
     init(drive: CloudDrive) {
         self.drive = drive
@@ -77,6 +80,8 @@ final class CloudLink: ObservableObject {
     func pull() {
         guard allowed, !paused, !busy, let store, store.loaded, !store.frozen else { return }
         busy = true
+        pulling = true
+        stale = away
         let drive = drive
         queue.async { [weak self] in
             let fetched = CloudSync(drive: drive).fetch()
@@ -85,19 +90,33 @@ final class CloudLink: ObservableObject {
     }
 
     /// 這一輪有結果了叫一次 done（主執行緒）：合完、iCloud 沒開、拿不到、停在問「放進去」都算。
-    /// 沒在同步、現在拉不了就馬上叫；正在拉就等那一輪；正在傳就等傳完、拉一輪。等太久（limit）照叫
-    func whenPulled(limit: Double = Tok.Timing.pullWait, _ done: @escaping () -> Void) {
+    /// 沒在同步、現在拉不了就馬上叫；正在拉就等那一輪；正在傳就等傳完、拉一輪。
+    /// 等太久照叫：limit 秒到了還在拉就再等，總共 times 次。只有人在看 app 的時候叫
+    func whenPulled(limit: Double = Tok.Timing.pullWait, times: Int = Tok.Timing.pullTimes, _ done: @escaping () -> Void) {
         let key = UUID()
+        away = false
         waiting[key] = done
-        DispatchQueue.main.asyncAfter(deadline: .now() + limit) { [weak self] in
-            self?.waiting.removeValue(forKey: key)?()
-        }
+        giveUp(key, after: limit, times: times)
         pullForWaiting()
     }
 
-    /// 離開前景：還在等的不等了，回來會重新要一次（app 睡著時倒數照走，一醒來就會當成逾時）
+    private func giveUp(_ key: UUID, after limit: Double, times: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + limit) { [weak self] in
+            guard let self, waiting[key] != nil else { return }
+            if pulling, allowed, times > 1 {
+                giveUp(key, after: limit, times: times - 1)
+            } else {
+                waiting.removeValue(forKey: key)?()
+            }
+        }
+    }
+
+    /// 離開前景：還在等的不等了，回來會重新要一次（app 睡著時倒數照走，一醒來就會當成逾時）。
+    /// 拉到一半的、在背景才開始拉的那一輪過期：睡了多久不知道，回來要再拉一輪才算
     func forgetWaiting() {
         waiting = [:]
+        away = true
+        stale = pulling
     }
 
     private func pullForWaiting() {
@@ -118,8 +137,18 @@ final class CloudLink: ObservableObject {
     }
 
     private func merge(_ fetched: CloudSync.Fetched) {
-        defer { settle() }
+        let old = stale
+        defer {
+            // 過期的那輪照合，但不放行：再拉一輪
+            if old {
+                pullForWaiting()
+            } else {
+                settle()
+            }
+        }
         busy = false
+        pulling = false
+        stale = false
         ready = true
         guard let store, allowed else { return }
         switch fetched {

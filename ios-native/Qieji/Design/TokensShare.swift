@@ -15,4 +15,5 @@ extension Tok.Motion {
 
 extension Tok.Timing {
     static let shareReadWait: Double = 0.3 // 過這麼久還沒讀到字，才寫「讀取中」
+    static let shareReadLimit: Double = 5 // 附件總共最多讀這麼久，到了就用已經讀到的
 }

@@ -7,7 +7,7 @@ final class SharePanel: UIView, UITextViewDelegate {
     var onCommit: () -> Void = {}
     var onSplit: () -> Void = {}
     var onPick: (Int) -> Void = { _ in }
-    /// VoiceOver 的兩指搓。回傳有沒有做事
+    /// VoiceOver 的兩指搓。回傳有沒有吃掉
     var onEscape: () -> Bool = { false }
 
     private let field = UITextView()
@@ -64,11 +64,12 @@ final class SharePanel: UIView, UITextViewDelegate {
         UIAccessibility.post(notification: .announcement, argument: words)
     }
 
-    /// 那排上面的一句話；alert＝沒記成
-    func showNote(_ words: String, alert: Bool = false) {
+    /// 那排上面的一句話；alert＝沒記成、不能記。nil＝收起
+    func showNote(_ words: String?, alert: Bool = false) {
+        note.isHidden = words == nil
+        guard let words else { return }
         note.text = words
         note.textColor = UIColor(alert ? Tok.Col.danger : Tok.Col.textSecondary)
-        note.isHidden = false
         UIAccessibility.post(notification: .announcement, argument: words)
     }
 

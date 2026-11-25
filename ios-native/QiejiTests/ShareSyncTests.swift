@@ -266,10 +266,121 @@ final class ShareSyncTests: ShareSafeCase {
         var calls = 0
         link.whenPulled(limit: 0.2) { calls += 1 }
         XCTAssertEqual(calls, 0)
-        await waitUntil("逾時", timeout: 1) { calls == 1 }
+        await rest(0.4) // 還在拉：一次不夠，再等
+        XCTAssertEqual(calls, 0)
+        await waitUntil("三次之後", timeout: 1) { calls == 1 }
+        XCTAssertNil(link.lastSync)
         await waitUntil("那一輪拉完") { link.lastSync != nil }
         await rest()
         XCTAssertEqual(calls, 1)
+    }
+
+    /// 還在拉就再等：第二次等到了，併在別台改完的那份上
+    @MainActor
+    func testKeepsWaitingWhileStillPulling() async throws {
+        let store = try synced([note("aaa", ["一"])])
+        try put(note("aaa", ["B 改過的一"]))
+        let link = link(drive(slow: 0.9), store)
+        link.setAllowed(true)
+        var seen: [String] = []
+        link.whenPulled(limit: 0.4) { seen = self.texts(store) }
+        await waitUntil("叫我") { !seen.isEmpty }
+        XCTAssertEqual(seen, ["B 改過的一"])
+        XCTAssertNotNil(link.lastSync)
+    }
+
+    /// 沒在拉的不多等：還不知道買了沒、正在傳，第一次到了就叫
+    @MainActor
+    func testDoesNotWaitLongerWhenNotPulling() async throws {
+        let one = link(drive(), store([note("aaa")]))
+        one.setDeciding(true)
+        var start = Date(), took = 0.0
+        one.whenPulled(limit: 0.3) { took = -start.timeIntervalSinceNow }
+        await waitUntil("不知道買了沒") { took > 0 }
+        XCTAssertLessThan(took, 0.55)
+
+        let store = try synced([note("aaa", ["一"])])
+        let drive = drive(slow: 0)
+        let two = link(drive, store)
+        two.setAllowed(true)
+        await waitUntil("第一輪") { two.lastSync != nil }
+        drive.slowWrite = 2
+        store.edit { $0.notes.append(self.note("bbb", ["新的"])) }
+        store.flush()
+        two.pushSoon(now: true)
+        await rest(0.2)
+        start = Date()
+        took = 0
+        two.whenPulled(limit: 0.3) { took = -start.timeIntervalSinceNow }
+        await waitUntil("正在傳") { took > 0 }
+        XCTAssertLessThan(took, 0.55)
+    }
+
+    /// 睡前拉到一半的那輪：回來不算，再拉一輪才放行
+    @MainActor
+    func testRoundFromBeforeSleepDoesNotCount() async throws {
+        let store = try synced([note("aaa", ["一"])])
+        let drive = drive(slow: 0.6)
+        let link = link(drive, store)
+        link.setAllowed(true)
+        await rest(0.1) // 這一輪開始列檔名了
+        link.forgetWaiting()
+        XCTAssertEqual(drive.pulls, 1)
+        try share(["分享的"], note: "aaa")
+        store.takeInbox(after: link)
+        link.pull()
+        await waitUntil("睡前那輪拉完") { link.lastSync != nil }
+        try put(note("aaa", ["B 改過的一"]))
+        XCTAssertEqual(left(), 1)
+        XCTAssertEqual(texts(store), ["一"])
+        await waitUntil("檔刪掉") { left() == 0 }
+        XCTAssertEqual(texts(store), ["分享的", "B 改過的一"])
+        XCTAssertEqual(drive.pulls, 2)
+    }
+
+    /// 在背景才開始拉的那輪也一樣；回來之後才開始的就算數，不多拉
+    @MainActor
+    func testRoundStartedWhileAwayDoesNotCount() async {
+        let store = store([note("aaa")])
+        let drive = drive(slow: 0.4)
+        let link = link(drive, store)
+        link.forgetWaiting()
+        link.setAllowed(true)
+        var calls = 0
+        link.whenPulled { calls += 1 }
+        await waitUntil("叫我") { calls == 1 }
+        XCTAssertEqual(drive.pulls, 2)
+        link.forgetWaiting()
+        await rest()
+        link.whenPulled { calls += 1 }
+        link.pull()
+        await waitUntil("叫我") { calls == 2 }
+        XCTAssertEqual(drive.pulls, 3)
+    }
+
+    /// 過期的那輪一直不回來：保底時間到照樣叫，只叫一次；停在問「放進去」也不會一直等
+    @MainActor
+    func testStaleRoundNeverHangs() async throws {
+        let slow = store([note("aaa")])
+        let link = link(drive(slow: 1.5), slow)
+        link.setAllowed(true)
+        link.forgetWaiting()
+        var calls = 0
+        link.whenPulled(limit: 0.2) { calls += 1 }
+        await waitUntil("保底", timeout: 1.2) { calls == 1 }
+        await waitUntil("那一輪拉完") { link.lastSync != nil }
+        await rest()
+        XCTAssertEqual(calls, 1)
+
+        let store = try synced([note("aaa")])
+        try FileManager.default.removeItem(at: cloudDir)
+        let other = self.link(drive(slow: 0.2), store)
+        other.setAllowed(true)
+        other.forgetWaiting()
+        var asked = 0
+        other.whenPulled { asked += 1 }
+        await waitUntil("叫我", timeout: 2) { asked == 1 }
+        XCTAssertTrue(other.asking)
     }
 
     /// 拉到一半關掉同步、離開前景

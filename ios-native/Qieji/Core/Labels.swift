@@ -116,6 +116,18 @@ enum Dates {
         return "\(parts.year ?? 0)/\(pad(parts.month ?? 0))/\(pad(parts.day ?? 0)) \(pad(parts.hour ?? 0)):\(pad(parts.minute ?? 0))"
     }
 
+    /// 月／日
+    static func day(_ stamp: Double, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.month, .day], from: Date(timeIntervalSince1970: stamp / 1000))
+        return "\(parts.month ?? 0)/\(parts.day ?? 0)"
+    }
+
+    /// 幾點幾分
+    static func time(_ stamp: Double, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.hour, .minute], from: Date(timeIntervalSince1970: stamp / 1000))
+        return "\(pad(parts.hour ?? 0)):\(pad(parts.minute ?? 0))"
+    }
+
     static func ago(_ stamp: Double, now: Double = Clock.now()) -> String {
         let secs = (now - stamp) / 1000
         if secs < 60 {

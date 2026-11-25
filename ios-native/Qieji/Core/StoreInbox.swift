@@ -164,8 +164,9 @@ extension Store {
     }
 
     private func shareTargets() -> [ShareTarget] {
-        InboxMerge.choices(book, current: currentID, recent: disk?.recent ?? []).map {
-            ShareTarget(id: $0.id, title: Labels.label($0), glyph: Labels.glyph($0), color: $0.color)
+        let notes = InboxMerge.choices(book, current: currentID, recent: disk?.recent ?? [])
+        return zip(notes, InboxMerge.names(notes)).map {
+            ShareTarget(id: $0.id, title: $1, glyph: Labels.glyph($0), color: $0.color)
         }
     }
 
@@ -249,6 +250,21 @@ enum InboxMerge {
         usable.notes = book.notes.filter { fits($0, 1) }
         let lists = Seats.switchList(usable, recent: [first.id] + recent)
         return [first] + (lists.pinned + lists.recent).filter { $0.id != first.id }
+    }
+
+    /// 紙單上的名字。同名的加上開的日期，還是一樣（同一天開的）再加幾點幾分。
+    /// 只用開的時間：紙的內容（第一行）不准放進共用區
+    static func names(_ notes: [Note], calendar: Calendar = .current) -> [String] {
+        let labels = notes.map(Labels.label)
+        func same(_ list: [String], _ name: String) -> Bool {
+            list.filter { $0 == name }.count > 1
+        }
+        let days = zip(notes, labels).map { note, label in
+            same(labels, label) ? "\(label)・\(Dates.day(note.created, calendar: calendar))" : label
+        }
+        return zip(notes, zip(labels, days)).map { note, name in
+            same(labels, name.0) && same(days, name.1) ? "\(name.1) \(Dates.time(note.created, calendar: calendar))" : name.1
+        }
     }
 
     /// 能記的：沒刪、是清單、沒上鎖、放得下
