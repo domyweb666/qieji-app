@@ -153,6 +153,8 @@ targets:
       - path: Shared/Ident.swift
       - path: Shared/LineSplit.swift
       - path: Qieji/Design/Tokens.swift
+      - path: Qieji/Design/TokensShare.swift
+      - path: Qieji/Design/Haptic.swift
     entitlements:
       path: QiejiShare/QiejiShare.entitlements
       properties:

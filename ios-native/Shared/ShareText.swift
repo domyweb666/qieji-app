@@ -81,3 +81,120 @@ enum ShareText {
     /// 網址後面接著這些就是網址結束了
     private static let closers: Set<Character> = [")", ">", "]", "\"", "'", "，", "。", "、", "；", "：", "！", "？", "）", "」", "』", "》", "】"]
 }
+
+/// 分享過來的附件一樣一樣收進來，最後組成要記的字。純計算
+struct ShareHaul {
+    /// 系統給的標題
+    var title: String?
+    /// 說有文字或網址、卻沒拿到的有幾樣：面板上要講一聲
+    private(set) var missed = 0
+    private var texts: [String] = []
+    private var links: [URL] = []
+
+    init(title: String? = nil) {
+        self.title = title
+    }
+
+    mutating func add(link: URL) {
+        links.append(link)
+    }
+
+    mutating func add(text: String) {
+        texts.append(text)
+    }
+
+    mutating func miss() {
+        missed += 1
+    }
+
+    /// 組進去的那個網址
+    var link: String? {
+        links.first.flatMap(ShareText.web)
+    }
+
+    /// 要記的字；cut＝太長、後面沒拿。一個字都沒有回 nil
+    func compose() -> (text: String, cut: Bool)? {
+        let words = texts.map(ShareText.trim).filter { !$0.isEmpty }
+        // 沒有附件可讀（有的 app 只給標題）：標題就是要記的字，換行照舊
+        let body = words.isEmpty && links.isEmpty ? title : words.joined(separator: "\n")
+        let main = ShareText.compose(title: title, text: body, url: links.first)
+        // 規矩是只收一個網址；真的給了好幾個就一個一行接在後面，不丟
+        let all = [main].compactMap { $0 } + links.dropFirst().compactMap(ShareText.web)
+        return all.isEmpty ? nil : ShareText.clip(all.joined(separator: "\n"))
+    }
+
+    /// 系統給的網址：只收 http、https（檔案網址不收）
+    static func link(_ item: Any?) -> URL? {
+        let url: URL? = switch item {
+        case let url as URL: url
+        case let data as Data: URL(dataRepresentation: data, relativeTo: nil)
+        case let text as String: URL(string: ShareText.trim(text))
+        default: nil
+        }
+        return url.flatMap { ShareText.web($0) == nil ? nil : $0 }
+    }
+
+    /// 系統給的文字：空的不算；給的是檔案就不收
+    static func words(_ item: Any?) -> String? {
+        let text: String? = switch item {
+        case let text as String: text
+        case let rich as NSAttributedString: rich.string
+        case let data as Data: utf8(data)
+        default: nil
+        }
+        return text.flatMap { ShareText.trim($0).isEmpty ? nil : $0 }
+    }
+
+    /// 太大的只解前面那段（後面反正會被截掉）；從一個字中間切開時往前退到切得開的地方
+    private static func utf8(_ data: Data) -> String? {
+        guard data.count > ShareInbox.maxBytes else { return String(data: data, encoding: .utf8) }
+        let head = data.prefix(ShareInbox.maxBytes)
+        return (0 ... 3).lazy.compactMap { String(data: head.dropLast($0), encoding: .utf8) }.first
+    }
+}
+
+/// 面板上要記的那段字：改過沒有、拆得出幾行、✓ 那一份。純計算
+struct ShareDraft {
+    /// 拿到時的字
+    let start: String
+    /// 跟著分享過來的網址
+    let link: String?
+    var text: String
+    /// 上一次 ✓ 做的那份
+    private var made: ShareEntry?
+
+    init(_ start: String, link: String? = nil) {
+        self.start = start
+        self.link = link
+        text = start
+    }
+
+    var edited: Bool {
+        text != start
+    }
+
+    var isBlank: Bool {
+        ShareText.trim(text).isEmpty
+    }
+
+    /// 拆成這幾行；不給拆就是空的。一行字＋分享過來的網址不給拆：那是一則
+    var rows: [String] {
+        guard text.contains(where: \.isNewline) else { return [] }
+        let rows = LineSplit.lines(text)
+        guard (2 ... ShareInbox.maxLines).contains(rows.count) else { return [] }
+        if rows.count == 2, let link, rows[1].contains(link) {
+            return []
+        }
+        return rows
+    }
+
+    /// 這次 ✓ 要寫的那一份。沒寫成再按一次：字和紙都沒變就是同一份，不會記兩次
+    mutating func entry(_ texts: [String], note: String?) -> ShareEntry? {
+        let next = ShareEntry.make(texts, note: note)
+        if let made, let next, made.note == next.note, made.lines.map(\.text) == next.lines.map(\.text) {
+            return made
+        }
+        made = next
+        return next
+    }
+}
