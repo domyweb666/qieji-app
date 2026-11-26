@@ -8,7 +8,10 @@ struct PaperHeader: View {
     let note: Note
     let colors: Tok.NoteColors
     @Binding var renaming: Bool
-    var showDone = false
+    /// 鍵盤升降只叫標題列重畫（✓ 跟鍵盤同一刻進出），不叫整張紙
+    @ObservedObject var keyboard: KeyboardWatch
+    /// 在行裡、清單名、記事本打字：鍵盤也開著才畫 ✓
+    var typing = false
     let onTitle: () -> Void
     let onDone: () -> Void
     let onRoute: (Route) -> Void
@@ -22,6 +25,10 @@ struct PaperHeader: View {
     /// 封面圖：沒有／清單的矮橫幅（標題列的底與小膠囊隨捲動淡進來，時間列在捲動內容裡）／記事本的固定大圖（標題列疊在圖上）
     var cover: CoverMode = .none
     @FocusState private var titleFocused: Bool
+
+    private var showDone: Bool {
+        keyboard.up && typing
+    }
 
     enum CoverMode {
         case none

@@ -18,7 +18,9 @@ struct PaperView: View {
     var onTrash: (String) -> Void
 
     @State var remote = ListRemote()
-    @StateObject private var keyboard = KeyboardWatch()
+    /// 鍵盤升降：紙不看著它（按 ＋ 升輸入框時鍵盤一升，整張紙會白白多重算一次）。
+    /// 要跟著鍵盤變的只有右上 ✓（標題列自己看）和右下 ＋（下面的 Watch）
+    @State private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
     @ObservedObject private var covers = Covers.shared
     @ObservedObject private var locks = Locks.shared
@@ -157,9 +159,10 @@ struct PaperView: View {
             Button(Words.cancel, role: .cancel) {}
         }
         .onChange(of: store.composeAsk) { _ in openIfAsked() }
-        .onChange(of: store.plusAsk) { _ in addLine() }
+        .modifier(Watch(object: store.plus, value: { $0.asks }, action: { _ in addLine() }))
         .onChange(of: store.renameAsk) { _ in renameIfAsked() }
         .onChange(of: fabWanted) { _ in updateFab() }
+        .modifier(Watch(object: keyboard, value: { $0.up }, action: { _ in updateFab() }))
         // 切到別的 app、鎖螢幕：輸入框裡打到一半的字先記成一行、框收起、馬上存（1.1 多米 2026-11-01 定）
         .onChange(of: phase) { now in
             if now != .active, composing {
@@ -214,7 +217,7 @@ struct PaperView: View {
     private func header(_ colors: Tok.NoteColors, cover: PaperHeader.CoverMode) -> some View {
         PaperHeader(
             store: store, note: note, colors: colors, renaming: $renaming,
-            showDone: keyboard.up && (editingID != nil || renaming || padFocused),
+            keyboard: keyboard, typing: editingID != nil || renaming || padFocused,
             onTitle: onTitle, onDone: doneTyping, onRoute: onRoute,
             onRename: startRename,
             onPinFull: { pinChoices = $0 },

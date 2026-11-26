@@ -48,8 +48,9 @@ final class Store: ObservableObject {
     /// 要紙升起輸入框（開了新的一張、控制中心按了「記一行」）：每要一次加一
     @Published var composeAsk = 0
     private var composePending = false
-    /// 右下 ＋ 被按了一下（＋ 畫在紙外面，換紙時不跟著閃）：每按一次加一，紙自己決定開不開輸入框
-    @Published var plusAsk = 0
+    /// 右下 ＋ 被按了一下（＋ 畫在紙外面，換紙時不跟著閃）：每按一次加一，紙自己決定開不開輸入框。
+    /// 自己一份（跟 fab 一樣）：按下去只有紙上看著它的小 modifier 醒來，紙和根畫面不會因為 store 變了先多重算一次
+    let plus = Plus()
     /// 從搜尋點一行過來（1.1 openAt／takeSeek）：換到那張，紙捲到那一行、亮一下。紙拿一次就清掉
     var seek: String?
     @Published var seekAsk = 0
@@ -136,6 +137,10 @@ final class Store: ObservableObject {
 
     final class Fab: ObservableObject {
         @Published var shown = false
+    }
+
+    final class Plus: ObservableObject {
+        @Published var asks = 0
     }
 
     final class Toasts: ObservableObject {
