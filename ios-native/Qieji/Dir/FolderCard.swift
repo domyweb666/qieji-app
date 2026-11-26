@@ -135,6 +135,11 @@ final class FolderCard: UIView {
         }
     }
 
+    /// 框裡一張磚按著／放開：直接改那塊
+    func mark(_ id: String, held: Bool) {
+        grid.mark(id, animated: up) { $0.held = held }
+    }
+
     private func arrange(_ look: FolderLook) {
         let inner = CGRect(origin: .zero, size: look.place.page)
         let wide = CGSize(width: CGFloat(look.pages) * inner.width, height: inner.height)

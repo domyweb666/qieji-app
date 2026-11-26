@@ -43,7 +43,9 @@ extension DirModel {
         quiet.disablesAnimations = true
         withTransaction(quiet) {
             settle()
+            tilesQuiet = true
             stackOn = nil
+            tilesQuiet = false
             ghost.entry = nil
             ghost.shift = .zero
             ghost.catchUp = .zero

@@ -46,7 +46,12 @@ struct DirPanel: View {
         pinned
             .ignoresSafeArea()
             .allowsHitTesting(model.isOpen)
-            .onChange(of: model.query) { _ in model.page = 0 }
+            // 本來就在第一頁不再設一次（設一次整個目錄、搜尋結果就多算一次）。搜尋時格子藏著沒拆，跟著回到第一頁
+            .onChange(of: model.query) { _ in
+                guard model.page != 0 else { return }
+                model.page = 0
+                model.gridTouch.scroll(toPage: 0, animated: false)
+            }
             .alert(deleteTitle, isPresented: flag(\.askDelete)) {
                 Button(Words.delete, role: .destructive) {
                     if let id = model.askDelete {
@@ -85,7 +90,7 @@ struct DirPanel: View {
         ZStack(alignment: .topLeading) {
             // 後面的紙整個霧掉（多米 2026-11-22 看過對照圖選的；原本是黑色暗幕、上面那截看得到紙）
             Veil(solidColor: Tok.Col.scrim)
-                .opacity(Double(model.progress))
+                .modifier(DirSlideFade(slide: model.slide))
                 .contentShape(Rectangle())
                 .onTapGesture { model.tapOut() }
                 .accessibilityLabel(model.editing ? Words.doneEditing : Words.closeDir)
@@ -93,10 +98,7 @@ struct DirPanel: View {
             if model.stage > 1 {
                 sheet
                     .coordinateSpace(name: DirPanel.space)
-                    .offset(y: model.fading ? model.pulled : model.travel * (1 - model.progress))
-                    // 整塊當成一張淡出：不這樣的話裡面每一層各自變透明，點磚打開時底下那一面磚會透出來閃一下
-                    .compositingGroup()
-                    .opacity(model.fading ? Double(model.progress) : 1)
+                    .modifier(DirSlideMove(slide: model.slide, travel: model.travel))
             }
         }
     }
@@ -266,13 +268,18 @@ struct DirPanel: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
-        if model.searching, model.movingItem == nil {
-            DirSearchList(store: store, model: model)
-        } else if model.searching {
-            DirPickGrid(store: store, model: model)
-        } else {
+    /// 搜尋時格子藏起來、不拆：開始搜尋、清掉搜尋不用把整面磚拆掉再全部重建
+    private var content: some View {
+        ZStack(alignment: .topLeading) {
             grid
+                .opacity(model.searching ? 0 : 1)
+                .allowsHitTesting(!model.searching)
+                .accessibilityHidden(model.searching)
+            if model.searching, model.movingItem == nil {
+                DirSearchList(store: store, model: model)
+            } else if model.searching {
+                DirPickGrid(store: store, model: model)
+            }
         }
     }
 
@@ -283,7 +290,8 @@ struct DirPanel: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: Tok.Space.zero) {
                     ForEach(Array(model.pages.enumerated()), id: \.offset) { number, items in
-                        DirPageView(model: model, items: items, currentID: store.currentID)
+                        DirPageView(model: model, page: pageLook(items))
+                            .equatable()
                             .padding(.horizontal, Tok.Space.lg)
                             .padding(.top, Tok.Space.sm + Tok.Space.md)
                             .frame(width: model.screen.width, height: proxy.size.height, alignment: .topLeading)
@@ -297,6 +305,10 @@ struct DirPanel: View {
             .onAppear { model.gridFrame = frame }
             .onChange(of: frame) { model.gridFrame = $0 }
         }
+    }
+
+    private func pageLook(_ items: [Seats.Entry]) -> DirPage {
+        DirPage(items: items, currentID: store.currentID, editing: model.editing, dragID: model.drag?.id, cell: model.cellWidth)
     }
 
     /// 頁點：幾頁幾個，亮的是現在這頁；只有一頁不印

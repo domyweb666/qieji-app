@@ -9,10 +9,20 @@ struct FolderFlight: Equatable {
         case spring, fade
     }
 
-    var from: CGFloat
-    var goal: CGFloat
-    var speed: CGFloat = 0 // 起步的速度（每秒走多少進度）
-    var kind = Kind.spring
+    let from: CGFloat
+    let goal: CGFloat
+    let speed: CGFloat // 起步的速度（每秒走多少進度）
+    let kind: Kind
+    /// 走多久。做出來就算好一次（以前每問一次從頭算，開關資料夾一次要算上百次）
+    let span: Double
+
+    init(from: CGFloat, goal: CGFloat, speed: CGFloat = 0, kind: Kind = .spring) {
+        self.from = from
+        self.goal = goal
+        self.speed = speed
+        self.kind = kind
+        span = FolderFlight.span(from: from, goal: goal, speed: speed, kind: kind)
+    }
 
     /// 停著不動
     static func still(_ at: CGFloat) -> FolderFlight {
@@ -47,15 +57,15 @@ struct FolderFlight: Equatable {
         return (speed - FolderFlight.rate * push * CGFloat(time)) * exp(-FolderFlight.rate * CGFloat(time))
     }
 
-    /// 走多久
-    var span: Double {
-        if isStill {
+    /// 走多久：離終點和速度都夠小的那一刻
+    private static func span(from: CGFloat, goal: CGFloat, speed: CGFloat, kind: Kind) -> Double {
+        if from == goal, speed == 0 {
             return 0
         }
         if kind == .fade {
             return Tok.Motion.folderFadeSeconds
         }
-        let push = push, near = Tok.Motion.folderNear
+        let gap = from - goal, push = speed + rate * gap, near = Tok.Motion.folderNear
         var time: Double = 0
         while time < Tok.Motion.folderMost {
             let left = (gap + push * CGFloat(time)) * exp(-FolderFlight.rate * CGFloat(time))
