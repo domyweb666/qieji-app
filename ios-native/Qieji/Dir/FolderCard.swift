@@ -50,6 +50,13 @@ final class FolderCard: UIView {
         folder?.id
     }
 
+    /// 框藏著時霧面停掉（停在中間的動畫掛著，推進設定的轉場會收不了尾，見 SoftBlurView）
+    override var isHidden: Bool {
+        didSet {
+            frost.asleep = isHidden
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         isHidden = true

@@ -46,7 +46,7 @@ final class FolderStage: UIView {
     init(_ model: DirModel) {
         self.model = model
         super.init(frame: .zero)
-        veil.isHidden = true
+        hideVeil(true)
         veil.isAccessibilityElement = true
         veil.accessibilityLabel = Words.closeFolder
         veil.accessibilityTraits = .button
@@ -259,7 +259,7 @@ final class FolderStage: UIView {
         let spring = cards.contains { $0.moving && !$0.grow.isStill && $0.show.goal == 1 }
         fog = fog.turned(to: goal, after: fogTime(now), kind: spring ? .spring : .fade)
         added = now
-        veil.isHidden = false
+        hideVeil(false)
         tint.alpha = goal
         let part = CAKeyframeAnimation(keyPath: "opacity")
         part.values = fog.frames.map { FolderPose.shade($0) }
@@ -270,7 +270,13 @@ final class FolderStage: UIView {
     private func settleFog() {
         mist.amount = Tok.Col.folderBlur * fog.goal
         tint.alpha = fog.goal
-        veil.isHidden = fog.goal == 0
+        hideVeil(fog.goal == 0)
+    }
+
+    /// 霧沒了整層藏起來，霧面的動畫跟著停（見 SoftBlurView）
+    private func hideVeil(_ hidden: Bool) {
+        veil.isHidden = hidden
+        mist.asleep = hidden
     }
 
     private func fogTime(_ now: CFTimeInterval) -> Double {
