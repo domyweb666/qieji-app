@@ -118,6 +118,9 @@ final class Store: ObservableObject {
     var inboxHold: () -> Bool = { false } // 手上正在拖東西：先不併
     var targetsSent: [ShareTarget]? // 上次推出去的紙單（nil＝還沒推過）
     var landed: (note: String, line: String)? // 剛併進正在看的那張的最上面一行：紙拿去亮一下
+    /// iCloud 上有、這台還沒有最新那份的紙（CloudLink 每拉一輪告訴一次，沒在同步就是空的）。分享進來的字先不放進去
+    var cloudBehind: Set<String> = []
+    var inboxHeld: [String: Double] = [:] // 收件匣裡在等那張下載好的（第一行 id）→ 這次打開第一次等的時間（毫秒）
 
     @Published private(set) var loaded = false
     /// 這次打開不准寫檔（原本的存檔讀不到、或沒能先備份）。回到前景再試（thaw）

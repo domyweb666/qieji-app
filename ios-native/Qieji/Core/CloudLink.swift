@@ -35,6 +35,8 @@ final class CloudLink: ObservableObject {
     private var pulling = false // busy 的時候是在拉（不是在傳）
     private var away = false // 離開前景了
     private var stale = false // 正在拉的這一輪是回到前景之前開始的：不算這次要的
+    private var behindTries = 0 // 有紙還沒下載到最新：這次已經多拉了幾次
+    private var behindWork: DispatchWorkItem?
 
     init(drive: CloudDrive) {
         self.drive = drive
@@ -59,6 +61,8 @@ final class CloudLink: ObservableObject {
             pull()
         } else {
             pushWork?.cancel()
+            behindWork?.cancel()
+            store?.setCloudBehind([]) // 沒在同步了：不用再等哪一張下載
             settle()
         }
     }
@@ -87,7 +91,7 @@ final class CloudLink: ObservableObject {
             let fetched = CloudSync(drive: drive).fetch()
             // 解檔、算指紋也在這裡做（不碰本機資料），主執行緒只合併
             var cloud: [Note] = []
-            if case let .got(notes, _, _, _) = fetched {
+            if case let .got(notes, _, _, _, _) = fetched {
                 cloud = Sync.decodeCloud(notes)
             }
             DispatchQueue.main.async { [cloud] in self?.merge(fetched, cloud: cloud) }
@@ -100,6 +104,7 @@ final class CloudLink: ObservableObject {
     func whenPulled(limit: Double = Tok.Timing.pullWait, times: Int = Tok.Timing.pullTimes, _ done: @escaping () -> Void) {
         let key = UUID()
         away = false
+        behindTries = 0 // 回到前景：還沒下載好的那幾張重新多看幾次
         waiting[key] = done
         giveUp(key, after: limit, times: times)
         pullForWaiting()
@@ -162,17 +167,43 @@ final class CloudLink: ObservableObject {
             return
         case .failed:
             return
-        case let .got(_, gone, layout, names):
+        case let .got(_, gone, layout, names, behind):
             if Sync.seemsNewCloud(store.book, names: names, gone: gone) {
                 paused = true
                 asking = true
                 return
             }
             store.mergeCloud(cloud: cloud, gone: gone, layout: layout)
+            store.setCloudBehind(Set(behind.compactMap(CloudSync.noteID)))
             lastSync = Date()
             syncCovers(names: names)
+            lookAgain(behind.isEmpty)
         }
         pushSoon()
+    }
+
+    /// 有檔這台還沒有最新那份（已經請 iCloud 下載）：過一下再拉一次，每次多等一倍，有限次。
+    /// 回到前景才重新算次數；人不在看 app 就不拉
+    private func lookAgain(_ caughtUp: Bool) {
+        behindWork?.cancel()
+        guard !caughtUp else {
+            behindTries = 0
+            return
+        }
+        guard behindTries < Tok.Timing.behindTimes else { return }
+        let wait = Tok.Timing.behindWait * pow(2, Double(behindTries))
+        behindTries += 1
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !away else { return }
+            if busy {
+                behindTries -= 1 // 正在傳：傳完會自己再看，這次不算
+                lookAgain(false)
+            } else {
+                pull()
+            }
+        }
+        behindWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
     }
 
     /// 「放進去」：這台的紙全部當成沒傳過，跟現在這個 iCloud 合起來、全部傳上去

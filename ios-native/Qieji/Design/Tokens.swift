@@ -477,6 +477,11 @@ enum Tok {
         static let cloudPushWait: Double = 2
         static let pullWait: Double = 5 // 分享進來的字等這一輪 iCloud：等這麼久，還在拉就再等，最多等 pullTimes 次，超過就照併
         static let pullTimes = 3
+        // iCloud 上有紙這台還沒有最新那份：過 behindWait 秒再拉一次，每次多等一倍，最多 behindTimes 次（2、4、8、16、32 秒）
+        static let behindWait: Double = 2
+        static let behindTimes = 5
+        // 分享進來的字要放的那張還沒下載到最新：這次打開最多等這麼久（秒），還沒好就照放（兩邊都改的那條規則合，字不會少）
+        static let behindGiveUp: Double = 60
         static let priceLimit: Double = 10 // 讀價格最多等這麼久，超過就照實說讀不到
         static let widgetPushDelay: Double = 0.8 // 換紙之後停這麼久才通知桌面小工具
         static let inboxRetry: Double = 0.3 // 分享進來的字要併進紙時正在拖東西：過這麼久再看放手了沒

@@ -44,7 +44,7 @@ final class CloudTests: XCTestCase {
     /// 一台手機拉 iCloud、合進來
     @discardableResult
     private func pull(_ book: inout Notebook, now: Double) -> Sync.MergeResult {
-        guard case let .got(notes, gone, layout, _) = sync.fetch() else {
+        guard case let .got(notes, gone, layout, _, _) = sync.fetch() else {
             XCTFail("拉不到")
             return Sync.MergeResult()
         }

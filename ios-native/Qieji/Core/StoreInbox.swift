@@ -70,10 +70,13 @@ extension Store {
         }
         let entries = pass.mail.map(\.entry)
         let skip = dealtWith(InboxMerge.ids(entries), in: book)
+        let now = Clock.now()
         var next = book
         let out = InboxMerge.run(
-            &next, entries, skip: skip, current: currentID, recent: disk?.recent ?? [], now: Clock.now()
+            &next, entries, skip: skip, current: currentID, recent: disk?.recent ?? [],
+            behind: cloudBehind, late: waitedOut(now: now), now: now
         )
+        holdInbox(entries, held: out.held, now: now)
         inboxPut.merge(out.put) { _, new in new }
         if !out.tops.isEmpty {
             landed = currentID.flatMap { id in out.tops[id].map { (note: id, line: $0) } }
@@ -89,6 +92,40 @@ extension Store {
             DispatchQueue.main.async {
                 self?.saveSoon { saved in self?.settleInbox(pass, saved: saved) }
             }
+        }
+    }
+
+    // MARK: 等 iCloud 下載
+
+    /// iCloud 每拉一輪告訴一次哪幾張這台還沒有最新那份。有一張好了、收件匣又有字在等：再收一次
+    func setCloudBehind(_ ids: Set<String>) {
+        let caught = cloudBehind.subtracting(ids)
+        cloudBehind = ids
+        if !inboxHeld.isEmpty, !caught.isEmpty {
+            takeInbox()
+        }
+    }
+
+    /// 等夠久的（這次打開第一次等到現在超過 behindGiveUp）：這一趟照放
+    private func waitedOut(now: Double) -> Set<String> {
+        Set(inboxHeld.filter { now - $0.value >= Tok.Timing.behindGiveUp * 1000 }.keys)
+    }
+
+    /// 這一趟沒放的記下第一次等的時間，放了的忘掉。第一次等的到時間自己再收一次（不用等回到前景）
+    private func holdInbox(_ entries: [ShareEntry], held: [String], now: Double) {
+        let waiting = Set(held)
+        var fresh = false
+        for key in entries.compactMap(InboxMerge.key) {
+            if !waiting.contains(key) {
+                inboxHeld[key] = nil
+            } else if inboxHeld[key] == nil {
+                inboxHeld[key] = now
+                fresh = true
+            }
+        }
+        guard fresh else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.behindGiveUp + 0.5) { [weak self] in
+            self?.takeInbox()
         }
     }
 
@@ -184,6 +221,7 @@ extension Store {
         targetsSent = nil
         inboxPut = [:]
         inboxKept = []
+        inboxHeld = [:]
         let inbox = inbox
         Store.nameQueue.sync {} // 還在排隊的紙單先寫完，才不會清掉之後又寫回去
         return Store.inboxQueue.sync { inbox.wipe() }
@@ -195,10 +233,16 @@ enum InboxMerge {
     struct Landed: Equatable {
         var tops: [String: String] = [:] // 放了字的紙 id → 那張最上面的新行 id
         var put: [String: String] = [:] // 放進去的每一行 id → 放進哪一張
+        var held: [String] = [] // 要放的那張這台還沒下載到最新、這次先不放的（key）：留在收件匣
     }
 
     static func ids(_ entries: [ShareEntry]) -> Set<String> {
         Set(entries.flatMap { $0.lines.map(\.id) })
+    }
+
+    /// 認一則分享用的名字：第一行的 id（分享當下就定好，不會變）
+    static func key(_ entry: ShareEntry) -> String? {
+        entry.lines.first?.id
     }
 
     /// 這幾個 id 哪些已經在紙上（行、最近刪除）。只掃一趟、只比這幾個：不為了一行把全部的行做成一份表
@@ -216,16 +260,26 @@ enum InboxMerge {
     }
 
     /// entries 舊的在前，skip＝不准再加的。每則插到最上面（新的在最上），拆的行照原本順序。
+    /// behind＝這台還沒下載到 iCloud 最新那份的紙：要放進這幾張的先不放（留在收件匣，等下載好再來），
+    /// 不然會變成「兩邊都改」、以這台的舊字為主，別台剛改的劃掉、改名、刪行會被蓋回去。late＝等夠久的那幾則（key），照放
     static func run(
-        _ book: inout Notebook, _ entries: [ShareEntry], skip: Set<String> = [], current: String?, recent: [String], now: Double
+        _ book: inout Notebook, _ entries: [ShareEntry], skip: Set<String> = [], current: String?, recent: [String],
+        behind: Set<String> = [], late: Set<String> = [], now: Double
     ) -> Landed {
         var known = found(ids(entries), in: book).union(skip)
         var out = Landed()
         for entry in entries {
-            let fresh = entry.lines.filter { known.insert($0.id).inserted }.map { Item(id: $0.id, text: $0.text) }
+            var mine = known
+            let fresh = entry.lines.filter { mine.insert($0.id).inserted }.map { Item(id: $0.id, text: $0.text) }
             guard let first = fresh.first else { continue }
-            let id = place(book, wanted: entry.note, current: current, recent: recent, need: fresh.count)
-                .map { book.notes[$0].id } ?? openNew(&book, now: now)
+            let target = place(book, wanted: entry.note, current: current, recent: recent, need: fresh.count)
+                .map { book.notes[$0].id }
+            if let target, behind.contains(target), let key = key(entry), !late.contains(key) {
+                out.held.append(key)
+                continue
+            }
+            known = mine
+            let id = target ?? openNew(&book, now: now)
             guard let spot = book.index(id) else { continue }
             book.notes[spot].items.insert(contentsOf: fresh, at: 0)
             book.notes[spot].updated = now

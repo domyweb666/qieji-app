@@ -9,7 +9,7 @@ import os
 
 enum CloudError: Error {
     case notFound // 沒有這個檔
-    case notReady // 有這個檔，但還沒下載到這台（已經請 iCloud 下載，下次再讀）
+    case notReady // 有這個檔，但這台還沒有最新的那份（還沒下載、或手上那份比較舊）。已經請 iCloud 下載，下次再讀
 }
 
 /// 放檔案的地方。真的 iCloud 資料夾與測試用的本機資料夾都實作這個
@@ -23,10 +23,12 @@ protocol CloudDrive {
     func remove(_ name: String) throws
 }
 
-/// 一個普通的資料夾當雲碟（測試用；真的 iCloud 資料夾也是在這上面多處理「還沒下載」）
+/// 一個普通的資料夾當雲碟（測試用；真的 iCloud 資料夾也是在這上面多處理「還沒下載」）。
+/// behind＝假裝這台手上那份不是最新的檔名：讀的時候跟真的 iCloud 一樣回「還沒好」
 struct FolderDrive: CloudDrive {
     let dir: URL
     var online = true
+    var behind: Set<String> = []
 
     func available() -> Bool {
         online
@@ -42,6 +44,9 @@ struct FolderDrive: CloudDrive {
         guard FileManager.default.fileExists(atPath: file.path) else {
             throw CloudError.notFound
         }
+        if behind.contains(name) {
+            throw CloudError.notReady
+        }
         return try String(contentsOf: file, encoding: .utf8)
     }
 
@@ -56,12 +61,28 @@ struct FolderDrive: CloudDrive {
 }
 
 /// 真的 iCloud 雲碟（容器的 Documents 資料夾）。還沒下載到這台的檔，系統用「.檔名.icloud」佔位：
-/// 列檔名時換回原名，讀的時候請系統下載、這次先當成讀不到
+/// 列檔名時換回原名，讀的時候請系統下載、這次先當成讀不到。
+/// 檔在、但系統說手上這份不是最新的（別台改過、新的那份還在路上）也一樣：請系統下載、這次當成讀不到。
+/// 不然會拿舊的那份當 iCloud 的內容，合併、上傳時把別台剛改的字蓋回去
 struct ICloudDrive: CloudDrive {
     static let container = "iCloud.org.domyweb.qieji"
 
     private var dir: URL? {
         FileManager.default.url(forUbiquityContainerIdentifier: ICloudDrive.container)?.appendingPathComponent("Documents")
+    }
+
+    /// 手上這份能不能當成 iCloud 上的內容：系統說是最新的（.current）才算。
+    /// 「有一份但比較舊」（.downloaded）、「還沒下載」都不算。系統沒給（不是 iCloud 的檔）照舊讀
+    static func isCurrent(_ status: URLUbiquitousItemDownloadingStatus?) -> Bool {
+        guard let status else { return true }
+        return status == .current
+    }
+
+    /// 每次重問系統（URL 會記住上次問到的答案）
+    private static func status(_ file: URL) -> URLUbiquitousItemDownloadingStatus? {
+        var url = file
+        url.removeAllCachedResourceValues()
+        return try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
     }
 
     func available() -> Bool {
@@ -87,6 +108,10 @@ struct ICloudDrive: CloudDrive {
         }
         let file = dir.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: file.path) {
+            guard ICloudDrive.isCurrent(ICloudDrive.status(file)) else {
+                try? FileManager.default.startDownloadingUbiquitousItem(at: file)
+                throw CloudError.notReady
+            }
             return try String(contentsOf: file, encoding: .utf8)
         }
         let holder = dir.appendingPathComponent(".\(name).icloud")
@@ -124,7 +149,15 @@ struct CloudSync {
     enum Fetched {
         case off // iCloud 沒登入或雲碟關掉
         case failed // 這次拿不到（列不出資料夾）
-        case got(notes: [JSONValue], gone: JSONValue?, layout: Seats.LayoutFetch, names: [String])
+        /// behind＝在 iCloud 上、這台還沒有最新那份的檔名（這次沒讀，已經請 iCloud 下載）
+        case got(notes: [JSONValue], gone: JSONValue?, layout: Seats.LayoutFetch, names: [String], behind: Set<String>)
+    }
+
+    /// 檔名是一張紙的（不是墓碑、排列、封面圖）就回紙的 id
+    static func noteID(_ name: String) -> String? {
+        guard name.hasSuffix(".json"), !name.hasPrefix("."), name != goneFile, name != layoutFile else { return nil }
+        let id = String(name.dropLast(".json".count))
+        return id.isEmpty ? nil : id
     }
 
     struct Pushed: Equatable {
@@ -135,7 +168,8 @@ struct CloudSync {
 
     // MARK: 下載
 
-    /// 把 iCloud 上所有紙、墓碑、排列讀回來（原樣）。某一張讀不到就跳過：本機那張留著，上傳前也會因為讀不到而先不傳
+    /// 把 iCloud 上所有紙、墓碑、排列讀回來（原樣）。某一張讀不到就跳過：本機那張留著，上傳前也會因為讀不到而先不傳。
+    /// 這台手上那份不是最新的也算讀不到（記進 behind）：舊的那份不准當成 iCloud 的內容
     func fetch() -> Fetched {
         guard drive.available() else {
             return .off
@@ -146,8 +180,15 @@ struct CloudSync {
         var notes: [JSONValue] = []
         var gone: JSONValue? = .object([:])
         var layout: Seats.LayoutFetch = names.contains(CloudSync.layoutFile) ? .unreadable : .missing
+        var behind = Set<String>()
         for name in names where name.hasSuffix(".json") && !name.hasPrefix(".") {
-            guard let text = try? drive.read(name) else {
+            let text: String
+            do {
+                text = try drive.read(name)
+            } catch CloudError.notReady {
+                behind.insert(name)
+                continue
+            } catch {
                 continue
             }
             guard let data = JSONValue.parse(text) else {
@@ -163,7 +204,7 @@ struct CloudSync {
             default: notes.append(data)
             }
         }
-        return .got(notes: notes, gone: gone, layout: layout, names: names)
+        return .got(notes: notes, gone: gone, layout: layout, names: names, behind: behind)
     }
 
     // MARK: 上傳
