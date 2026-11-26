@@ -417,7 +417,7 @@ final class ShareTargetsTests: ShareSafeCase {
         return note
     }
 
-    /// 同名的分得出來：加開的日期，同一天的再加時分；不同名的不變；第一行不准出現
+    /// 同名的分得出來：加開的日期；同一天的只加時分（日期一樣，加了也分不出來，還會擠成兩行）；不同名的不變；第一行不准出現
     func testSameNamesAreToldApart() {
         let early = stamp(24, 9, 5), noon = stamp(25, 12, 0), late = stamp(25, 18, 30)
         XCTAssertEqual(InboxMerge.names([paper("", noon)]), ["未命名"])
@@ -425,7 +425,7 @@ final class ShareTargetsTests: ShareSafeCase {
         XCTAssertEqual(InboxMerge.names([paper(" ", noon), paper("", early)]), ["未命名・11/25", "未命名・11/24"])
         XCTAssertEqual(
             InboxMerge.names([paper("", noon), paper("買菜", noon), paper("", early), paper("", late)]),
-            ["未命名・11/25 12:00", "買菜", "未命名・11/24", "未命名・11/25 18:30"]
+            ["未命名・12:00", "買菜", "未命名・11/24", "未命名・18:30"]
         )
         XCTAssertEqual(InboxMerge.names([paper("買菜", noon), paper("買菜", early)]), ["買菜・11/25", "買菜・11/24"])
         XCTAssertEqual(InboxMerge.names([]), [])

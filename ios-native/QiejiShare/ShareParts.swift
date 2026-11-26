@@ -101,6 +101,8 @@ final class ShareTargetButton: SharePress {
         tile.isHidden = target == nil
         name.text = ShareWords.into(target?.title)
         name.numberOfLines = big ? Tok.Shape.shareNameLines : 1
+        // 一行放不下：從中間省略，同名的後面那段（「・10:16」）才看得到
+        name.lineBreakMode = big ? .byTruncatingTail : .byTruncatingMiddle
         mark.isHidden = !many
         isUserInteractionEnabled = many
         accessibilityLabel = name.text

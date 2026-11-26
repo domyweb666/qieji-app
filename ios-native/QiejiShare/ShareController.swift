@@ -10,6 +10,9 @@ final class ShareController: UIViewController {
     private let born = Date()
     private var targets: [ShareTarget]? // 紙單讀到才有；一張都沒有是空的
     private var picked = 0
+    private var chose = false // 自己從選單挑過
+    private var listTurn = 0 // 第幾次讀紙單：晚到的舊結果不算
+    private var ears: [NSObjectProtocol] = []
     private var read = false // 附件讀完了
     private var draft: ShareDraft? // 讀到字才有
     private var failed = false // 按過 ✓ 但沒寫成
@@ -24,11 +27,8 @@ final class ShareController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         wire()
-        // 第一次跟系統拿共用容器會慢：不准在主執行緒。送出時是第二次，✓ 等紙單到了才能按
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let list = ShareInbox.app.targets()
-            DispatchQueue.main.async { self?.listed(list) }
-        }
+        loadTargets()
+        watchTargets()
         Task { [weak self] in
             let found = await ShareReader.read(self?.extensionContext?.inputItems ?? [])
             self?.arrived(found)
@@ -66,17 +66,57 @@ final class ShareController: UIViewController {
 
     // MARK: 紙單
 
-    private func listed(_ list: [ShareTarget]) {
-        guard !closed else { return }
+    /// 第一次跟系統拿共用容器會慢：不准在主執行緒。送出時是第二次，✓ 等紙單到了才能按
+    private func loadTargets() {
+        listTurn += 1
+        let turn = listTurn
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let list = ShareInbox.app.targets()
+            DispatchQueue.main.async { self?.listed(list, turn: turn) }
+        }
+    }
+
+    /// 面板開著切去茄記上鎖、刪紙、改名再切回來：重讀紙單，上鎖的那張名字不准還留在選單上。
+    /// 回到前景（擴充的主人回來）讀一次；app 寫完紙單也會講一聲（同時開著兩邊、或回來時 app 還沒寫完）
+    private func watchTargets() {
+        ShareInbox.listen()
+        let center = NotificationCenter.default
+        for name in [ShareInbox.changed, .NSExtensionHostWillEnterForeground, .NSExtensionHostDidBecomeActive] {
+            ears.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.loadTargets()
+            })
+        }
+    }
+
+    deinit {
+        for ear in ears {
+            NotificationCenter.default.removeObserver(ear)
+        }
+    }
+
+    private func listed(_ list: [ShareTarget], turn: Int) {
+        guard !closed, turn == listTurn else { return }
+        guard let old = targets else {
+            targets = list
+            panel.showTargets(list, picked: picked)
+            refresh(animated: false)
+            logReady()
+            return
+        }
+        guard old != list else { return }
+        // 挑的那張不在了（上鎖、刪掉、滿了）就回到預設那張；記的時候 app 也會再擋一次（不准放進上鎖的）
+        let kept = chose ? ShareTarget.follow(picked, from: old, in: list) : nil
+        picked = kept ?? 0
+        chose = kept != nil
         targets = list
         panel.showTargets(list, picked: picked)
         refresh(animated: false)
-        logReady()
     }
 
     private func pick(_ index: Int) {
         guard let targets, targets.indices.contains(index) else { return }
         picked = index
+        chose = true
         panel.showTargets(targets, picked: index)
     }
 
