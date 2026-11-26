@@ -46,7 +46,12 @@ struct PaperList: UIViewRepresentable {
         guard list.paperID == note.id else {
             PerfMeter.time("swap") {
                 UIView.lively {
-                    list.swap(to: note.id, look: LineLook(key: note.color, scale: scale, texture: texture), wire: { wire(list) }, front: front)
+                    list.swap(
+                        to: note.id,
+                        look: LineLook(key: note.color, scale: scale, texture: texture),
+                        wire: { wire(list) },
+                        front: front
+                    )
                 }
             }
             seek(list)

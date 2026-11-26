@@ -101,7 +101,7 @@ final class LineRowView: UIView {
         placeLabel()
     }
 
-    // 材質跟整張紙對齊：這一行一換位置，就把卡片裡那張貼圖挪到對的相位（只挪、不重畫）
+    /// 材質跟整張紙對齊：這一行一換位置，就把卡片裡那張貼圖挪到對的相位（只挪、不重畫）
     override var frame: CGRect {
         didSet { alignGrain() }
     }

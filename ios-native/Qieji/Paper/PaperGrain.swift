@@ -24,7 +24,7 @@ enum PaperGrain {
         return made
     }
 
-    private static func pattern(_ key: String, _ recipe: Tok.Texture.Recipe, dark: Bool) -> UIColor {
+    private static func pattern(_ key: String, _ recipe: TextureRecipe, dark: Bool) -> UIColor {
         let id = dark ? key + ".dark" : key
         if let hit = patterns[id] {
             return hit
@@ -35,7 +35,7 @@ enum PaperGrain {
     }
 
     /// 每一層：遮罩的形狀塗上那一層的墨色（含不透明度），疊成一格
-    private static func draw(_ recipe: Tok.Texture.Recipe, dark: Bool) -> UIImage? {
+    private static func draw(_ recipe: TextureRecipe, dark: Bool) -> UIImage? {
         let masks = recipe.coats.compactMap { coat in UIImage(named: coat.mask).map { (coat, $0) } }
         guard masks.count == recipe.coats.count else {
             assertionFailure("紙張材質少了貼圖：\(recipe.coats.map(\.mask))")
