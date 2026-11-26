@@ -288,7 +288,7 @@ enum Sync {
         return res
     }
 
-    /// 兩份只差同步記號（指紋、指紋變的時間、上次傳上去的記號、墓碑、排列改過與傳過的時間）：畫面上看起來一模一樣
+    /// 兩份只差同步記號（指紋、指紋變的時間、上次傳上去的記號、墓碑、排列改過與傳過的時間、排列還沒跟 iCloud 對過）：畫面上看起來一模一樣
     static func onlyMarks(_ lhs: Notebook, _ rhs: Notebook) -> Bool {
         unmarked(lhs) == unmarked(rhs)
     }
@@ -298,6 +298,7 @@ enum Sync {
         out.gone = [:]
         out.orderMod = nil
         out.orderSent = nil
+        out.orderFresh = false
         for idx in out.notes.indices {
             out.notes[idx].hash = nil
             out.notes[idx].mod = nil

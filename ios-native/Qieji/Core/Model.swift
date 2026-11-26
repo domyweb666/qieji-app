@@ -72,6 +72,8 @@ struct Notebook: Equatable {
     var order: [String]? // 目錄座位表
     var orderMod: Double?
     var orderSent: Double?
+    /// 剛從空的開始（新裝、從空的開始、清除所有資料），還沒跟 iCloud 的排列對過：第一次拉到時照 iCloud 的排，這台的不准蓋過去
+    var orderFresh = false
     var folders: [Folder]?
     var grid: Double?
     var extra: [String: JSONValue] = [:]

@@ -229,14 +229,15 @@ extension Seats {
         }
     }
 
-    /// 要傳上 iCloud 的排列：跟上次對上的不一樣才傳
+    /// 要傳上 iCloud 的排列：跟上次對上的不一樣才傳。剛從空的開始、還沒跟 iCloud 對過的不傳（會蓋掉 iCloud 上的排列）
     static func layoutToSend(_ book: Notebook) -> Layout? {
-        guard let order = book.order, let mod = book.orderMod, mod != book.orderSent else { return nil }
+        guard !book.orderFresh, let order = book.order, let mod = book.orderMod, mod != book.orderSent else { return nil }
         return Layout(order: order, mod: mod, folders: book.folders ?? [])
     }
 
     /// 拉 iCloud 時合排列（紙合完之後）。這台排過還沒傳、而且比 iCloud 那份新 → 留著等上傳；
-    /// 不然照 iCloud 那份排，這台沒有的紙跳過、那份沒有的補最後。回傳目錄順序有沒有變
+    /// 不然照 iCloud 那份排，這台沒有的紙跳過、那份沒有的補最後。回傳目錄順序有沒有變。
+    /// 剛從空的開始、第一次對到：不比誰新，一律照 iCloud 的（見 takeFirstLayout）
     @discardableResult
     static func mergeLayout(_ book: inout Notebook, _ fetch: LayoutFetch) -> Bool {
         let raw: JSONValue?
@@ -246,10 +247,15 @@ extension Seats {
         case let .found(val): raw = val
         }
         guard let remote = readLayout(raw) else {
+            // iCloud 上沒有排列（或壞掉）：這台的就是第一份
+            book.orderFresh = false
             if book.orderMod != nil {
                 book.orderSent = nil
             }
             return false
+        }
+        if book.orderFresh {
+            return takeFirstLayout(&book, remote)
         }
         if let mine = book.orderMod, mine > remote.mod {
             if book.orderSent == mine {
@@ -262,6 +268,20 @@ extension Seats {
         book.folders = remote.folders
         book.orderMod = remote.mod
         book.orderSent = remote.mod
+        fixOrder(&book)
+        return (book.order ?? []) != beforeOrder || (book.folders ?? []) != beforeFolders
+    }
+
+    /// 剛從空的開始之後第一次對到 iCloud 的排列：整份照 iCloud 的順序與資料夾（這台在那之前排的、開的資料夾不算數，
+    /// 裡面的紙拆出來補在最後，一張都不少）。這次不傳：這時候常常還有紙沒下載下來，傳上去會把別台那幾張的位置排亂。
+    /// 之後就跟平常一樣，後排的那台為準
+    private static func takeFirstLayout(_ book: inout Notebook, _ remote: Layout) -> Bool {
+        let beforeOrder = book.order ?? [], beforeFolders = book.folders ?? []
+        book.order = remote.order
+        book.folders = remote.folders
+        book.orderMod = remote.mod
+        book.orderSent = remote.mod
+        book.orderFresh = false
         fixOrder(&book)
         return (book.order ?? []) != beforeOrder || (book.folders ?? []) != beforeFolders
     }

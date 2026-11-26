@@ -158,10 +158,12 @@ final class Disk {
         return Loaded(book: book, source: .fresh, last: first.id, recent: [], unreadable: false, legacy: [:])
     }
 
-    /// 空的一份。新開始的沒有寬磚時期的空位：下次打開不准清、不准把排列時間改成現在（會蓋掉 iCloud 的排列）
+    /// 空的一份。新開始的沒有寬磚時期的空位：下次打開不准清、不准把排列時間改成現在（會蓋掉 iCloud 的排列）。
+    /// 也還沒跟 iCloud 的排列對過（orderFresh）：在那之前親手排的，不准蓋掉 iCloud 上的排列與資料夾
     private func empty() -> Notebook {
         var book = Notebook()
         book.grid = Seats.gridCols
+        book.orderFresh = true
         return book
     }
 

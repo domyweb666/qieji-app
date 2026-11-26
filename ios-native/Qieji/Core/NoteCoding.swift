@@ -9,7 +9,7 @@ enum NoteCoding {
         "deletedAt", "created", "updated", "b", "h", "mod", "sh",
     ]
     private static let bookKeys: Set<String> = [
-        "sort", "notes", "garden", "gone", "order", "orderMod", "orderSent", "folders", "grid",
+        "sort", "notes", "garden", "gone", "order", "orderMod", "orderSent", "orderFresh", "folders", "grid",
     ]
 
     // MARK: 小工具
@@ -167,6 +167,7 @@ enum NoteCoding {
         }
         book.orderMod = dict["orderMod"]?.numberValue
         book.orderSent = dict["orderSent"]?.numberValue
+        book.orderFresh = dict["orderFresh"]?.truthy == true
         if let folders = dict["folders"]?.arrayValue {
             book.folders = folders.compactMap(folder)
         }
@@ -236,6 +237,9 @@ enum NoteCoding {
         }
         if let sent = book.orderSent {
             dict["orderSent"] = .number(sent)
+        }
+        if book.orderFresh {
+            dict["orderFresh"] = .bool(true)
         }
         if let folders = book.folders {
             dict["folders"] = .array(folders.map(json))

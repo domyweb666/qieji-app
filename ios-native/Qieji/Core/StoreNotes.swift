@@ -197,6 +197,7 @@ extension Store {
         guard loaded, let disk, !frozen, disk.wipe(), wipeInbox() else { return false }
         var fresh = Notebook()
         fresh.grid = Seats.gridCols // 跟新裝的一樣（見 Disk）
+        fresh.orderFresh = true // 之後再打開同步：照 iCloud 的排列，這台的不准蓋過去
         let first = Tutorial.note(now: Clock.now())
         fresh.notes = [first]
         Seats.fixOrder(&fresh)
