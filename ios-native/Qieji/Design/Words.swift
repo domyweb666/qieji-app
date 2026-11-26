@@ -17,6 +17,7 @@ enum Words {
     static let commit = "記下來，收起輸入框"
     static let more = "更多"
     static let menu = "選單"
+    static let back = "返回"
     static let rename = "改名字"
     static let renameHint = "這張叫什麼"
     static let titleField = "清單名"

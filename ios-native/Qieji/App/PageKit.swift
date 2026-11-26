@@ -1,10 +1,18 @@
 import SwiftUI
+import UIKit
 
 /// 推進來的一頁（最近刪除、設定、新功能、蔬菜家族；照 1.1）：奶油底，頁名用 28 點大字畫在內容裡、跟內容一起捲。
 /// 不用系統大標題：推進來時標題列邊進場邊長高，標題往下掉（1.1 2026-11-04 多米真機「抖」）。返回鍵只有箭頭
-struct PageScaffold<Content: View>: View {
+///
+/// 不用系統標題列，返回鍵、⋯ 自己畫在頁面上（跟紙右上的 ⋯ 同一種玻璃圓鈕）：
+/// 紙沒有標題列，系統的返回鍵在推頁時比頁面慢半拍才對齊；按返回時那顆玻璃先鼓成空心圈、留在原地不跟頁面走，
+/// 回到紙之後還在左上角飄約 10 格才淡掉（2026-11-26 多米真機「左上角按鈕會跳動一下」，limrun 錄影逐格看到）。
+/// 畫在頁面上就跟頁面一起滑，只剩一套機制在動
+struct PageScaffold<Content: View, Trailing: View>: View {
     let title: String
+    @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -22,8 +30,90 @@ struct PageScaffold<Content: View>: View {
             .padding(.bottom, Tok.Space.pageBottom)
         }
         .background(Tok.Col.page.ignoresSafeArea())
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarRole(.editor)
+        .safeAreaInset(edge: .top, spacing: Tok.Space.zero) { bar }
+        .toolbar(.hidden, for: .navigationBar)
+        .background(SwipeBack().frame(width: Tok.Space.zero, height: Tok.Space.zero))
+        .accessibilityAction(.escape) { dismiss() }
+    }
+
+    /// 頂端一排：左返回、右邊這頁自己的鈕；位置照紙的頂端那排（左 16、右 20、上 8）
+    private var bar: some View {
+        HStack(spacing: Tok.Space.sm) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(Tok.Font.barIcon)
+                    .foregroundColor(Tok.Col.textPrimary)
+                    .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
+                    .frost(Circle(), interactive: true)
+            }
+            .buttonStyle(FrostPress())
+            .accessibilityLabel(Words.back)
+            Spacer(minLength: Tok.Space.sm)
+            trailing()
+        }
+        .padding(.leading, Tok.Space.lg)
+        .padding(.trailing, Tok.Space.gutter)
+        .padding(.vertical, Tok.Space.sm)
+        .background(Tok.Col.page.ignoresSafeArea(edges: .top))
+    }
+}
+
+extension PageScaffold where Trailing == EmptyView {
+    init(title: String, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, trailing: { EmptyView() }, content: content)
+    }
+}
+
+/// 右上的圓鈕（最近刪除的 ⋯）：跟紙右上的 ⋯ 長一樣
+struct PageBarIcon: View {
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(Tok.Font.barIcon)
+            .foregroundColor(Tok.Col.textPrimary)
+            .frame(width: Tok.Shape.hitMin, height: Tok.Shape.hitMin)
+            .frost(Circle(), interactive: true)
+    }
+}
+
+/// 標題列藏起來之後，系統把「從左邊緣往右滑回上一頁」關掉了，這裡接回來。
+/// 只在堆疊裡有兩頁以上才准開始：紙（最底下那頁）往右滑是劃掉一行，不能被它搶走
+struct SwipeBack: UIViewControllerRepresentable {
+    func makeUIViewController(context _: Context) -> Probe {
+        Probe()
+    }
+
+    func updateUIViewController(_: Probe, context _: Context) {}
+
+    final class Probe: UIViewController {
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            hook()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            hook()
+        }
+
+        private func hook() {
+            guard let nav = navigationController, let pop = nav.interactivePopGestureRecognizer else { return }
+            PopGate.shared.nav = nav
+            pop.delegate = PopGate.shared
+            pop.isEnabled = true
+        }
+    }
+}
+
+/// 邊緣滑回上一頁的守門：手勢的 delegate 是 weak，所以放一個一直活著的
+final class PopGate: NSObject, UIGestureRecognizerDelegate {
+    static let shared = PopGate()
+    weak var nav: UINavigationController?
+
+    func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
+        guard let nav else { return false }
+        return nav.viewControllers.count > 1 && nav.transitionCoordinator == nil
     }
 }
 

@@ -40,7 +40,18 @@ struct TrashPage: View {
             .flatMap { note in note.bin.map { LineAsk(note: note, line: $0) } }
             .sorted { ($0.line.binnedAt ?? 0) > ($1.line.binnedAt ?? 0) }
         let total = dead.count + lines.count
-        PageScaffold(title: Words.trash) {
+        PageScaffold(title: Words.trash, trailing: {
+            if total > 0 {
+                Menu {
+                    Button(role: .destructive) { askEmpty = true } label: {
+                        Label(Words.emptyTrash(total), systemImage: "trash")
+                    }
+                } label: {
+                    PageBarIcon(symbol: "ellipsis")
+                }
+                .accessibilityLabel(Words.menu)
+            }
+        }, content: {
             if total > 0 {
                 Text(Words.trashRule)
                     .font(Tok.Font.footnote)
@@ -80,21 +91,7 @@ struct TrashPage: View {
             if total == 0 {
                 EmptyNote(lines: [Words.trashEmpty, Words.trashEmptyTip])
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if total > 0 {
-                    Menu {
-                        Button(role: .destructive) { askEmpty = true } label: {
-                            Label(Words.emptyTrash(total), systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .accessibilityLabel(Words.menu)
-                }
-            }
-        }
+        })
         .confirmationDialog(askNote.map { Labels.label($0) } ?? "", isPresented: noteAsking, titleVisibility: .visible) {
             if let note = askNote {
                 Button(Words.restore) {
