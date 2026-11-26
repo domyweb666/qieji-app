@@ -41,11 +41,13 @@ final class DirModel: ObservableObject {
         var frame: CGRect
     }
 
-    /// 現在這張是從目錄哪裡點進來的：哪一張、目錄第幾頁、打開著哪個資料夾
+    /// 現在這張是從目錄哪裡點進來的：哪一張、目錄第幾頁、打開著哪個資料夾、資料夾第幾頁、搜尋的字（不是從搜尋結果點的就是空的）
     struct Origin: Equatable {
         var id: String
         var page: Int
         var folder: String?
+        var folderPage = 0
+        var query = ""
     }
 
     struct Hit {
@@ -416,7 +418,7 @@ final class DirModel: ObservableObject {
             }
             return
         }
-        markOrigin(id)
+        markOrigin(id, search: true)
         // 離開的那張由 open 收尾（空行拿掉、空白的紙不留）
         guard !calm, let frame, line == nil else {
             if let line {

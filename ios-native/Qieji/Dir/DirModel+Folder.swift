@@ -3,10 +3,11 @@ import UIKit
 
 /// 資料夾：打開、收起、改名、放進、移出
 extension DirModel {
-    func showFolder(_ id: String, naming: Bool = false) {
+    /// page＝開在第幾頁（刪除這張回來的：點進去時那一頁）
+    func showFolder(_ id: String, naming: Bool = false, page: Int = 0) {
         // 收到一半又點同一個：留在同一頁，不然裡面的磚會跳一下
         if folderStage?.closing(id) != true {
-            folderPage = 0
+            folderPage = page
         }
         openFolder = OpenFolder(id: id, naming: naming)
     }
