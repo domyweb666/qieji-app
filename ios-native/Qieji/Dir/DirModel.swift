@@ -316,8 +316,8 @@ final class DirModel: ObservableObject {
             rise()
             return
         }
-        // 剛打開 app 就按、還沒先做好：先掛上去（還在螢幕外），下一格才開始滑。一起改的話面板會直接出現在定位
-        DispatchQueue.main.async { [weak self] in self?.rise() }
+        // 剛打開 app 就按、還沒先做好：先掛上去（還在螢幕外），真的畫出一格才開始滑（為什麼不用主佇列見 NextFrame）
+        NextFrame.run { [weak self] in self?.rise() }
     }
 
     private func rise() {
