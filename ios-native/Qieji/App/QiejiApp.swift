@@ -42,10 +42,22 @@ struct RootView: View {
     @State private var switcher = SwitchModel() // 切換清單。不讓根畫面看著它：開、收的時候紙不用跟著重畫
     @State private var newsCard: News.Entry? // 更新後第一次打開跳一次的新功能卡片
     @State private var fullNotice = false // 1.0 開過同步的人：iCloud 同步改成完整版功能
-    @ObservedObject private var shop = Purchases.shared
-    @ObservedObject private var look = Look.shared
-    @ObservedObject private var cloud = CloudLink.shared
-    @ObservedObject private var quick = QuickAction.shared
+    // 根畫面不看著這四個：看著的話同步時間、價格一變，整個根畫面就重算一次。要跟著它們變的那幾件各自用只看自己的小 modifier（Watch、LookScheme、CloudAsk）
+    private var shop: Purchases {
+        Purchases.shared
+    }
+
+    private var look: Look {
+        Look.shared
+    }
+
+    private var cloud: CloudLink {
+        CloudLink.shared
+    }
+
+    private var quick: QuickAction {
+        QuickAction.shared
+    }
 
     /// 假資料模式、跑單元測試：不碰 App Store
     private static var offline: Bool {
@@ -96,7 +108,7 @@ struct RootView: View {
                 }
         }
         .tint(Tok.Col.accent)
-        .overlay(alignment: .bottom) { ToastBar(store: store).animation(Tok.Motion.fade, value: store.toast?.id) }
+        .overlay(alignment: .bottom) { ToastBar(store: store, toasts: store.toasts) }
         .sheet(item: $sheet) { _ in
             // 付費頁：系統表單，從下面升起、一次展開到全高（2026-11-14 多米真機：半高要再滑一次才看得到購買鍵）、往下拉可以關
             FullView(shop: shop, store: store) { sheet = nil }
@@ -105,7 +117,7 @@ struct RootView: View {
                 .presentationCornerRadius(Tok.Shape.radiusLg)
         }
         // 外觀（跟隨系統／淺色／深色）：整個 app 連系統提示框、選單一起換
-        .preferredColorScheme(look.scheme)
+        .modifier(LookScheme(look: look))
         .onAppear {
             PerfMeter.shared.start()
             store.boot()
@@ -126,8 +138,8 @@ struct RootView: View {
             }
             composeIfQuick()
         }
-        .onChange(of: quick.asks) { _ in composeIfQuick() }
-        .onChange(of: shop.asked) { asked in
+        .modifier(Watch(object: quick, value: { $0.asks }, action: { _ in composeIfQuick() }))
+        .modifier(Watch(object: shop, value: { $0.asked }, action: { asked in
             // 問過 Apple 買了沒才決定：1.0 同步過、確定沒買的人跳「iCloud 同步改成完整版功能」。
             // 新功能卡片（更新後第一次打開跳一次）照樣記成看過，但上面那個這次有跳就不跳，一次只跳一個（1.1 _layout）
             guard asked, !RootView.offline else { return }
@@ -138,7 +150,7 @@ struct RootView: View {
             } else {
                 newsCard = entry
             }
-        }
+        }))
         .alert(Words.fullNoticeTitle, isPresented: $fullNotice) {
             Button(Words.gotIt, role: .cancel) {}
             Button(Words.seeFull) { sheet = .full }
@@ -189,13 +201,7 @@ struct RootView: View {
                 }
             }
         }
-        // iCloud S5：這個 iCloud 裡一張這台同步過的紙都沒有（換了 Apple ID、資料夾被刪）：先停下來問。第一句先答「有沒有損失」
-        .alert(Words.newCloudTitle, isPresented: Binding(get: { cloud.asking }, set: { _ in })) {
-            Button(Words.notNowCloud, role: .cancel) { cloud.decline() }
-            Button(Words.adoptCloud) { cloud.adopt() }
-        } message: {
-            Text(Words.newCloudBody)
-        }
+        .modifier(CloudAsk(cloud: cloud))
         .onOpenURL { url in
             // 網址只准打開畫面、升起輸入框，不帶資料、解鎖不了任何東西（.vibe/安全標準.md 平台互動、授權段）。
             // 控制中心「記一行」：qieji://new → 回到紙、升起輸入框；完整版功能（1.1 片 B4），沒買的打開付費頁。
@@ -253,10 +259,11 @@ struct RootView: View {
         ZStack {
             if let note = store.current {
                 // 換紙時同一個紙面換內容（不整個重做），新的那張自己淡入：見 PaperView
-                PaperView(
+                PaperHost(
                     store: store, given: note, onTitle: { go(.switcher) }, onRoute: go,
                     onMoveLine: { dir.open(move: $0) }, onTrash: { dir.trashPaper($0) }
                 )
+                .equatable()
             }
         }
         // 右下 ＋ 畫在紙外面：換紙時一直停在原地（1.1 PageBarHost）；目錄升起時蓋過它
@@ -321,10 +328,15 @@ struct RootView: View {
 /// 畫面底下的一條提示（刪掉一行、清掉劃掉的行…），幾秒後自己收，可以按復原。
 /// 照 1.1：系統材質的膠囊（iOS 26 液態玻璃）、長的字會換行、出現時 VoiceOver 唸出來
 struct ToastBar: View {
-    @ObservedObject var store: Store
+    let store: Store
+    @ObservedObject var toasts: Store.Toasts
 
     var body: some View {
-        if let toast = store.toast {
+        bar.animation(Tok.Motion.fade, value: toasts.now?.id)
+    }
+
+    @ViewBuilder private var bar: some View {
+        if let toast = toasts.now {
             HStack(spacing: Tok.Space.lg) {
                 Text(toast.text)
                     .font(Tok.Font.callout)

@@ -26,7 +26,13 @@ final class Store: ObservableObject {
         didSet { onCurrent() }
     }
 
-    @Published var toast: Toast?
+    /// 提示條自己一份（跟 fab 一樣）：出現、收起只重畫提示條，不叫紙跟著重算
+    let toasts = Toasts()
+    var toast: Toast? {
+        get { toasts.now }
+        set { toasts.now = newValue }
+    }
+
     /// 要人讀完的訊息（會丟字的錯誤）：系統提示框、一顆按鈕，不像提示條會自己消失（1.1 06-首次體驗 ❓7）
     @Published var notice: Notice?
     private var saveFailed = false
@@ -127,6 +133,10 @@ final class Store: ObservableObject {
 
     final class Fab: ObservableObject {
         @Published var shown = false
+    }
+
+    final class Toasts: ObservableObject {
+        @Published var now: Toast?
     }
 
     struct Toast: Equatable {

@@ -97,7 +97,10 @@ final class Purchases: ObservableObject {
     func loadPrice() {
         guard !pricing, !full else { return }
         pricing = true
-        priceFailed = false
+        // 一樣就不設：@Published 設一次就叫看著它的畫面重畫一次，設定頁推進來的動畫裡不要多這一下
+        if priceFailed {
+            priceFailed = false
+        }
         Task {
             defer { pricing = false }
             do {
@@ -105,13 +108,15 @@ final class Purchases: ObservableObject {
                     try await Product.products(for: [FullRule.productID])
                 }
                 if let product = found.first {
-                    price = product.displayPrice
-                } else if price == nil {
+                    if price != product.displayPrice {
+                        price = product.displayPrice
+                    }
+                } else if price == nil, !priceFailed {
                     priceFailed = true
                 }
             } catch {
                 Purchases.log.error("price failed: \(String(describing: type(of: error)), privacy: .public)")
-                if price == nil {
+                if price == nil, !priceFailed {
                     priceFailed = true
                 }
             }
