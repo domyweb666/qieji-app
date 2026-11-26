@@ -7,6 +7,14 @@ struct ShareTarget: Codable, Equatable {
     var title: String
     var glyph: String
     var color: String
+
+    /// 面板開著時紙單換了（app 上鎖、刪掉、改名、換張）：自己挑過的那張在新紙單的第幾個（位置可能變了）。
+    /// 不在了（上鎖、刪掉、滿了）是 nil：呼叫的人回到第一張（預設）
+    static func follow(_ picked: Int, from old: [ShareTarget], in new: [ShareTarget]) -> Int? {
+        guard old.indices.contains(picked) else { return nil }
+        let id = old[picked].id
+        return new.firstIndex { $0.id == id }
+    }
 }
 
 /// 分享進來的一行
@@ -90,6 +98,8 @@ struct ShareInbox {
     let settings: () -> UserDefaults?
     /// 假資料、單元測試那份：本來就沒有東西，清除時算清乾淨
     var isOff = false
+    /// 紙單的檔換了：跟開著的面板講一聲（跨行程，只有名字、不帶內容）
+    var announce: () -> Void = ShareInbox.ping
 
     static let app = ShareInbox(
         folder: {
@@ -261,19 +271,59 @@ struct ShareInbox {
             ShareInbox.log.error("targets: no app group container")
             return false
         }
+        // 檔有動就講一聲：面板開著的話馬上重讀，剛上鎖、刪掉、改名的不會留在選單上
+        let had = FileManager.default.fileExists(atPath: file.path)
         do {
-            guard let data = try ShareInbox.pack(ShareInbox.sound(next)) else { return ShareInbox.clear(file) }
+            guard let data = try ShareInbox.pack(ShareInbox.sound(next)) else {
+                let gone = ShareInbox.clear(file)
+                if had {
+                    announce()
+                }
+                return gone
+            }
             // 比檔裡的原樣，不比讀回來的：讀的時候會丟掉多的，裡面說不定還留著不該在的
             guard data != ShareInbox.targetsData(file) else { return true }
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            announce()
             return true
         } catch {
             ShareInbox.log.error("targets not written: \(ShareInbox.brief(error), privacy: .public)")
             _ = ShareInbox.clear(file) // 寧可沒有紙單：舊的裡面可能有剛上鎖的
+            if had {
+                announce()
+            }
             return false
         }
     }
+
+    // MARK: 紙單換了，跟開著的面板講
+
+    /// 跨行程的通知名字（Darwin）：只是「換了」，不帶任何內容
+    static let changedName = "org.domyweb.qieji.shareTargets.changed"
+    /// 行程裡轉成的通知：面板在主執行緒收
+    static let changed = Notification.Name("org.domyweb.qieji.shareTargets.changed")
+
+    /// app 寫完紙單叫的
+    static func ping() {
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterPostNotification(center, CFNotificationName(changedName as CFString), nil, nil, true)
+    }
+
+    /// 擴充開面板時叫一次（一個行程只接一次）：之後 app 每換一次紙單，這個行程就收到一次 `changed`
+    static func listen() {
+        _ = listening
+    }
+
+    private final class Ear {}
+    private static let ear = Ear() // 只當名牌用，不會被放掉
+    private static let listening: Void = {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(ear).toOpaque(),
+            { _, _, _, _, _ in NotificationCenter.default.post(name: ShareInbox.changed, object: nil) },
+            changedName as CFString, nil, .deliverImmediately
+        )
+    }()
 
     /// 刪檔；刪不掉就把內容換成空的。回傳裡面是不是沒有名字了
     private static func clear(_ file: URL) -> Bool {

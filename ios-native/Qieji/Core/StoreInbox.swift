@@ -257,19 +257,53 @@ enum InboxMerge {
         return [first] + (lists.pinned + lists.recent).filter { $0.id != first.id }
     }
 
-    /// 紙單上的名字。同名的加上開的日期，還是一樣（同一天開的）再加幾點幾分。
-    /// 只用開的時間：紙的內容（第一行）不准放進共用區
+    /// 紙單上的名字。同名的才在後面加一段開的時間，挑最短、而且在同名的裡面只有它一個的：
+    /// 日期 → 幾點幾分 → 日期＋時分 → 時分秒 → 日期＋時分秒（選單一行大約放得下「未命名・10:16:05」）。
+    /// 五種長相都不一樣（有沒有斜線、空格、秒），挑了不同種的兩張不會撞。同一秒開的再加（2）（3）。
+    /// 只用開的時間：紙的內容（第一行、行數）不准放進共用區
     static func names(_ notes: [Note], calendar: Calendar = .current) -> [String] {
         let labels = notes.map(Labels.label)
-        func same(_ list: [String], _ name: String) -> Bool {
-            list.filter { $0 == name }.count > 1
+        var out = labels
+        let clocks = notes.map { NameClock($0.created, calendar) }
+        var groups: [String: [Int]] = [:]
+        for (spot, label) in labels.enumerated() {
+            groups[label, default: []].append(spot)
         }
-        let days = zip(notes, labels).map { note, label in
-            same(labels, label) ? "\(label)・\(Dates.day(note.created, calendar: calendar))" : label
+        for group in groups.values where group.count > 1 {
+            let tags = NameClock.styles.map { style in group.map { style(clocks[$0]) } }
+            for (slot, spot) in group.enumerated() {
+                if let tag = tags.first(where: { list in list.filter { $0 == list[slot] }.count == 1 }) {
+                    out[spot] = "\(labels[spot])・\(tag[slot])"
+                    continue
+                }
+                let last = tags[tags.count - 1], nth = last.prefix(slot).filter { $0 == last[slot] }.count + 1
+                out[spot] = "\(labels[spot])・\(last[slot])" + (nth > 1 ? "（\(nth)）" : "")
+            }
         }
-        return zip(notes, zip(labels, days)).map { note, name in
-            same(labels, name.0) && same(days, name.1) ? "\(name.1) \(Dates.time(note.created, calendar: calendar))" : name.1
+        return out
+    }
+
+    /// 一張紙開的時間，拆成紙單名字要用的幾段
+    private struct NameClock {
+        let day: String // 11/25
+        let time: String // 10:16
+        let second: String // 05
+
+        init(_ stamp: Double, _ calendar: Calendar) {
+            day = Dates.day(stamp, calendar: calendar)
+            time = Dates.time(stamp, calendar: calendar)
+            let sec = calendar.component(.second, from: Date(timeIntervalSince1970: stamp / 1000))
+            second = sec < 10 ? "0\(sec)" : "\(sec)"
         }
+
+        /// 由短到長
+        static let styles: [(NameClock) -> String] = [
+            { $0.day },
+            { $0.time },
+            { "\($0.day) \($0.time)" },
+            { "\($0.time):\($0.second)" },
+            { "\($0.day) \($0.time):\($0.second)" },
+        ]
     }
 
     /// 能記的：沒刪、是清單、沒上鎖、放得下
