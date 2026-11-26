@@ -13,10 +13,10 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 API = "https://api.appstoreconnect.apple.com/v1"
 BUNDLE_ID = "org.domyweb.qieji"
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 LOCALE = "zh-Hant"
-RELEASE = "AFTER_APPROVAL"  # 多米 2026-11-24 選：審過馬上全部發
-SHEET = Path(__file__).resolve().parent.parent / ".vibe" / "送審貼上版-2.0.0.md"
+RELEASE = "AFTER_APPROVAL"  # 多米 2026-11-24 替 2.0.0 選：審過馬上全部發；2.1.0 沿用，送前再問一次
+SHEET = Path(__file__).resolve().parent.parent / ".vibe" / "送審貼上版-2.1.0.md"
 EDITABLE = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
 LIVE = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION"}
 REVIEW_FIELDS = ("contactFirstName", "contactLastName", "contactPhone", "contactEmail",
@@ -78,6 +78,9 @@ def texts():
     if len(found) != 3:
         sys.exit(f"送審稿應該有 3 個程式碼區塊，找到 {len(found)} 個。停。")
     notes, promo, review = found
+    for name, text in (("新功能說明", notes), ("宣傳文字", promo), ("審查備註", review)):
+        if "待多米" in text:
+            sys.exit(f"{name}還有「待多米」的字，還沒定稿。停。")
     if len(notes) > 4000 or len(promo) > 170 or len(review.encode()) > 4000:
         sys.exit(f"超過上限：新功能 {len(notes)}、宣傳 {len(promo)}、備註 {len(review.encode())} bytes。停。")
     return notes, promo, review
