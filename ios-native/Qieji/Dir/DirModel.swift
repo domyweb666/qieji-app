@@ -86,7 +86,7 @@ final class DirModel: ObservableObject {
 
     var origin: Origin?
 
-    var searchSeen: (query: String, book: Notebook, hits: [Seats.LineHit])?
+    var searchSeen: DirSearchSeen?
     var tilesQuiet = false // 改單塊磚的狀態時不帶動畫（放手落定那一步）
     private var pagesSeen: [[Seats.Entry]]?
     private var pagesSize = 0
@@ -107,7 +107,7 @@ final class DirModel: ObservableObject {
     let pageGrids = NSHashTable<DirGridView>.weakObjects()
     @Published var folderPage = 0
     @Published var menu: Menu?
-    // 下面三個只關一塊磚：直接改那塊（DirModel+Tiles），不叫整個目錄、每一頁重畫
+    /// 下面三個只關一塊磚：直接改那塊（DirModel+Tiles），不叫整個目錄、每一頁重畫
     var stackOn: String? { // 準備疊上去的那一格是誰
         didSet { markTiles(oldValue, stackOn) { $0.target = $1 } }
     }

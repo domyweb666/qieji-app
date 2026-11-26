@@ -35,7 +35,14 @@ extension DirModel {
             return seen.hits
         }
         let hits = Seats.searchLines(book, query: query)
-        searchSeen = (query, book, hits)
+        searchSeen = DirSearchSeen(query: query, book: book, hits: hits)
         return hits
     }
+}
+
+/// 上次搜尋算好的：哪個字、哪一份資料、結果
+struct DirSearchSeen {
+    let query: String
+    let book: Notebook
+    let hits: [Seats.LineHit]
 }
