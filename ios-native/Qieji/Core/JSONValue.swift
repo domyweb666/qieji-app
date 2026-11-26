@@ -22,25 +22,31 @@ enum JSONValue: Equatable {
         return from(any)
     }
 
+    /// 直接看 Foundation 的類別（NSString、NSDictionary…），不先整包轉成 Swift 的 [String: Any] 再轉一次：
+    /// 千行的存檔冷啟動讀一次省好幾毫秒。讀出來的值跟以前一樣（測試 JSONFromTests 逐一對過）
     static func from(_ any: Any) -> JSONValue {
-        if any is NSNull {
-            return .null
+        let obj = any as AnyObject
+        if let str = obj as? NSString {
+            return .string(str as String)
         }
-        if let num = any as? NSNumber {
+        if let num = obj as? NSNumber {
             // JSONSerialization 把 true／false 也給成 NSNumber：看底層型別才分得出來
             if CFGetTypeID(num) == CFBooleanGetTypeID() {
                 return .bool(num.boolValue)
             }
             return .number(num.doubleValue)
         }
-        if let str = any as? String {
-            return .string(str)
+        if let dict = obj as? NSDictionary {
+            var out = [String: JSONValue](minimumCapacity: dict.count)
+            for (key, val) in dict {
+                // 鍵不是字串（JSON 不會有）：跟以前一樣整個當成 null
+                guard let key = key as? String else { return .null }
+                out[key] = from(val)
+            }
+            return .object(out)
         }
-        if let arr = any as? [Any] {
+        if let arr = obj as? NSArray {
             return .array(arr.map(from))
-        }
-        if let dict = any as? [String: Any] {
-            return .object(dict.mapValues(from))
         }
         return .null
     }

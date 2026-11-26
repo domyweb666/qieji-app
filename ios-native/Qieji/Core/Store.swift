@@ -318,6 +318,15 @@ final class Store: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Tok.Timing.saveDebounce, execute: task)
     }
 
+    /// 冷啟動讀完：不等、照平常的存法（指紋背景先算、背景寫，內容沒變就不寫）。
+    /// 算完之前又改了字就交給那一趟；進背景的 flush() 會取消這一趟、當場寫
+    func saveAfterBoot() {
+        guard disk != nil else { return }
+        saveTask?.cancel()
+        saveTask = DispatchWorkItem {}
+        warmThenSave()
+    }
+
     /// 指紋在背景算好（記在 PrintCache）再存。算的時候又改了、或已經馬上存過：這一趟不用存
     private func warmThenSave() {
         guard let task = saveTask, !task.isCancelled else { return }

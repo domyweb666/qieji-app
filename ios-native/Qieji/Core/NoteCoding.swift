@@ -154,7 +154,17 @@ enum NoteCoding {
 
     /// 讀不出來（沒有存檔、JSON 壞掉、不是茄記的格式）回 nil：呼叫的人要先把原本那份另存，不能拿空的蓋掉
     static func readBook(_ raw: String?) -> Notebook? {
-        guard let raw, let dict = JSONValue.parse(raw)?.objectValue, let list = dict["notes"]?.arrayValue else { return nil }
+        guard let raw else { return nil }
+        return book(JSONValue.parse(raw))
+    }
+
+    /// 存檔讀進來的位元組直接解（不先轉成字、再轉回位元組）
+    static func readBook(_ data: Data) -> Notebook? {
+        book(JSONValue.parse(data))
+    }
+
+    private static func book(_ value: JSONValue?) -> Notebook? {
+        guard let dict = value?.objectValue, let list = dict["notes"]?.arrayValue else { return nil }
         var book = Notebook()
         book.notes = dedupe(list.compactMap(\.objectValue).map(note))
         book.garden = garden(dict["garden"], notes: book.notes)

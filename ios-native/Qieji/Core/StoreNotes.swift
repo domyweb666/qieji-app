@@ -10,7 +10,10 @@ extension Store {
         let found = disk.load()
         startPrefs(found, with: disk)
         unreadTries = disk.tally(unread: found.canStartOver)
-        start(found, with: disk)
+        // 讀到自己的存檔：存檔排到背景（打開那一格不在主執行緒算指紋、整本轉文字跟原檔比）。
+        // 這時記憶體跟原檔只差「下次打開會照樣再補一次」的東西（指紋、排列、清掉過期的最近刪除），還沒存就被殺掉也不丟字；
+        // 同步一定是存檔成功之後才傳，iCloud 不會先拿到檔裡沒有的東西
+        start(found, with: disk, later: found.source == .native && !found.unreadable)
     }
 
     /// 1.1 的設定照抄一次。1.1 的舊檔讀不到的時候沒有東西可抄：傳 nil，Prefs 自己會再找、找不到就下次
@@ -81,7 +84,8 @@ extension Store {
         return book.notes.filter { !Labels.isEmpty($0) || !$0.bin.isEmpty || $0.cover != nil }
     }
 
-    private func start(_ read: Disk.Loaded, with disk: Disk, adding typed: [Note] = []) {
+    /// later：存檔可以排到背景。其他情況（從 1.1 搬過來、讀不出來另存過、讀不到時記的字補進來）當下寫：打開馬上被殺掉也不准丟
+    private func start(_ read: Disk.Loaded, with disk: Disk, adding typed: [Note] = [], later: Bool = false) {
         var found = read
         if found.source != .fresh, !found.unreadable {
             Seats.ownLayout(&found.book)
@@ -95,7 +99,11 @@ extension Store {
         adopt(found.book, last: found.last)
         tellUnread(found)
         purgeTrash()
-        flush()
+        if later, typed.isEmpty {
+            saveAfterBoot()
+        } else {
+            flush()
+        }
     }
 
     /// 已經另存的：先講沒有損失，再講紙會從哪裡回來。沒另存成的不准說另存了

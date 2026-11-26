@@ -217,7 +217,8 @@ final class Disk {
         queue.sync {} // 上一份設定還在排隊的先寫完
         let last = defaults.string(forKey: LegacyStore.lastKey)
         let recent = defaults.stringArray(forKey: LegacyStore.recentKey) ?? []
-        guard let raw = String(data: data, encoding: .utf8), let book = NoteCoding.readBook(raw) else {
+        // 位元組直接解；解不出來再照以前從字解一次（讀得進來的檔跟以前一模一樣）
+        guard let raw = String(data: data, encoding: .utf8), let book = NoteCoding.readBook(data) ?? NoteCoding.readBook(raw) else {
             // 讀不出來：原本那份另存，接下來的存檔才不會把唯一的一份蓋掉。另存不成就什麼都不寫
             let saved = rescue(data)
             Disk.log.error("state.json unreadable, rescued=\(saved)")
