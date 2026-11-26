@@ -109,13 +109,15 @@ extension Store {
     }
 
     /// 最近刪除 30 天自動清：打開 app、回到前景各跑一次。清掉的紙立墓碑（不然同步會從另一台把它帶回來）
+    /// 先在副本上算：沒有要補時間、沒有過期的就不動資料（不重畫、不存檔、不上傳）
     func purgeTrash(now: Double = Clock.now()) {
         guard loaded else { return }
-        edit { book in
-            _ = Trash.stampOld(&book.notes, now: now)
-            _ = Trash.stampOldBin(&book.notes, now: now)
-            Sync.dropNotes(&book, now: now) { Trash.isExpired($0, now: now) }
-            _ = Trash.purgeBin(&book.notes, now: now)
+        var copy = book
+        let stamped = Trash.stampOld(&copy.notes, now: now) + Trash.stampOldBin(&copy.notes, now: now)
+        let dropped = Sync.dropNotes(&copy, now: now) { Trash.isExpired($0, now: now) }.count
+        let purged = Trash.purgeBin(&copy.notes, now: now)
+        if stamped + dropped + purged > 0 {
+            edit { $0 = copy }
         }
         ensureCurrent()
     }

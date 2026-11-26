@@ -161,17 +161,24 @@ enum Sync {
         return out
     }
 
-    /// iCloud 上的檔案整理成「每個 id 一張、指紋算好」
-    private static func prepare(_ raws: [JSONValue]) -> (ids: [String], notes: [String: Note]) {
-        var ids: [String] = [], notes: [String: Note] = [:]
-        for raw in raws {
-            guard let dict = raw.objectValue, case .string = dict["id"] else { continue }
+    /// iCloud 上的檔案解成紙、指紋算好（id 不是字串的不理）。不碰本機資料：可以在背景做，千行的紙解一次、算一次指紋要好幾毫秒
+    static func decodeCloud(_ raws: [JSONValue]) -> [Note] {
+        raws.compactMap { raw in
+            guard let dict = raw.objectValue, case .string = dict["id"] else { return nil }
             var note = NoteCoding.note(dict)
             note.locked = false // 上鎖只算這支手機的事，iCloud 來的檔不能把這台的紙鎖上
             note.hash = PrintCache.shared.print(of: note)
             if !Clock.validTime(note.mod) {
                 note.mod = note.updated
             }
+            return note
+        }
+    }
+
+    /// 解好的紙整理成「每個 id 一張」：同一個 id 有兩份就留比較新的
+    private static func unique(_ cloud: [Note]) -> (ids: [String], notes: [String: Note]) {
+        var ids: [String] = [], notes: [String: Note] = [:]
+        for note in cloud {
             if let old = notes[note.id] {
                 if (note.mod ?? 0) > (old.mod ?? 0) {
                     notes[note.id] = note
@@ -185,13 +192,13 @@ enum Sync {
     }
 
     /// 把 iCloud 上的紙與墓碑合進本機。push＝合完之後本機比 iCloud 新、要上傳的紙 id
-    static func mergeRemote(_ book: inout Notebook, notes raws: [JSONValue], gone: JSONValue?, now: Double) -> MergeResult {
+    private static func mergeRemote(_ book: inout Notebook, cloud: [Note], gone: JSONValue?, now: Double) -> MergeResult {
         stampMods(&book, now: now)
         for (id, at) in NoteCoding.gone(gone) {
             book.gone[id] = max(book.gone[id] ?? 0, at)
         }
         let stones = book.gone
-        var (order, theirs) = prepare(raws)
+        var (order, theirs) = unique(cloud)
         var out: [Note] = []
         var res = MergeResult()
         for local in book.notes {
@@ -255,17 +262,18 @@ enum Sync {
     /// 把 iCloud 拉下來的東西合進本機（打開 app、回到前景、iCloud 變成可用、上傳時發現別台改過）。
     /// notes 是一個個 <id>.json 讀出來的原樣。retyped＝字被同步改掉的行（正在打字的那行要換成新字）
     static func mergeCloud(_ book: inout Notebook, notes raws: [JSONValue], gone: JSONValue?, now: Double) -> MergeResult {
+        mergeCloud(&book, cloud: decodeCloud(raws), gone: gone, now: now)
+    }
+
+    /// 同上，iCloud 的檔已經在背景解好（decodeCloud）
+    static func mergeCloud(_ book: inout Notebook, cloud: [Note], gone: JSONValue?, now: Double) -> MergeResult {
         let before = book.notes
-        let real = raws.filter { raw in
-            guard let dict = raw.objectValue, case .string = dict["id"] else { return false }
-            return !Tutorial.isUntouched(NoteCoding.note(dict))
-        }
+        let real = cloud.filter { !Tutorial.isUntouched($0) }
         let stones = NoteCoding.gone(gone)
-        // iCloud 上有真的紙（沒被墓碑擋掉的）＝重裝或換新手機：本機那張沒動過的教學紙是多的，拿掉（從沒上傳過，不立墓碑）
+        // iCloud 上有真的紙（沒被墓碑擋掉的）＝重裝或換新手機：本機那張沒動過的教學紙是多的，拿掉（從沒上傳過，不立墓碑）。
+        // 解好的紙 mod 讀不到時已換成 updated，跟 rawTouch 讀原檔的結果一樣
         var spare = 0
-        let alive = real.contains { raw in
-            guard let dict = raw.objectValue else { return false }
-            let note = NoteCoding.note(dict)
+        let alive = real.contains { note in
             guard let at = stones[note.id] else { return true }
             return at < rawTouch(note)
         }
@@ -274,10 +282,28 @@ enum Sync {
             book.notes.removeAll(where: Tutorial.isUntouched)
             spare = count - book.notes.count
         }
-        var res = mergeRemote(&book, notes: real, gone: gone, now: now)
+        var res = mergeRemote(&book, cloud: real, gone: gone, now: now)
         res.spare = spare
         res.retyped = retyped(before: before, after: book.notes)
         return res
+    }
+
+    /// 兩份只差同步記號（指紋、指紋變的時間、上次傳上去的記號、墓碑、排列改過與傳過的時間）：畫面上看起來一模一樣
+    static func onlyMarks(_ lhs: Notebook, _ rhs: Notebook) -> Bool {
+        unmarked(lhs) == unmarked(rhs)
+    }
+
+    private static func unmarked(_ book: Notebook) -> Notebook {
+        var out = book
+        out.gone = [:]
+        out.orderMod = nil
+        out.orderSent = nil
+        for idx in out.notes.indices {
+            out.notes[idx].hash = nil
+            out.notes[idx].mod = nil
+            out.notes[idx].syncedHash = nil
+        }
+        return out
     }
 
     private static func retyped(before: [Note], after: [Note]) -> [String] {
@@ -300,9 +326,11 @@ enum Sync {
 }
 
 /// 指紋不重算：內容跟上次算的時候一模一樣就沿用（一千行的紙每次存檔都從頭算會卡）。結果跟每次從頭算一樣。
+/// 每張紙記最近兩份：iCloud 拉下來那份在背景算指紋時，不會把本機那份擠掉（不然合併時主執行緒又要把本機千行的紙重算一次）
 final class PrintCache {
     static let shared = PrintCache()
-    private var seen: [String: (note: Note, print: String)] = [:]
+    private static let keep = 2
+    private var seen: [String: [(note: Note, print: String)]] = [:]
     private let lock = NSLock()
 
     func print(of note: Note) -> String {
@@ -312,14 +340,15 @@ final class PrintCache {
         bare.syncedHash = nil
         // 算的時候不佔著鎖：背景先算的那一趟不擋主執行緒
         lock.lock()
-        let old = seen[note.id]
+        let old = seen[note.id] ?? []
         lock.unlock()
-        if let old, old.note == bare {
-            return old.print
+        if let hit = old.first(where: { $0.note == bare }) {
+            return hit.print
         }
         let fresh = Sync.fingerprint(note)
         lock.lock()
-        seen[note.id] = (bare, fresh)
+        let list = [(note: bare, print: fresh)] + (seen[note.id] ?? []).filter { $0.note != bare }
+        seen[note.id] = Array(list.prefix(PrintCache.keep))
         lock.unlock()
         return fresh
     }

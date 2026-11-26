@@ -378,6 +378,23 @@ final class Store: ObservableObject {
         book = next
     }
 
+    /// 只換了畫面上看不到的同步記號（指紋、修改時間、上次傳上去的記號、墓碑）：不叫畫面重畫，存檔在背景。
+    /// 已經排著一次存檔（打字中）就跟那一趟一起存，不提早在主執行緒算指紋
+    func keepMarks(_ next: Notebook) {
+        quiet = true
+        book = next
+        quiet = false
+        saveInBackground()
+    }
+
+    /// 同步改過資料之後的存檔：排著的那一趟還沒存就交給它，不然現在在背景存一次（不在主執行緒寫檔）
+    func saveInBackground() {
+        if let task = saveTask, !task.isCancelled {
+            return
+        }
+        saveSoon()
+    }
+
     /// 讀完資料後呼叫一次
     func adopt(_ book: Notebook, last: String?) {
         self.book = book

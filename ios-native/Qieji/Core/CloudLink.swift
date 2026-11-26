@@ -85,7 +85,12 @@ final class CloudLink: ObservableObject {
         let drive = drive
         queue.async { [weak self] in
             let fetched = CloudSync(drive: drive).fetch()
-            DispatchQueue.main.async { self?.merge(fetched) }
+            // 解檔、算指紋也在這裡做（不碰本機資料），主執行緒只合併
+            var cloud: [Note] = []
+            if case let .got(notes, _, _, _) = fetched {
+                cloud = Sync.decodeCloud(notes)
+            }
+            DispatchQueue.main.async { [cloud] in self?.merge(fetched, cloud: cloud) }
         }
     }
 
@@ -136,7 +141,7 @@ final class CloudLink: ObservableObject {
         }
     }
 
-    private func merge(_ fetched: CloudSync.Fetched) {
+    private func merge(_ fetched: CloudSync.Fetched, cloud: [Note]) {
         let old = stale
         defer {
             // 過期的那輪照合，但不放行：再拉一輪
@@ -157,13 +162,13 @@ final class CloudLink: ObservableObject {
             return
         case .failed:
             return
-        case let .got(notes, gone, layout, names):
+        case let .got(_, gone, layout, names):
             if Sync.seemsNewCloud(store.book, names: names, gone: gone) {
                 paused = true
                 asking = true
                 return
             }
-            store.mergeCloud(notes: notes, gone: gone, layout: layout)
+            store.mergeCloud(cloud: cloud, gone: gone, layout: layout)
             lastSync = Date()
             syncCovers(names: names)
         }
@@ -294,19 +299,31 @@ final class CloudLink: ObservableObject {
 }
 
 extension Store {
-    /// 把 iCloud 拉下來的紙、墓碑、排列合進本機（規則全在 Sync.mergeCloud、Seats.mergeLayout），一律存一次
+    /// 把 iCloud 拉下來的紙、墓碑、排列合進本機（規則全在 Sync.mergeCloud、Seats.mergeLayout）
     func mergeCloud(notes: [JSONValue], gone: JSONValue?, layout: Seats.LayoutFetch) {
+        mergeCloud(cloud: Sync.decodeCloud(notes), gone: gone, layout: layout)
+    }
+
+    /// 同上，iCloud 的檔已經在背景解好。什麼都沒變就什麼都不做（回到前景、拉一下控制中心都會走這裡）；
+    /// 只變了同步記號不叫畫面重畫；存檔一律在背景（進背景時的 flush 照舊馬上寫）
+    func mergeCloud(cloud: [Note], gone: JSONValue?, layout: Seats.LayoutFetch) {
         var copy = book
-        let result = Sync.mergeCloud(&copy, notes: notes, gone: gone, now: Clock.now())
+        let result = Sync.mergeCloud(&copy, cloud: cloud, gone: gone, now: Clock.now())
         let moved = frozen ? false : Seats.mergeLayout(&copy, layout)
+        guard copy != book else { return }
+        guard result.changed || moved || !result.retyped.isEmpty || !Sync.onlyMarks(book, copy) else {
+            keepMarks(copy)
+            return
+        }
         replaceBook(copy)
         if result.changed || moved {
             ensureCurrent()
         }
-        flush()
+        saveInBackground()
     }
 
-    /// 上傳成功的紙記下 sh、排列記下 orderSent。傳的這段時間又改過的那張不記（下次照樣傳）
+    /// 上傳成功的紙記下 sh、排列記下 orderSent。傳的這段時間又改過的那張不記（下次照樣傳）。
+    /// 記號畫面上看不到：不叫畫面重畫，存檔在背景
     func adoptSync(from sent: Notebook) {
         var copy = book
         var changed = false
@@ -321,8 +338,7 @@ extension Store {
             changed = true
         }
         if changed {
-            replaceBook(copy)
-            flush()
+            keepMarks(copy)
         }
     }
 
