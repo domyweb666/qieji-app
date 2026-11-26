@@ -22,7 +22,7 @@ struct DirFolderLayer: UIViewRepresentable {
     func updateUIView(_ view: FolderStage, context _: Context) {
         _ = (covers.version, solid, typeSize) // 封面圖到了、換了（紙本身沒變，磚也要重畫）
         view.prepare(cards: model.stage > DirModel.folderStep ? FolderStage.cardMax : 1)
-        view.sync()
+        view.syncIfChanged()
     }
 }
 
@@ -127,10 +127,57 @@ final class FolderStage: UIView {
         cards.contains { $0.id == id && !$0.isHidden && !$0.up && $0.moving }
     }
 
+    /// 框裡那張按著：只有開著的那個資料夾算；放開哪一份都放
+    func mark(_ id: String, held: Bool) {
+        let open = model?.openFolder?.id
+        for card in cards where !held || card.id == open {
+            card.mark(id, held: held)
+        }
+    }
+
     // MARK: 照現況開、收
+
+    /// sync 看的那些東西。都沒變就不用再排：打開資料夾時 openFolder 改了已經排過一次，接著 SwiftUI 重畫又會叫一次
+    struct Look: Equatable {
+        var open: DirModel.OpenFolder?
+        var scene: DirModel.Scene
+        var isOpen: Bool
+        var editing: Bool
+        var current: String?
+        var folderPage: Int
+        var page: Int
+        var searching: Bool
+        var covers: Int
+        var solid: Bool
+        var calm: Bool
+        var font: UIFont
+        var screen: CGSize
+        var grid: CGRect
+    }
+
+    private var seen: Look?
+
+    private func look() -> Look? {
+        guard let model else { return nil }
+        return Look(
+            open: model.openFolder, scene: model.scene, isOpen: model.isOpen, editing: model.editing, current: model.store.currentID,
+            folderPage: model.folderPage, page: model.page, searching: model.searching, covers: Covers.shared.version,
+            solid: UIAccessibility.isReduceTransparencyEnabled, calm: model.calm, font: Tok.Font.labelUI(), screen: model.screen,
+            grid: model.gridFrame
+        )
+    }
+
+    /// SwiftUI 重畫時叫：上次排完到現在都沒變就跳過
+    func syncIfChanged() {
+        if let now = look(), now == seen {
+            return
+        }
+        sync()
+    }
 
     func sync() {
         guard let model else { return }
+        seen = look()
         let now = CACurrentMediaTime()
         let entry = model.openEntry
         let want = entry != nil && !model.folderHidden

@@ -105,7 +105,7 @@ struct DirTileFace: View {
 }
 
 /// 排在某一格的一塊磚現在的樣子
-struct DirSlot {
+struct DirSlot: Equatable {
     var entry: Seats.Entry
     var index: Int
     var spot: CGPoint
@@ -127,7 +127,7 @@ final class DirTileView: UIView {
     let face = DirFaceView(frame: .zero)
     private var plate: UIView?
     private var minus: UIImageView?
-    private var slot: DirSlot?
+    private(set) var slot: DirSlot?
     weak var model: DirModel?
 
     override init(frame: CGRect) {
@@ -175,6 +175,12 @@ final class DirTileView: UIView {
         }
         showMinus(next)
         accessibilityTraits = next.current ? [.button, .selected] : .button
+    }
+
+    /// 資料夾開著：方磚先藏起來（記在 slot 裡，之後單改別樣不會把它放出來）
+    func cover(_ on: Bool) {
+        slot?.covered = on
+        face.covered = on
     }
 
     /// 按著：沒抖動＝變淡，抖動中＝放大（等著被拿起來）
@@ -299,6 +305,15 @@ final class DirGridView: UIView {
     weak var model: DirModel?
     private var tiles: [String: DirTileView] = [:]
     private var places: [String: (index: Int, spot: CGPoint)] = [:]
+    /// 上次照什麼排的：字、尺寸、減少動態、封面圖都沒變，slot 一樣的磚就不用再看
+    private struct Look: Equatable {
+        var font: UIFont
+        var size: CGSize
+        var calm: Bool
+        var covers: Int
+    }
+
+    private var look: Look?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -316,15 +331,35 @@ final class DirGridView: UIView {
     }
 
     func cover(_ id: String, _ on: Bool) {
-        tiles[id]?.face.covered = on
+        tiles[id]?.cover(on)
+    }
+
+    /// 那塊磚現在排成什麼樣子
+    func slot(_ id: String) -> DirSlot? {
+        tiles[id]?.slot
+    }
+
+    /// 只改一塊磚的一樣東西（按著、瞄著、彈一下），不重排整面
+    func mark(_ id: String, animated: Bool, _ change: (inout DirSlot) -> Void) {
+        guard let tile = tiles[id], var slot = tile.slot, let look else { return }
+        change(&slot)
+        guard slot != tile.slot else { return }
+        UIView.lively { tile.show(slot, font: look.font, calm: look.calm, animated: animated) }
     }
 
     func show(_ slots: [DirSlot], size: CGSize, calm: Bool, animated: Bool) {
         var gone = Set(tiles.keys)
         let font = Tok.Font.labelUI()
+        let now = Look(font: font, size: size, calm: calm, covers: Covers.shared.version)
+        let same = look == now
+        look = now
         for slot in slots {
             let id = slot.entry.id
             gone.remove(id)
+            // 跟上次一模一樣的磚不用再看（點一下、翻頁時其他頁的磚全部跳過）
+            if same, let tile = tiles[id], tile.slot == slot {
+                continue
+            }
             let fresh = tiles[id] == nil
             let tile = tiles[id] ?? make(id)
             let frame = CGRect(origin: slot.spot, size: size)
@@ -364,11 +399,11 @@ final class DirGridView: UIView {
     }
 }
 
-/// 一面磚接到 SwiftUI
+/// 一面磚接到 SwiftUI。按著、瞄著、彈一下、資料夾開著這幾樣排的那一刻才去 model 讀（平常直接改磚，見 DirModel+Tiles）
 struct DirGrid: UIViewRepresentable {
     let model: DirModel
-    let slots: [DirSlot]
-    let cell: CGFloat
+    let page: DirPage
+    let covers: Int // 封面圖到了、換了：磚的資料沒變，也要再排一次
     @Environment(\.accessibilityReduceMotion) private var calm
     /// 系統字級改了要重排
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -382,46 +417,12 @@ struct DirGrid: UIViewRepresentable {
 
     func updateUIView(_ view: DirGridView, context: Context) {
         _ = typeSize
+        let cell = page.cell
         let size = CGSize(width: cell, height: DirMetrics(cell: cell).tileHeight)
         PerfMeter.time("grid") {
+            let slots = page.slots(model)
             UIView.lively { view.show(slots, size: size, calm: calm, animated: !context.transaction.disablesAnimations) }
         }
-    }
-}
-
-/// 目錄的一頁
-struct DirPageView: View {
-    @ObservedObject var model: DirModel
-    let items: [Seats.Entry]
-    let currentID: String?
-    @ObservedObject private var covers = Covers.shared
-
-    init(model: DirModel, items: [Seats.Entry], currentID: String?) {
-        self.model = model
-        self.items = items
-        self.currentID = currentID
-    }
-
-    var body: some View {
-        let metrics = model.metrics
-        let rows = (items.count + DirMetrics.cols - 1) / DirMetrics.cols
-        _ = covers.version // 封面圖到了、換了（紙本身沒變，磚也要重畫）
-        return DirGrid(model: model, slots: slots(metrics), cell: metrics.cell)
-            .frame(width: metrics.cell * CGFloat(DirMetrics.cols), height: metrics.height(rows: rows), alignment: .topLeading)
-    }
-
-    private func slots(_ metrics: DirMetrics) -> [DirSlot] {
-        items.enumerated().filter { !$0.element.isHole }.map { index, entry in
-            DirSlot(
-                entry: entry, index: index, spot: metrics.slot(index), current: isCurrent(entry), editing: model.editing,
-                hidden: model.drag?.id == entry.id, target: model.stackOn == entry.id, pop: model.popID == entry.id,
-                held: model.heldID == entry.id, covered: model.folderCovers.contains(entry.id)
-            )
-        }
-    }
-
-    private func isCurrent(_ entry: Seats.Entry) -> Bool {
-        entry.folder != nil ? entry.notes.contains { $0.id == currentID } : entry.id == currentID
     }
 }
 

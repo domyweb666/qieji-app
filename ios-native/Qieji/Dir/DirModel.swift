@@ -57,6 +57,7 @@ final class DirModel: ObservableObject {
 
     let store: Store
     let ghost = DirGhost()
+    let slide = DirSlide()
     let gridTouch = DirTouch(zone: .grid)
     let folderTouch = DirTouch(zone: .folder)
 
@@ -64,10 +65,7 @@ final class DirModel: ObservableObject {
     @Published var shown = false
     /// 掛到第幾步：0＝還沒、1＝後面的霧、2＝面板和底下兩列、3＝搜尋列、4＝方磚、5＝打開的資料夾、6＝它的第二份框
     @Published var stage = 0
-    @Published var progress: CGFloat = 0 // 0＝收起、1＝全開
-    @Published var fading = false // 這次用淡的不用滑的
     var grabbing = false // 手指正在拉把手（不是點）
-    @Published var pulled: CGFloat = 0 // 用淡的那次，把手把面板往下拉了多少（收起時留在那裡淡掉）
     @Published var isOpen = false // 停在全開
     @Published var moveLine: String? // 搬行模式：要搬的那一行
 
@@ -77,7 +75,7 @@ final class DirModel: ObservableObject {
     @Published var editing = false // 抖動中
     /// 目錄現在畫的樣子：排列和拖曳綁成一份，一次換。分兩次換的話中間會多畫一格「資料已經改了、拖曳還沒結束」，
     /// 疊成資料夾放手那一刻整頁的磚會亂飛（2026-11-23）
-    struct Scene {
+    struct Scene: Equatable {
         var entries: [Seats.Entry] = []
         var drag: DirDrag?
     }
@@ -88,6 +86,8 @@ final class DirModel: ObservableObject {
 
     var origin: Origin?
 
+    var searchSeen: (query: String, book: Notebook, hits: [Seats.LineHit])?
+    var tilesQuiet = false // 改單塊磚的狀態時不帶動畫（放手落定那一步）
     private var pagesSeen: [[Seats.Entry]]?
     private var pagesSize = 0
     private var moveHeld: Item?
@@ -107,10 +107,20 @@ final class DirModel: ObservableObject {
     let pageGrids = NSHashTable<DirGridView>.weakObjects()
     @Published var folderPage = 0
     @Published var menu: Menu?
-    @Published var stackOn: String? // 準備疊上去的那一格是誰
-    @Published var popID: String? // 剛有東西縮進來的那格：彈一下
+    // 下面三個只關一塊磚：直接改那塊（DirModel+Tiles），不叫整個目錄、每一頁重畫
+    var stackOn: String? { // 準備疊上去的那一格是誰
+        didSet { markTiles(oldValue, stackOn) { $0.target = $1 } }
+    }
+
+    var popID: String? { // 剛有東西縮進來的那格：彈一下
+        didSet { markTiles(oldValue, popID) { $0.pop = $1 } }
+    }
+
+    var heldID: String? { // 手指按著的那塊（沒抖動變淡、抖動中放大）
+        didSet { markHeld(oldValue, heldID) }
+    }
+
     @Published var launch: Launch?
-    @Published var heldID: String? // 抖動中手指按著的那塊
     @Published var askDelete: String?
     @Published var glyphFor: String?
     @Published var putInFor: String?

@@ -66,9 +66,16 @@ final class TileSquare: UIView {
         nil
     }
 
+    /// 只有畫出來會不一樣的才重畫：深淺色、對比、螢幕倍率、字級、粗體字（以前外觀一有動靜整塊重畫）
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        setNeedsDisplay()
+        let now = traitCollection
+        guard let previous, !now.hasDifferentColorAppearance(comparedTo: previous), now.displayScale == previous.displayScale,
+              now.preferredContentSizeCategory == previous.preferredContentSizeCategory, now.legibilityWeight == previous.legibilityWeight
+        else {
+            setNeedsDisplay()
+            return
+        }
     }
 
     override func draw(_: CGRect) {
@@ -163,8 +170,18 @@ final class TileSquare: UIView {
         path.stroke()
     }
 
+    /// 釘選、上鎖的小符號：同一個字級、同一個顏色做一次就留著（以前每畫一塊磚都重做）
+    private static var symbols: [String: UIImage] = [:]
+
     private static func symbol(_ name: String, _ color: UIColor) -> UIImage? {
-        UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(font: Tok.Font.labelUI()))?
+        let font = Tok.Font.labelUI()
+        let key = "\(name)|\(font.fontName)|\(font.pointSize)|\(color.resolvedColor(with: UITraitCollection.current).description)"
+        if let made = symbols[key] {
+            return made
+        }
+        let made = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(font: font))?
             .withTintColor(color, renderingMode: .alwaysOriginal)
+        symbols[key] = made
+        return made
     }
 }

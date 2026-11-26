@@ -9,7 +9,7 @@ struct DirSearchList: View {
 
     var body: some View {
         let needle = Labels.trim(model.query)
-        let hits = Seats.searchLines(store.book, query: model.query)
+        let hits = model.searchHits()
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Tok.Space.zero) {
                 ForEach(hits, id: \.note.id) { hit in
