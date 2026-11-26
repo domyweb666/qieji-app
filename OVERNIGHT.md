@@ -24,7 +24,8 @@
 - 子代理代決 4 條：同步排列照 iCloud、分享等 60 秒、同名加秒、搜尋 20 毫秒沒動
 - 第 8 項退頁規則：資料夾少一頁開最後一頁、資料夾刪光停在目錄原頁、搜尋沒結果字留著
 - 2.1.0 發行方式（工具先沿用 2.0.0 的「審過馬上全部發」）；描述要補的三句要在後台改
-- 這條分支要不要合進 feat/2.1、打 tfs-11
+- 這條分支要不要合進 feat/2.1、打 tfs-11（feat/2.1 收尾時多的交接 commit 37e8a90 已經合進來，可以直接快轉）
+- 別的 session 記下：`StaleCloudTests` 三條在 GitHub 打包機器上會偶爾慢到失敗，原因還沒找（見 `.vibe/HANDOFF.md`「不穩的測試」）。今晚沒碰那塊，打 tfs-11 時如果紅，先看是不是這三條
 
 還沒解的
 - 按 ＋ 時記錄裡有 22 行「AttributeGraph: cycle detected」，feat/2.1 原本也一樣，畫面看不出問題，沒查
@@ -37,7 +38,7 @@
 - 其他照舊：`.vibe/HANDOFF.md` 的 T、P、S、H、D 清單，加上 `.vibe/修正-回目錄記位置-2026-11-26.md` 的 R1–R13
 
 分支：`overnight-20261126-1104`（資料夾 `E:\茄記\qieji-2.1-night`）
-- 合併（在 `E:\茄記\qieji-2.1` 跑）：`git merge --ff-only overnight-20261126-1104`
+- 合併（在 `E:\茄記\qieji-2.1` 跑，可快轉）：`git merge --ff-only overnight-20261126-1104`
 - 丟棄：`git worktree remove "E:/茄記/qieji-2.1-night"; git branch -D overnight-20261126-1104`
 
 ## 任務清單
