@@ -8,19 +8,23 @@ struct LineLook: Equatable {
     let rule: UIColor
     var scale: CGFloat // 紙上的字級（完整版）
     var size: CGFloat // 系統字級算出來的內文大小
+    let texture: String // 紙張材質（設定，2026-11-26）
+    let grain: PaperGrain.Paint? // 純色＝nil
 
-    init(key: String, scale: CGFloat) {
+    init(key: String, scale: CGFloat, texture: String = PaperTexture.plain) {
         let colors = Tok.note(key)
         self.key = key
         paper = UIColor(colors.paper)
         rule = UIColor(colors.rule)
         self.scale = scale
         size = Tok.Font.lineUI.pointSize
+        self.texture = texture
+        grain = PaperGrain.paint(texture)
     }
 
     /// 顏色物件每次都是新的，比代號就好
     static func == (lhs: LineLook, rhs: LineLook) -> Bool {
-        lhs.key == rhs.key && lhs.scale == rhs.scale && lhs.size == rhs.size
+        lhs.key == rhs.key && lhs.scale == rhs.scale && lhs.size == rhs.size && lhs.texture == rhs.texture
     }
 
     var font: UIFont {

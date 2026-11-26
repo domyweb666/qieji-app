@@ -10,6 +10,7 @@ final class Prefs {
     static let reviewKey = "qieji.review.v1" // 評分提示的計數（JSON）
     static let noticeKey = "qieji.fullNotice.v1" // 1.0 同步使用者看過「iCloud 同步改成完整版功能」
     static let cloudOffKey = "cn.cloudOffSeen" // 「iCloud 雲碟沒開」提示過了
+    static let paperTextureKey = "qieji.paperTexture.v1" // 紙張材質（2.1 新加，1.1 沒有，不搬）
     private static let importedKey = "qieji.native.prefsImported"
     /// 還沒從 1.1 搬設定之前，在這支手機改過的鍵（使用者自己改的、app 問過 Apple 記下的）：搬的時候不准拿 1.1 的值蓋回去
     private static let touchedKey = "qieji.native.prefsTouched"

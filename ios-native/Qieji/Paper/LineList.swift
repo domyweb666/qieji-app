@@ -30,6 +30,7 @@ final class LineListView: UIScrollView {
     var resting = LineLayer()
     var fading: [LineRowView] = [] // 換紙後還在淡出的舊行
     var fadeTurn = 0
+    let grainBox = GrainSkin() // 紙張材質：墊在所有行底下、跟著捲（PaperGrain）
 
     // 捲動內容最前面那一塊（封面的方磚與大字、空白說明）
     private var headHost: UIHostingController<AnyView>?
@@ -86,6 +87,7 @@ final class LineListView: UIScrollView {
         keyboardDismissMode = .interactive
         delaysContentTouches = false
         resting.isHidden = true
+        addSubview(grainBox)
         addSubview(resting)
         addSubview(content)
         delegate = self
@@ -311,11 +313,13 @@ final class LineListView: UIScrollView {
                 row.layoutIfNeeded()
             }
         }
+        placeGrain()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0 else { return }
+        placeGrain()
         if laidWidth != bounds.width {
             PerfMeter.time("firstLayout") {
                 remeasureAll()

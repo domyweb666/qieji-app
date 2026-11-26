@@ -23,6 +23,7 @@ struct SettingsPage: View {
     @ObservedObject var cloud: CloudLink
     @ObservedObject var look: Look
     @ObservedObject var size: TextSize
+    @ObservedObject var texture: PaperTexture
     let onFull: () -> Void
     let onPage: (Page) -> Void
     @State private var picking: Picking?
@@ -33,7 +34,7 @@ struct SettingsPage: View {
     @State private var driveOn = true
 
     enum Picking: Identifiable {
-        case look, size
+        case look, size, texture
         var id: Self {
             self
         }
@@ -61,10 +62,14 @@ struct SettingsPage: View {
                 driveOn = cloud.driveOn()
             }
         }
-        .confirmationDialog(picking == .size ? Words.textSize : Words.look, isPresented: pickingShown, titleVisibility: .visible) {
+        .confirmationDialog(pickTitle, isPresented: pickingShown, titleVisibility: .visible) {
             if picking == .size {
                 ForEach(TextSize.choices, id: \.scale) { choice in
                     Button(choice.scale == size.scale ? "✓ \(choice.label)" : choice.label) { size.set(choice.scale) }
+                }
+            } else if picking == .texture {
+                ForEach(PaperTexture.choices, id: \.key) { choice in
+                    Button(choice.key == texture.key ? "✓ \(choice.label)" : choice.label) { texture.set(choice.key) }
                 }
             } else {
                 ForEach(Look.choices, id: \.key) { choice in
@@ -103,6 +108,10 @@ struct SettingsPage: View {
     private var general: some View {
         PageGroup(title: Words.groupGeneral) {
             row(first: true, icon: "circle.lefthalf.filled", Words.look, state: Look.label(look.key), next: true) { picking = .look }
+            // 紙張材質：所有人都能用（不鎖完整版）
+            row(icon: "rectangle.pattern.checkered", Words.paperTexture, state: PaperTexture.label(texture.key), next: true) {
+                picking = .texture
+            }
             if shop.full {
                 // 字級（完整版）：沒買的人看不到這一列（2026-11-14 多米：沒買還列出來，看了煩）
                 row(icon: "textformat.size", Words.textSize, state: TextSize.label(size.scale), next: true) { picking = .size }
@@ -288,6 +297,14 @@ struct SettingsPage: View {
         .buttonStyle(PressDim())
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isLink)
+    }
+
+    private var pickTitle: String {
+        switch picking {
+        case .size: Words.textSize
+        case .texture: Words.paperTexture
+        default: Words.look
+        }
     }
 
     private var pickingShown: Binding<Bool> {

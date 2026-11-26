@@ -59,7 +59,8 @@ final class RowLiftView: UIView {
     private var runner: UIViewPropertyAnimator?
 
     /// cut＝那一行上面被清單頂端擋住多少（只浮起看得到的那段）；fresh＝畫面上的樣子還是舊的（游標還在、劃掉的線還沒畫），照排好的字畫一份
-    init?(_ row: LineRowView, paper: UIColor, cut: CGFloat, fresh: Bool) {
+    /// grain＝紙張材質（純色＝nil），鋪在底色上，不用跟整張紙對齊
+    init?(_ row: LineRowView, paper: UIColor, grain: PaperGrain.Paint? = nil, cut: CGFloat, fresh: Bool) {
         self.cut = cut
         let inset = Tok.Shape.rowLiftInset
         // 不含最下面那條格線：縮回去時格線一直看得到
@@ -73,6 +74,9 @@ final class RowLiftView: UIView {
         sheet.layer.cornerRadius = Tok.Shape.radiusMd
         sheet.layer.cornerCurve = .continuous
         addSubview(sheet)
+        let skin = GrainSkin(frame: bounds)
+        skin.use(grain)
+        sheet.addSubview(skin)
         // 按住變暗的那層接著退掉，不會一格就從暗跳回紙的底色
         shade.frame = bounds
         shade.backgroundColor = UIColor(Tok.Col.pressedFill)

@@ -79,7 +79,7 @@ extension LineListView {
             endEditingLine()
             guard live[id] === row, !row.leaving, spot(of: id) != nil else { return nil }
         }
-        guard let lift = RowLiftView(row, paper: look.paper, cut: cut, fresh: typing) else { return nil }
+        guard let lift = RowLiftView(row, paper: look.paper, grain: look.grain, cut: cut, fresh: typing) else { return nil }
         let seen = CGRect(
             x: whole.minX + Tok.Shape.rowLiftInset, y: whole.minY + cut, width: lift.bounds.width, height: lift.bounds.height
         )

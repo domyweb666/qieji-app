@@ -22,6 +22,7 @@ struct PaperView: View {
     /// 要跟著鍵盤變的只有右上 ✓（標題列自己看）和右下 ＋（下面的 Watch）
     @State private var keyboard = KeyboardWatch()
     @ObservedObject private var size = TextSize.shared
+    @ObservedObject private var texture = PaperTexture.shared
     @ObservedObject private var covers = Covers.shared
     @ObservedObject private var locks = Locks.shared
     @State private var lockAsk = false
@@ -65,7 +66,7 @@ struct PaperView: View {
                 } else {
                     PaperList(
                         store: store, remote: remote, note: note, onEditing: { editingID = $0 },
-                        onMenu: { openRowMenu($0) }, scale: size.scale,
+                        onMenu: { openRowMenu($0) }, scale: size.scale, texture: texture.key,
                         head: float ? AnyView(CoverHead(note: note, colors: colors, spy: remote.spy, onTitle: onTitle)) : nil
                     )
                     // 清單換清單：同一個清單自己換內容、自己淡（LineListView.swap）
@@ -93,6 +94,10 @@ struct PaperView: View {
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 colors.paper.ignoresSafeArea()
+                // 紙張材質：從螢幕最頂鋪下來，換紙時不跟著換（只有紙色在變）
+                if let grain = PaperGrain.paint(texture.key) {
+                    PaperGrainView(paint: grain).ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+                }
                 if float, let photo {
                     CoverBanner(photo: photo, paper: colors.paper, spy: remote.spy).modifier(FreshPaper(id: note.id))
                 }
@@ -228,7 +233,8 @@ struct PaperView: View {
             onLock: toggleLock,
             onDelete: askDelete,
             lockedNow: lockedNow,
-            cover: cover
+            cover: cover,
+            grain: PaperGrain.paint(texture.key)
         )
     }
 

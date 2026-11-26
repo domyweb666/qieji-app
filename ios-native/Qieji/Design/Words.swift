@@ -213,6 +213,14 @@ enum Words {
     // 設定頁（1.1 settings.tsx）
     static let look = "外觀"
     static let textSize = "紙上的字級"
+    // 紙張材質（2026-11-26 多米：「紙張材質都放進去，再設定裡加個材質設定，可自行做切換」）
+    static let paperTexture = "紙張材質"
+    static let texturePlain = "純色"
+    static let textureFine = "細紙紋"
+    static let textureWashi = "棉紙纖維"
+    static let textureRecycled = "再生紙"
+    static let textureWatercolor = "水彩紙壓紋"
+    static let textureLaid = "簾紋紙"
     static let groupGeneral = "一般"
     static let groupData = "資料"
     static let groupBuy = "購買"

@@ -12,6 +12,8 @@ struct PaperList: UIViewRepresentable {
     var onMenu: (RowGrab) -> Void = { _ in }
     /// 紙上的字級（完整版）
     var scale: CGFloat = 1
+    /// 紙張材質（設定）
+    var texture = PaperTexture.plain
     /// 捲動內容最前面那一塊（有封面圖的清單：方磚、大字名字、時間列）
     var head: AnyView?
     /// 系統字級在 app 開著時改了：讀著它，這裡才會跟著重量、重畫
@@ -29,7 +31,7 @@ struct PaperList: UIViewRepresentable {
         list.spy = remote.spy
         remote.list = list
         wire(list)
-        list.restyle(LineLook(key: note.color, scale: scale))
+        list.restyle(LineLook(key: note.color, scale: scale, texture: texture))
         list.setHead(front)
         list.setEmpty(AnyView(EmptyNote(lines: [Words.emptyPaper, Words.emptyPaperTip])))
         list.apply(LineListView.items(note), animated: false)
@@ -44,14 +46,14 @@ struct PaperList: UIViewRepresentable {
         guard list.paperID == note.id else {
             PerfMeter.time("swap") {
                 UIView.lively {
-                    list.swap(to: note.id, look: LineLook(key: note.color, scale: scale), wire: { wire(list) }, front: front)
+                    list.swap(to: note.id, look: LineLook(key: note.color, scale: scale, texture: texture), wire: { wire(list) }, front: front)
                 }
             }
             seek(list)
             return
         }
         wire(list)
-        list.restyle(LineLook(key: note.color, scale: scale))
+        list.restyle(LineLook(key: note.color, scale: scale, texture: texture))
         list.setHead(front)
         // 看現在的資料，不看交下來的那份（那份可能慢一拍，會把剛打的字蓋回去）
         let landed = store.takeLanded(in: note)

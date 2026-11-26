@@ -24,6 +24,8 @@ struct PaperHeader: View {
     var lockedNow = false
     /// 封面圖：沒有／清單的矮橫幅（標題列的底與小膠囊隨捲動淡進來，時間列在捲動內容裡）／記事本的固定大圖（標題列疊在圖上）
     var cover: CoverMode = .none
+    /// 紙張材質（純色＝nil）：有封面圖時淡進來的那塊底也要有
+    var grain: PaperGrain.Paint?
     @FocusState private var titleFocused: Bool
 
     private var showDone: Bool {
@@ -76,6 +78,11 @@ struct PaperHeader: View {
                 if let spy = floating {
                     SpyFade(spy: spy, start: { _ in Tok.Shape.coverBelowBar - Tok.Space.xl }, content: {
                         colors.paper
+                            .overlay {
+                                if let grain {
+                                    PaperGrainView(paint: grain).accessibilityHidden(true)
+                                }
+                            }
                             .overlay(alignment: .bottom) { colors.rule.frame(height: Tok.Shape.borderCard) }
                             .ignoresSafeArea(edges: .top)
                     })

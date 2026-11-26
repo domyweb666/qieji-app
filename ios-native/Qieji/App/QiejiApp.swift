@@ -99,7 +99,7 @@ struct RootView: View {
                     case .trash: TrashPage(store: store)
                     case .settings:
                         SettingsPage(
-                            store: store, shop: shop, cloud: cloud, look: look, size: TextSize.shared,
+                            store: store, shop: shop, cloud: cloud, look: look, size: TextSize.shared, texture: PaperTexture.shared,
                             onFull: { sheet = .full }, onPage: { path.append($0) }
                         )
                     case .news: NewsPage()
@@ -123,6 +123,7 @@ struct RootView: View {
             store.boot()
             TextSize.shared.load()
             look.load()
+            PaperTexture.shared.load()
             warmUp()
             if !RootView.offline {
                 shop.start() // 讀紙之後才問：先用手機上次記的結果，不等網路

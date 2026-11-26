@@ -28,6 +28,8 @@ final class LineRowView: UIView {
     private let fill = UIView() // 打字中整行提亮
     private let glow = UIView() // 剛記下的那行亮一下
     private let shade = UIView() // 按住變暗
+    private let skin = GrainSkin() // 紙張材質：跟整張紙對齊，左右滑時跟著卡片走
+    private var held = false // 拿起來拖著：材質跟著卡片走，放下才對回整張紙
     private var shown: LineItem?
     private var look: LineLook?
     private(set) var slide: CGFloat = 0
@@ -72,7 +74,7 @@ final class LineRowView: UIView {
         field.textContainerInset = UIEdgeInsets(top: Tok.Space.md, left: 0, bottom: Tok.Space.md, right: 0)
         field.isUserInteractionEnabled = false
         field.tintColor = UIColor(Tok.Col.accent)
-        for part in [fill, glow, shade, field, grip, rule] {
+        for part in [skin, fill, glow, shade, field, grip, rule] {
             card.addSubview(part)
         }
         card.layer.shadowColor = UIColor(Tok.Col.shadow).cgColor
@@ -87,6 +89,8 @@ final class LineRowView: UIView {
         // 卡片可能正被滑動（transform），位置改 bounds／center，不改 frame
         card.bounds = CGRect(origin: .zero, size: size)
         card.center = CGPoint(x: size.width / 2, y: size.height / 2)
+        skin.frame = card.bounds
+        alignGrain()
         fill.frame = card.bounds
         glow.frame = card.bounds
         shade.frame = card.bounds
@@ -95,6 +99,20 @@ final class LineRowView: UIView {
         grip.frame = CGRect(x: size.width - Tok.Shape.hitMin, y: 0, width: Tok.Shape.hitMin, height: Tok.Shape.rowMin)
         rule.frame = CGRect(x: 0, y: textHeight, width: size.width, height: Tok.Shape.borderCard)
         placeLabel()
+    }
+
+    // 材質跟整張紙對齊：這一行一換位置，就把卡片裡那張貼圖挪到對的相位（只挪、不重畫）
+    override var frame: CGRect {
+        didSet { alignGrain() }
+    }
+
+    override var center: CGPoint {
+        didSet { alignGrain() }
+    }
+
+    private func alignGrain() {
+        guard !held else { return }
+        skin.place(top: frame.minY)
     }
 
     // MARK: 內容
@@ -106,6 +124,7 @@ final class LineRowView: UIView {
         if restyle {
             card.backgroundColor = look.paper
             rule.backgroundColor = look.rule
+            skin.use(look.grain)
         }
         pitch.look = look
         let attrs = look.attributes(done: item.done)
@@ -223,6 +242,7 @@ final class LineRowView: UIView {
     // MARK: 拿起
 
     func lift(_ held: Bool, calm: Bool) {
+        self.held = held
         layer.zPosition = held ? 1 : 0
         let scale = Tok.Motion.dragLiftScale
         card.layer.shadowPath = UIBezierPath(rect: card.bounds).cgPath
@@ -252,6 +272,7 @@ final class LineRowView: UIView {
         shade.alpha = 0
         layer.zPosition = 0
         card.layer.shadowOpacity = 0
+        held = false
         settle()
         field.delegate = nil
         field.onDeleteAtStart = nil
