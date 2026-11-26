@@ -1,10 +1,16 @@
-# 2.1 分支：三條修正合併後整套測過（2026-11-26 晚，只在本機，沒推、沒打包）
+# 2.1 分支：2.1.0 (210) 已上 TestFlight（tfs-10，2026-11-26 晚），真機沒驗、沒送審
 
-> 合併後 limrun 331 過、0 失敗，排版零錯誤，模擬器走過一遍都正常。**接下來等多米決定要不要打 `tfs-10`。**
+> 三條修正合併後 limrun 331 過；feat/2.1 推到 bbda6c4、tfs-10 推上去，TestFlight run 45745841343 第二次跑成功（333 個測試、跳過 2、0 失敗），build 210 上傳。**下一個打包 tag `tfs-11`。** 接下來等多米真機跑下面的待驗。
+
+## 不穩的測試（要追）
+
+- 第一次跑 TestFlight 時 `StaleCloudTests` 三條在 GitHub 機器上慢了約 3 倍：`testLocalEditWaitsForTheNewestCopy`（等不到合起來傳上去）、`testOtherNotesLaggingDoNotHoldTheShare`（8 秒內沒放進去，CI 上 0.03 秒）失敗，第三條 11.8 秒才過。同一份程式 CI run 45745839198 和 limrun 全過，重跑也全過。
+- 還沒找到原因。可疑的地方：`lookAgain` 遇到正在傳就延後重拉；`Store.inboxQueue` 是所有 Store 共用的靜態佇列，前面測試留下的工作可能卡住後面的。真機上最壞是分享的字晚放（pullWait 5 秒 ×3），字不會丟。
+- 下次再紅一樣先看是不是這三條；要修就在 limrun 加負載重跑這三條找原因，別只拉長等待時間。
 
 ## 現在的狀態
 
-- `feat/2.1` 比 origin 多 22 個 commit，**全部沒推、沒打 tag、沒上 TestFlight**。下一個打包 tag 還是 `tfs-10`，多米開口才打（先推 feat/2.1，再單獨推 tag）。
+- `feat/2.1` 已推到 bbda6c4，`tfs-10` 已推（2.1.0 (210) 在 TestFlight）。下一個打包 tag `tfs-11`，多米開口才打（先推分支，再單獨推 tag）。
 - 多米 11/26 說「開 subagent 把這些修好為止」，三條修正已合併回 feat/2.1（沒有衝突；`Core/StoreInbox.swift` 兩邊都改，自動合併）：
   - `fix/2.1-sync`：同步邊角三條。筆記 `.vibe/修正-同步邊角-2026-11-26.md`
   - `fix/2.1-share`：分享面板名單會跟著換、同名同一分鐘分得出來。筆記 `.vibe/修正-分享面板-2026-11-26.md`
