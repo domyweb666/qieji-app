@@ -61,14 +61,15 @@ final class Look: ObservableObject {
     }
 }
 
-/// 紙張材質（2026-11-26 多米：「紙張材質都放進去，再設定裡加個材質設定，可自行做切換」）：純色和五種紙紋，免費。
+/// 紙張材質（2026-11-26 多米：「紙張材質都放進去，再設定裡加個材質設定，可自行做切換」）：純色和四種紙紋，免費。
+/// 水彩紙壓紋 11/27 拿掉（多米真機：很難看），選過的人 load 時當成純色。2026-11-27 起在紙的 ⋯ 選單切換，不在設定頁
 /// 只鋪在紙上（紙底、每一行、標題列、浮起的那行），目錄、小工具、設定頁照舊。記在這支手機，不同步；打開 app 時跟外觀同一處讀
 final class PaperTexture: ObservableObject {
     static let shared = PaperTexture(prefs: .shared)
     static let plain = "plain"
     static let choices: [(key: String, label: String)] = [
         (plain, Words.texturePlain), ("fine", Words.textureFine), ("washi", Words.textureWashi),
-        ("recycled", Words.textureRecycled), ("watercolor", Words.textureWatercolor), ("laid", Words.textureLaid),
+        ("recycled", Words.textureRecycled), ("laid", Words.textureLaid),
     ]
 
     @Published private(set) var key = plain

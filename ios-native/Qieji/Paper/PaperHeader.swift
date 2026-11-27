@@ -170,7 +170,7 @@ struct PaperHeader: View {
 }
 
 /// ⋯ 選單（照 1.1.1）：最上面一排九色（iOS 17 起是色點，16 是子選單）；改名字、釘選、分享、複製全文、
-/// 「清單」那組（上下順序反轉、全部恢復、清掉劃掉的行）、設定、刪除這張
+/// 「清單」那組（上下順序反轉、全部恢復、清掉劃掉的行）、字的大小／紙張材質、設定、刪除這張
 struct PaperMenu: View {
     @ObservedObject var store: Store
     let note: Note
@@ -181,6 +181,8 @@ struct PaperMenu: View {
     var onLock: () -> Void = {}
     var onDelete: () -> Void = {}
     var lockedNow = false
+    @ObservedObject private var size = TextSize.shared
+    @ObservedObject private var texture = PaperTexture.shared
 
     var body: some View {
         colors
@@ -224,8 +226,44 @@ struct PaperMenu: View {
                 }
             }
         }
+        looks
         Button { onRoute(.settings) } label: { Label(Words.settings, systemImage: "gearshape") }
         Button(role: .destructive, action: onDelete) { Label(Words.deleteNote, systemImage: "trash") }
+    }
+
+    /// 字的大小、紙張材質（2026-11-27 從設定頁搬來，多米：一調就看得到，放設定要一直切換畫面）。
+    /// 子選單選了不關，紙就在旁邊跟著換，可以連點比較；字級是完整版功能，沒買不列（同設定頁以前的規矩）
+    private var looks: some View {
+        Section {
+            if store.isFull {
+                Menu {
+                    ForEach(TextSize.choices, id: \.scale) { choice in
+                        Toggle(choice.label, isOn: pick(size.scale == choice.scale) { size.set(choice.scale) })
+                    }
+                } label: {
+                    Label(Words.textSize, systemImage: "textformat.size")
+                    Text(TextSize.label(size.scale))
+                }
+            }
+            Menu {
+                ForEach(PaperTexture.choices, id: \.key) { choice in
+                    Toggle(choice.label, isOn: pick(texture.key == choice.key) { texture.set(choice.key) })
+                }
+            } label: {
+                Label(Words.paperTexture, systemImage: "rectangle.pattern.checkered")
+                Text(PaperTexture.label(texture.key))
+            }
+        }
+        .menuActionDismissBehavior(.disabled)
+    }
+
+    /// 子選單的打勾：點沒勾的就換過去、震一下；點已經勾的不動
+    private func pick(_ on: Bool, _ set: @escaping () -> Void) -> Binding<Bool> {
+        Binding(get: { on }, set: { value in
+            guard value, !on else { return }
+            set()
+            Haptic.tick()
+        })
     }
 
     private var anyDone: Bool {

@@ -43,12 +43,6 @@ extension Tok {
                 TextureCoat(mask: "GrainRecycledDust", light: dustLight, dark: dustDark, lightAlpha: 0.28, darkAlpha: 0.16),
                 TextureCoat(mask: "GrainRecycledSpeck", light: 0x4A3A2C, dark: 0x1E1712, lightAlpha: 0.28, darkAlpha: 0.16),
             ]),
-            // 水彩紙壓紋：左上打光的低頻凹凸。設計稿淺色 multiply 28%、深色 soft-light 50%，
-            // 換成陰影壓黑、亮面提白（淺色只有陰影；整片的平均亮度不動，紙色照舊）
-            "watercolor": TextureRecipe(tile: tile, coats: [
-                TextureCoat(mask: "GrainWaterShade", light: 0x000000, dark: 0x000000, lightAlpha: 0.08, darkAlpha: 0.12),
-                TextureCoat(mask: "GrainWaterLight", light: 0xFFFFFF, dark: 0xFFFFFF, lightAlpha: 0, darkAlpha: 0.05),
-            ]),
             // 簾紋紙：每 3pt 一條很淡的橫細紋＋每 72pt 一條直鏈紋＋細顆粒（三樣在同一張遮罩）
             "laid": TextureRecipe(tile: laidTile, coats: [
                 TextureCoat(mask: "GrainLaid", light: 0x7A6248, dark: 0xFFF6E8, lightAlpha: 0.22, darkAlpha: 0.09),

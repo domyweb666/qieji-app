@@ -115,22 +115,8 @@ def main():
     speck = fbm(rng, SIDE, per_px(0.35), per_px(0.35), 2)
     save("GrainRecycledSpeck", curve(speck, 0.08, 9, -5.6))
 
-    # 4 水彩紙壓紋：fractalNoise 0.05（4 層）當高度，surfaceScale 2.4，左上打光（azimuth 235°、elevation 58°）
-    # 設計稿是 4 層；在手機上第 4 層（0.4/pt）看起來像石膏、不像紙，只疊 3 層（代決）
-    height = fbm(rng, SIDE, per_px(0.05), per_px(0.05), 3) * 0.1
-    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) / 2 * SCALE  # 每 pt 的斜率
-    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) / 2 * SCALE
-    nx, ny, nz = -2.4 * dx, -2.4 * dy, np.ones_like(height)
-    norm = np.sqrt(nx**2 + ny**2 + nz**2)
-    az, el = np.radians(235), np.radians(58)
-    light = (np.cos(az) * np.cos(el), np.sin(az) * np.cos(el), np.sin(el))  # y 朝下：左上
-    lit = np.clip(1.1 * (nx * light[0] + ny * light[1] + nz * light[2]) / norm, 0, 1)
-    relief = lit - lit.mean()
-    span = 2.5 * relief.std()  # 遮罩的 1＝亮度差這麼多
-    save("GrainWaterShade", np.clip(-relief / span, 0, 1))
-    save("GrainWaterLight", np.clip(relief / span, 0, 1))
-    # 換算成 Tok.Texture 的不透明度：淺色 multiply 28%＝黑墨 0.28×span；深色 soft-light 50%（底亮度約 0.28）
-    print(f"水彩紙 span={span:.4f}：淺色陰影 {0.28 * span:.3f}、深色陰影 {0.89 * span:.3f}、深色亮面 {0.346 * span:.3f}")
+    # 4 水彩紙壓紋：2026-11-27 拿掉（多米真機：很難看）。照樣抽一次亂數，後面的貼圖重產才跟以前一模一樣
+    fbm(rng, SIDE, per_px(0.05), per_px(0.05), 3)
 
     # 5 簾紋紙：每 3pt 一條 1pt 橫紋（0.35）＋每 72pt 一條 1.2pt 直鏈紋（x＝36pt，0.6）＋細顆粒（slope 1.8、−0.8）
     n = LAID_SIDE

@@ -49,9 +49,9 @@ final class PaperTextureTests: XCTestCase {
         XCTAssertEqual(prefs.string(Prefs.paperTextureKey), "velvet")
     }
 
-    /// 六個選項：純色沒有貼圖，其他五種都有配方、遮罩都在、淺深色都畫得出來
+    /// 五個選項：純色沒有貼圖，其他四種都有配方、遮罩都在、淺深色都畫得出來
     func testEveryTextureDraws() throws {
-        XCTAssertEqual(PaperTexture.choices.count, 6)
+        XCTAssertEqual(PaperTexture.choices.count, 5)
         XCTAssertNil(PaperGrain.paint(PaperTexture.plain))
         for choice in PaperTexture.choices where choice.key != PaperTexture.plain {
             let recipe = try XCTUnwrap(Tok.Texture.recipes[choice.key], choice.key)

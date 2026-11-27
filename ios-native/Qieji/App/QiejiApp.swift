@@ -99,7 +99,7 @@ struct RootView: View {
                     case .trash: TrashPage(store: store)
                     case .settings:
                         SettingsPage(
-                            store: store, shop: shop, cloud: cloud, look: look, size: TextSize.shared, texture: PaperTexture.shared,
+                            store: store, shop: shop, cloud: cloud, look: look,
                             onFull: { sheet = .full }, onPage: { path.append($0) }
                         )
                     case .news: NewsPage()
